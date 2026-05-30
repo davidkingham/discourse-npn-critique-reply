@@ -7,4 +7,3 @@ source "https://rubygems.org"
 # whatever Discourse core provides.
 gem "rubocop-discourse"
 gem "syntax_tree"
-gem "syntax_tree-disable_semantic_checks"
