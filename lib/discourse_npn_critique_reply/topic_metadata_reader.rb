@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "set"
-
 module DiscourseNpnCritiqueReply
   # Reads the topic custom fields written by discourse-npn-submissions and
   # discourse-revised-critique-image, then returns a compact, normalized hash

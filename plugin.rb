@@ -37,6 +37,15 @@ after_initialize do
   require_relative "lib/discourse_npn_critique_reply/topic_metadata_reader"
   require_relative "app/controllers/discourse_npn_critique_reply/critique_replies_controller"
 
+  # These topic custom fields are populated by sibling plugins
+  # (discourse-npn-submissions, discourse-revised-critique-image), but we
+  # register the JSON type here too so this plugin's specs round-trip the
+  # values correctly when the siblings aren't loaded. Re-registering an
+  # already-known type is a no-op in production.
+  register_topic_custom_field_type("npn_revision_images", :json)
+  register_topic_custom_field_type("npn_requested_feedback_areas", :json)
+  register_topic_custom_field_type("npn_specific_critique_questions", :json)
+
   # Single topic view: expose a compact, normalized critique-reply metadata
   # object built from custom fields written by the discourse-npn-submissions
   # plugin. Returns nil when the topic has no recognised submission fields, so

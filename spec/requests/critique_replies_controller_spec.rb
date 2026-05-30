@@ -4,11 +4,15 @@ require "rails_helper"
 
 describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
   fab!(:user)
-  fab!(:another_user) { Fabricate(:user) }
+  fab!(:another_user, :user)
   fab!(:topic)
   fab!(:topic_post) { Fabricate(:post, topic: topic) }
 
-  let(:endpoint) { "/npn-critique-reply/topics/#{topic.id}/replies" }
+  # Discourse's request specs hit the JSON suffix explicitly — without it
+  # Rails defaults the request format to HTML and core's ember_cli /
+  # exception-rendering layer ends up taking over before this engine's
+  # controller can render its JSON response.
+  let(:endpoint) { "/npn-critique-reply/topics/#{topic.id}/replies.json" }
   let(:valid_raw) { "This is a thoughtful critique that exceeds the minimum length." }
 
   describe "POST /npn-critique-reply/topics/:topic_id/replies" do
@@ -54,7 +58,7 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
       end
 
       it "returns 404 for an unknown topic_id" do
-        post "/npn-critique-reply/topics/0/replies", params: { raw: valid_raw }
+        post "/npn-critique-reply/topics/0/replies.json", params: { raw: valid_raw }
         expect(response.status).to eq(404)
       end
 
@@ -118,14 +122,14 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
     end
 
     context "with a topic the user cannot reply to (category permission)" do
-      fab!(:private_group) { Fabricate(:group) }
+      fab!(:private_group, :group)
       fab!(:private_category) { Fabricate(:private_category, group: private_group) }
       fab!(:private_topic) { Fabricate(:topic, category: private_category) }
 
       before { sign_in(another_user) }
 
       it "returns 403" do
-        post "/npn-critique-reply/topics/#{private_topic.id}/replies",
+        post "/npn-critique-reply/topics/#{private_topic.id}/replies.json",
              params: {
                raw: valid_raw,
              }

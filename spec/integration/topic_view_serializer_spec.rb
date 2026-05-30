@@ -93,7 +93,7 @@ describe TopicViewSerializer do
     end
   end
 
-  context "image_versions" do
+  context "with image_versions" do
     fab!(:original_upload) { Fabricate(:upload, user: user) }
     fab!(:revision_upload) { Fabricate(:upload, user: user) }
 
