@@ -1,0 +1,7 @@
+{
+  "name": "discourse-npn-critique-reply",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Critique-reply helper for Nature Photographers Network",
+  "license": "MIT"
+}

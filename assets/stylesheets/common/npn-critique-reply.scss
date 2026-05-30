@@ -1,0 +1,1272 @@
+// =====================================================================
+// "Start a Critique" topic-footer button
+// =====================================================================
+
+.npn-critique-reply-start.npn-critique-reply-start {
+  margin-left: 1em;
+  margin-right: 0.25em;
+
+  background: var(--tertiary-low);
+  color: var(--tertiary);
+  border: 1px solid var(--tertiary-low);
+  font-weight: 600;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+
+  .d-icon {
+    color: currentColor;
+    margin-right: 0.4em;
+  }
+
+  &:hover,
+  &:focus {
+    background: var(--tertiary);
+    color: var(--secondary);
+    border-color: var(--tertiary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tertiary);
+    outline-offset: 2px;
+  }
+
+  &:active {
+    background: var(--tertiary-hover, var(--tertiary));
+    border-color: var(--tertiary-hover, var(--tertiary));
+    color: var(--secondary);
+  }
+
+  @media (forced-colors: active) {
+    border-color: ButtonText;
+  }
+}
+
+.mobile-view .npn-critique-reply-start {
+  white-space: nowrap;
+  margin-left: 0.5em;
+}
+
+// Shared section heading used in both columns of the workspace modal —
+// uppercase, tight letterspacing, muted color. Visually consistent
+// header tier across "Reference image" / "The photographer asked for"
+// / "Suggested prompts" / "Your critique".
+%npn-critique-section-heading {
+  margin: 0 0 0.5em;
+  font-size: var(--font-down-1);
+  font-weight: 600;
+  color: var(--primary-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+// =====================================================================
+// Critique Helper modal — two-column workspace
+// =====================================================================
+
+.npn-critique-reply-modal {
+  // Nearly full viewport. The variable Discourse actually reads is
+  // `--modal-max-width` (no `d-` prefix); the doubled selector beats
+  // `.d-modal`'s media-query default (600px) at desktop widths.
+  &.--workspace.--workspace {
+    --modal-max-width: calc(100vw - 2em);
+  }
+
+  &__layout {
+    display: grid;
+    // Image column gets a little more room since the photo is the
+    // anchor; the write column still has plenty of width for prose.
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 1.5em;
+    align-items: start;
+  }
+
+  &.npn-critique-reply-modal--no-image &__layout {
+    grid-template-columns: 1fr;
+  }
+
+  // -- Image column ------------------------------------------------------
+
+  &__image-col {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    min-width: 0;
+
+    // Workspace container: soft panel that frames the photo and reserves
+    // a defined "stage" a future markup-tools step can render into.
+    padding: 0.75em;
+    background: var(--primary-very-low);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+
+    // Cap the column at the modal body's effective height so the entire
+    // image + surrounding controls (heading, version selector, toolbar,
+    // status) fit on screen without scrolling. The modal itself maxes at
+    // 80vh; subtract the modal chrome (~4em) and the column's own padding
+    // so the image has room to flex.
+    max-height: calc(80vh - 4em);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+  }
+
+  &__image-heading {
+    @extend %npn-critique-section-heading;
+  }
+
+  // -- Version selector --------------------------------------------------
+  //
+  // Compact pill-buttons above the image. Selected state uses a tonal
+  // tertiary fill PLUS a leading check icon — never color alone. Buttons
+  // wrap naturally when there are many revisions.
+
+  &__version-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35em;
+    margin-bottom: 0.6em;
+  }
+
+  &__version-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.3em 0.8em;
+    background: var(--secondary);
+    color: var(--primary);
+    border: 1px solid var(--primary-low-mid);
+    border-radius: 999px;
+    font: inherit;
+    font-size: var(--font-down-1);
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease,
+      color 0.12s ease;
+
+    &:hover,
+    &:focus {
+      background: var(--tertiary-low);
+      border-color: var(--tertiary);
+      color: var(--tertiary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+
+    // Selected: tinted fill + bolder weight + leading check icon.
+    // The check is rendered conditionally in the template; this rule just
+    // owns its tone and spacing.
+    &.is-selected {
+      background: var(--tertiary-low);
+      border-color: var(--tertiary);
+      color: var(--tertiary);
+      font-weight: 600;
+    }
+
+    @media (forced-colors: active) {
+      border-color: ButtonText;
+      &.is-selected {
+        border-width: 2px;
+      }
+    }
+  }
+
+  &__version-check {
+    display: inline-flex;
+    align-items: center;
+    color: currentColor;
+    .d-icon {
+      font-size: 0.85em;
+    }
+  }
+
+  &__version-status {
+    margin: 0.5em 0 0;
+    font-size: var(--font-down-1);
+    color: var(--primary-medium);
+    line-height: 1.4;
+  }
+
+  &__version-note {
+    color: var(--primary-high);
+    font-style: italic;
+  }
+
+  // -- Write column ------------------------------------------------------
+
+  &__write-col {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    // Bigger inter-section gap so the modal reads as four discrete
+    // surfaces (intro / request / prompts / textarea) rather than a
+    // worksheet of stacked rows.
+    gap: 1.5em;
+  }
+
+  &__intro {
+    margin: 0;
+    color: var(--primary-high);
+    line-height: 1.45;
+  }
+
+  // -- Request summary ---------------------------------------------------
+
+  &__request {
+    margin: 0;
+    padding: 0.75em 1em;
+    background: var(--primary-very-low);
+    border-left: 3px solid var(--primary-low-mid);
+    border-radius: var(--d-border-radius, 4px);
+  }
+
+  &__request-heading {
+    @extend %npn-critique-section-heading;
+  }
+
+  &__request-list {
+    margin: 0;
+    display: grid;
+    gap: 0.35em;
+  }
+
+  &__request-row {
+    display: grid;
+    grid-template-columns: minmax(7em, 30%) 1fr;
+    gap: 0.5em 1em;
+    align-items: baseline;
+    margin: 0;
+
+    dt {
+      font-weight: 600;
+      color: var(--primary-high);
+      font-size: var(--font-down-1);
+      margin: 0;
+    }
+    dd {
+      margin: 0;
+      color: var(--primary);
+    }
+  }
+
+  &__no-request {
+    margin: 0;
+    color: var(--primary-medium);
+    font-style: italic;
+    line-height: 1.45;
+  }
+
+  // -- Guided prompts ----------------------------------------------------
+  //
+  // Lower visual weight than the previous bullet list: no list markers,
+  // smaller body text, hairline left rule per prompt to mark it as a
+  // discrete suggestion without shouting like a checklist. The whole
+  // group sits inside a quiet tinted card so it reads as "reference
+  // material," not "tasks to complete."
+
+  // The prompts section is a flex column so the inline "Use these prompts"
+  // button below the list can self-align (and shrink to its label width)
+  // without participating in the wider write-column gap.
+  &__prompts {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__prompts-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5em;
+    margin-bottom: 0.5em;
+  }
+
+  &__prompts-heading {
+    @extend %npn-critique-section-heading;
+    margin: 0;
+  }
+
+  // Hide/Show prompts toggle — quiet text button beside the heading.
+  // Doesn't look like a CTA, doesn't pull focus.
+  &__prompts-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.2em 0.5em;
+    background: transparent;
+    color: var(--primary-medium);
+    border: 1px solid transparent;
+    border-radius: var(--d-border-radius, 4px);
+    font: inherit;
+    font-size: var(--font-down-1);
+    cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      color 0.12s ease,
+      border-color 0.12s ease;
+
+    .d-icon {
+      font-size: 0.85em;
+      color: currentColor;
+    }
+
+    &:hover,
+    &:focus {
+      color: var(--tertiary);
+      background: var(--tertiary-low);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+  }
+
+  &__prompts-list {
+    margin: 0;
+    padding: 0.5em 0.6em;
+    list-style: none;
+    background: var(--primary-very-low);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+    color: var(--primary-high);
+    font-size: var(--font-down-1);
+    line-height: 1.45;
+  }
+
+  // Each prompt: question on the left, compact + button on the right.
+  // Hover lifts the row slightly so the actionable nature is obvious.
+  &__prompt-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5em;
+    margin: 0;
+    padding: 0.35em 0.5em 0.35em 0.7em;
+    border-left: 2px solid var(--primary-low-mid);
+    border-radius: 2px;
+    transition: background-color 0.12s ease;
+
+    &:hover {
+      background: var(--secondary);
+    }
+
+    + .npn-critique-reply-modal__prompt-item {
+      margin-top: 0.25em;
+    }
+  }
+
+  &__prompt-question {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  // Show all / Show fewer expand toggle — quiet text button between the
+  // compact prompt list and the "Use all prompts" action. Same family as
+  // the hide/show toggle in the section header so the two collapse
+  // affordances look related.
+  &__prompts-expand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    margin-top: 0.5em;
+    padding: 0.25em 0.55em;
+    background: transparent;
+    color: var(--primary-medium);
+    border: 1px solid transparent;
+    border-radius: var(--d-border-radius, 4px);
+    font: inherit;
+    font-size: var(--font-down-1);
+    cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      color 0.12s ease,
+      border-color 0.12s ease;
+
+    .d-icon {
+      font-size: 0.85em;
+      color: currentColor;
+    }
+
+    &:hover,
+    &:focus {
+      color: var(--tertiary);
+      background: var(--tertiary-low);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+  }
+
+  // "Use all prompts" — now visually secondary so the per-prompt plus
+  // buttons read as the primary insertion path. Sits with the standard
+  // Discourse btn-default chrome (text on neutral background) and gets
+  // a little top breathing room.
+  &__use-prompts.npn-critique-reply-modal__use-prompts {
+    margin-top: 0.6em;
+    align-self: flex-start;
+  }
+
+  // Compact plus-button. Tonal-tertiary on hover/focus so it picks up
+  // the same accent family as the rest of the modal helpers.
+  &__prompt-insert {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85em;
+    height: 1.85em;
+    padding: 0;
+    background: var(--secondary);
+    color: var(--primary-medium);
+    border: 1px solid var(--primary-low-mid);
+    border-radius: 999px;
+    cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      color 0.12s ease,
+      border-color 0.12s ease;
+
+    .d-icon {
+      font-size: 0.8em;
+      color: currentColor;
+    }
+
+    &:hover,
+    &:focus {
+      background: var(--tertiary-low);
+      color: var(--tertiary);
+      border-color: var(--tertiary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+    &:active {
+      background: var(--tertiary);
+      color: var(--secondary);
+      border-color: var(--tertiary);
+    }
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    @media (forced-colors: active) {
+      border-color: ButtonText;
+    }
+  }
+
+  // -- Textarea ----------------------------------------------------------
+
+  &__textarea-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+  }
+
+  &__textarea-label {
+    @extend %npn-critique-section-heading;
+    margin: 0; // override the section-heading default — label sits next to its input
+  }
+
+  // -- Inline messages (validation + server error) ----------------------
+  //
+  // Sit between the label and the textarea so the user sees them right
+  // where they're acting. Use `role="alert"` in the template; the styling
+  // here just leans on Discourse's standard color tokens for tone.
+
+  &__inline-message {
+    margin: 0;
+    padding: 0.5em 0.75em;
+    border-radius: var(--d-border-radius, 4px);
+    font-size: var(--font-down-1);
+    line-height: 1.4;
+
+    &.--validation {
+      background: var(--highlight-bg, var(--tertiary-low));
+      color: var(--primary-high);
+      border-left: 3px solid var(--tertiary);
+    }
+
+    &.--error {
+      background: var(--danger-low, var(--tertiary-low));
+      color: var(--danger, var(--primary-high));
+      border-left: 3px solid var(--danger, var(--tertiary));
+      // Flex layout lets the inline fallback button sit on the right
+      // edge when the error text is short, wrap below on narrow widths.
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5em 0.75em;
+    }
+
+    // Async status while exporting / uploading / posting. Neutral so it
+    // reads as "in progress" rather than success or error.
+    &.--status {
+      background: var(--primary-very-low);
+      color: var(--primary-high);
+      border-left: 3px solid var(--tertiary);
+    }
+  }
+
+  &__inline-message-text {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  // Fallback action button living inside the error banner. Tertiary
+  // accent so it visually offers a way out without competing with the
+  // banner's danger tone.
+  &__fallback-action.npn-critique-reply-modal__fallback-action {
+    flex: 0 0 auto;
+    color: var(--tertiary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:hover,
+    &:focus {
+      background: var(--tertiary-low);
+      color: var(--tertiary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+  }
+
+  &__textarea {
+    width: 100%;
+    // Tall enough that it reads as a real writing surface rather than a
+    // comment box — comparable to the body of the Discourse composer at
+    // rest. Vertical resize lets the user grow it further if they want.
+    min-height: 320px;
+    resize: vertical;
+    padding: 0.75em;
+    background: var(--secondary);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+    color: var(--primary);
+    font: inherit;
+    line-height: 1.55;
+    box-sizing: border-box;
+
+    &::placeholder {
+      color: var(--primary-medium);
+    }
+
+    &:focus,
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: -1px;
+      border-color: var(--tertiary);
+    }
+  }
+
+  // -- Footer ------------------------------------------------------------
+  //
+  // Layout: primary on the left, secondary/accent next, neutral after,
+  // then Cancel pushed to the far right with `margin-left: auto`. The
+  // pen icon spacing matches the topic-footer button so the visual
+  // line stays coherent across surfaces.
+
+  &__insert.npn-critique-reply-modal__insert {
+    .d-icon {
+      margin-right: 0.4em;
+    }
+  }
+
+  // Local action under the prompts list — scoped to the prompts →
+  // textarea handoff, not a peer of the footer actions. Compact tonal
+  // tertiary so it visually belongs to the prompts card above it while
+  // still being recognisably actionable.
+  &__use-prompts.npn-critique-reply-modal__use-prompts {
+    // Sit slightly off the prompts card so the button reads as a follow-on
+    // to that block rather than a header for the textarea below.
+    margin-top: 0.6em;
+    align-self: flex-start; // don't stretch in the flex column
+
+    background: var(--tertiary-low);
+    color: var(--tertiary);
+    border: 1px solid var(--tertiary-low);
+    font-weight: 600;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+
+    .d-icon {
+      color: currentColor;
+      margin-right: 0.4em;
+    }
+
+    &:hover,
+    &:focus {
+      background: var(--tertiary);
+      color: var(--secondary);
+      border-color: var(--tertiary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+    &:active {
+      background: var(--tertiary-hover, var(--tertiary));
+      border-color: var(--tertiary-hover, var(--tertiary));
+      color: var(--secondary);
+    }
+  }
+
+  // Secondary accent: same tonal-tertiary treatment as the "Use these
+  // prompts" inline button, sized like a regular footer button. Signals
+  // "intentional helper action" without competing with the primary blue
+  // Post Critique CTA next to it.
+  &__edit-composer.npn-critique-reply-modal__edit-composer {
+    background: var(--tertiary-low);
+    color: var(--tertiary);
+    border: 1px solid var(--tertiary-low);
+    font-weight: 600;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+
+    .d-icon {
+      color: currentColor;
+      margin-right: 0.4em;
+    }
+
+    &:hover,
+    &:focus {
+      background: var(--tertiary);
+      color: var(--secondary);
+      border-color: var(--tertiary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+    &:active {
+      background: var(--tertiary-hover, var(--tertiary));
+      border-color: var(--tertiary-hover, var(--tertiary));
+      color: var(--secondary);
+    }
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  &__cancel.npn-critique-reply-modal__cancel {
+    // Pin Cancel to the right edge of the footer row so it reads as the
+    // quiet escape hatch rather than a peer of the action buttons.
+    margin-left: auto;
+  }
+
+  // Let footer buttons wrap on narrow viewports rather than overflow.
+  // DModal's footer is flex by default; we only nudge wrapping + gap.
+  .d-modal__footer {
+    flex-wrap: wrap;
+    gap: 0.5em;
+  }
+
+  // -- Responsive --------------------------------------------------------
+
+  @media (max-width: 720px) {
+    &__layout {
+      grid-template-columns: 1fr;
+      gap: 1.25em;
+    }
+
+    &__image-col {
+      position: static;
+      padding: 0.5em;
+      // Drop the desktop height cap on mobile — the stacked layout
+      // doesn't have a sticky column to keep in view, and the body
+      // scrolls naturally.
+      max-height: none;
+      display: block;
+    }
+
+    &__write-col {
+      gap: 1.25em;
+    }
+
+    &__request-row {
+      grid-template-columns: 1fr;
+      gap: 0.15em;
+    }
+
+    &__prompts-list {
+      font-size: inherit;
+    }
+
+    &__cancel.npn-critique-reply-modal__cancel {
+      // On wrapped footers, margin-left: auto can land Cancel on its own
+      // row pushed right. Reset to natural flow so it sits with the
+      // other buttons.
+      margin-left: 0;
+    }
+  }
+
+  @media (forced-colors: active) {
+    &__image-col {
+      border-color: ButtonText;
+    }
+    &__request {
+      border-left-color: ButtonText;
+    }
+    &__prompts-list,
+    &__textarea {
+      border-color: ButtonText;
+    }
+  }
+}
+
+// =====================================================================
+// Image reference component (image + reserved markup-tool overlay slot)
+// =====================================================================
+
+.npn-critique-image-reference {
+  margin: 0;
+  width: 100%;
+  // The image figure flexes to fill whatever vertical space remains in
+  // the (height-capped) image column after the heading / selector /
+  // toolbar / status take their natural space. `min-height: 0` is the
+  // standard flex-child unlock that lets the inner image shrink below
+  // its intrinsic size.
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  &__frame {
+    position: relative;
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    // Center the image inside the frame so portrait photos don't pile
+    // up against the top edge when the column is wider than the image.
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--secondary);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+    overflow: hidden;
+  }
+
+  // `object-fit: contain` plus `max-*: 100%` makes the image scale to
+  // fit the frame in BOTH dimensions while preserving aspect ratio.
+  // Wide panoramas fit by width; tall portraits fit by height; the
+  // result is always fully visible without scrolling.
+  &__img {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    background: var(--secondary);
+  }
+
+  // Reserved overlay for Visual Notes (and future markup tools). At rest
+  // it ignores pointer events so the underlying image gets normal hover/
+  // tap behavior. `is-note-mode` on the figure flips that — clicks land
+  // here and pin coordinates are computed against this element's rect.
+  &__overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  // Konva mount point. Sits in the same place as `__overlay`, sized to
+  // the image automatically by the stage's ResizeObserver. Konva injects
+  // a `<canvas>` element inside this div; the canvas captures clicks
+  // directly (Konva owns its own event dispatch).
+  &__konva-container {
+    position: absolute;
+    inset: 0;
+    // Stage handles its own pointer events; container itself is just a
+    // mount point. Cursor is updated dynamically by the stage when note
+    // mode is on/off.
+    pointer-events: auto;
+
+    // Make sure the inner canvas doesn't push past the frame on browsers
+    // that add tiny baselines below inline-block canvases.
+    & > canvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+    }
+  }
+
+  // When Konva is the active renderer, suppress the figure's
+  // `is-note-mode` outline-glow since Konva handles its own visual cue.
+  // (Optional polish — keep the outline visible for now so the UI
+  // signals "click here" even before Konva fully mounts.)
+
+  &.is-note-mode &__overlay {
+    pointer-events: auto;
+    cursor: crosshair;
+  }
+
+  // Subtle outline on the frame while pin-placement mode is active so
+  // critics see at a glance that the image is interactive. Uses tertiary
+  // so it picks up the same accent family as the rest of the plugin.
+  &.is-note-mode &__frame {
+    outline: 2px solid var(--tertiary);
+    outline-offset: 2px;
+  }
+
+  // Eye-path mode shares the click-to-add gesture with numbered notes,
+  // so it gets the same outline cue. Crop mode has its own cursor
+  // affordance during drag so it doesn't need the outline.
+  &.is-eye-path-mode &__frame {
+    outline: 2px solid var(--tertiary);
+    outline-offset: 2px;
+  }
+
+  // Attention-pull mode uses the warm amber accent to signal it's a
+  // different kind of tool than the tertiary-tinted ones — observational
+  // rather than corrective. `--bookmark` is Discourse's standard amber;
+  // explicit hex is the fallback.
+  &.is-attention-pull-mode &__frame {
+    outline: 2px solid var(--bookmark, #e89e2c);
+    outline-offset: 2px;
+  }
+
+  // Strong-area mode uses Discourse's `--success` green — the supportive
+  // counterpart to Attention Pull's amber. Falls back to a muted teal
+  // when the theme doesn't define `--success`.
+  &.is-strong-area-mode &__frame {
+    outline: 2px solid var(--success, #2a8c4a);
+    outline-offset: 2px;
+  }
+
+  &__hint {
+    margin: 0.5em 0 0;
+    color: var(--tertiary);
+    font-size: var(--font-down-1);
+    font-weight: 600;
+    text-align: center;
+  }
+
+  // Inline note popover. Anchored near the most recently placed pin
+  // by the `positionNotePopover` modifier (JS sets `left` / `top` in
+  // pixels after measuring the frame). z-index sits above the Konva
+  // canvas so the input is always clickable. `pointer-events: auto`
+  // is explicit even though the parent overlay has it off — the
+  // popover sits OUTSIDE __overlay and inside __frame.
+  &__note-popover {
+    position: absolute;
+    z-index: 10;
+    width: min(260px, 90%);
+    padding: 0.7em 0.8em 0.6em;
+    background: var(--secondary);
+    border: 1px solid var(--primary-low-mid);
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    gap: 0.45em;
+    // Don't inherit the frame's `cursor: crosshair` in note mode —
+    // the popover is a form region, not a click target for pins.
+    cursor: auto;
+  }
+
+  &__note-popover-title {
+    font-size: var(--font-down-1);
+    font-weight: 600;
+    color: var(--tertiary);
+  }
+
+  &__note-popover-input {
+    width: 100%;
+    padding: 0.45em 0.55em;
+    border: 1px solid var(--primary-low-mid);
+    border-radius: 4px;
+    background: var(--secondary);
+    color: var(--primary);
+    font: inherit;
+    font-size: var(--font-0);
+    box-sizing: border-box;
+    // Match Discourse's input min-height so touch targets are
+    // comfortable on mobile without making the popover huge.
+    min-height: 2.2em;
+
+    &:focus,
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 1px;
+      border-color: var(--tertiary);
+    }
+  }
+
+  &__note-popover-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em;
+    justify-content: flex-end;
+  }
+
+  &__note-popover-add,
+  &__note-popover-skip {
+    // Both buttons use Discourse's `.btn-small` size; we just need
+    // a touch-friendly floor on mobile.
+    min-height: 2em;
+  }
+
+  @media (forced-colors: active) {
+    &__note-popover {
+      border-color: ButtonText;
+    }
+    &__note-popover-input {
+      border-color: ButtonText;
+    }
+  }
+
+  @media (max-width: 720px) {
+    // On mobile the image column is no longer height-constrained
+    // (it's stacked above the write column and the body scrolls).
+    // Revert to a viewport-based cap so the photo doesn't grow taller
+    // than ~half the screen.
+    flex: 0 0 auto;
+    &__frame {
+      flex: 0 0 auto;
+    }
+    &__img {
+      max-height: 55vh;
+    }
+  }
+
+  @media (forced-colors: active) {
+    &__frame {
+      border-color: ButtonText;
+    }
+  }
+}
+
+// =====================================================================
+// Visual Notes — numbered pins
+// =====================================================================
+//
+// Pins are absolutely-positioned circles overlaid on the image. The
+// `positionPin` modifier sets `left` / `top` in percentages and we
+// translate (-50%, -50%) so the pin's center anchors to the click point
+// rather than its top-left corner. Pointer events are off so clicks pass
+// through to the overlay even when a critic happens to click on top of
+// an existing pin.
+
+.npn-critique-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85em;
+  height: 1.85em;
+  padding: 0;
+  background: var(--tertiary);
+  color: var(--secondary);
+  border: none;
+  border-radius: 50%;
+  font: inherit;
+  font-size: var(--font-0);
+  font-weight: 700;
+  line-height: 1;
+  // Halo: white ring then a soft drop shadow so the pin reads against
+  // both light and dark image content without an opaque background.
+  box-shadow:
+    0 0 0 2px var(--secondary),
+    0 2px 6px rgba(0, 0, 0, 0.45);
+  // Pins are interactive (selectable / removable) buttons. The overlay
+  // underneath catches clicks that miss a pin so create-pin still works
+  // when noteMode is active.
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  z-index: 2;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+
+  &:hover {
+    // Subtle scale-up clarifies "this is interactive" without crowding
+    // neighboring pins.
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+
+  &:focus-visible {
+    outline: 3px solid var(--tertiary);
+    outline-offset: 3px;
+  }
+
+  // Selected: scale + outer ring (in addition to the existing white
+  // halo). Two layered shadows = three concentric rings, which reads as
+  // "highlighted" without relying on color alone.
+  &.is-selected {
+    transform: translate(-50%, -50%) scale(1.15);
+    box-shadow:
+      0 0 0 2px var(--secondary),
+      0 0 0 5px var(--tertiary),
+      0 2px 8px rgba(0, 0, 0, 0.5);
+  }
+
+  @media (max-width: 720px) {
+    // Bigger tap target on mobile. Pin is now a real button so the
+    // larger hit area is the size the user actually taps.
+    width: 2.4em;
+    height: 2.4em;
+    font-size: var(--font-up-1);
+  }
+
+  @media (forced-colors: active) {
+    background: ButtonText;
+    color: ButtonFace;
+    box-shadow: 0 0 0 2px ButtonFace;
+    &.is-selected {
+      box-shadow:
+        0 0 0 2px ButtonFace,
+        0 0 0 5px ButtonText;
+    }
+  }
+}
+
+// Visual Notes toolbar — sits between the reference image and the
+// "Showing Revision N" status line. Wraps on narrow viewports.
+.npn-critique-reply-modal__visual-notes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em;
+  // Sits ABOVE the image so the visual tool CTAs are visible without
+  // scrolling. With crop added, the toolbar may have 2-5 buttons; flex
+  // wrapping handles it.
+  margin: 0 0 0.6em;
+}
+
+// Crop aspect-ratio chooser. Sits as a sub-row under the visual-notes
+// toolbar — only rendered when crop mode is active. Compact pill-style
+// buttons follow the same selected-state pattern as the version
+// selector so the visual language stays consistent across the modal.
+.npn-critique-reply-modal__crop-ratio-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+  margin: 0 0 0.6em;
+  font-size: var(--font-down-1);
+}
+
+.npn-critique-reply-modal__crop-ratio-label {
+  color: var(--primary-medium);
+  margin-right: 0.2em;
+}
+
+.npn-critique-reply-modal__crop-ratio-button {
+  padding: 0.2em 0.65em;
+  background: var(--secondary);
+  color: var(--primary);
+  border: 1px solid var(--primary-low-mid);
+  border-radius: 999px;
+  font: inherit;
+  font-size: var(--font-down-1);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+
+  &:hover {
+    background: var(--tertiary-low);
+    border-color: var(--tertiary);
+    color: var(--tertiary);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--tertiary);
+    outline-offset: 2px;
+  }
+  &.is-selected {
+    background: var(--tertiary);
+    color: var(--secondary);
+    border-color: var(--tertiary);
+    font-weight: 600;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  @media (forced-colors: active) {
+    border-color: ButtonText;
+    &.is-selected {
+      border-width: 2px;
+    }
+  }
+}
+
+// Accessible annotation list. Sits below the image (and below the
+// "Showing Revision N" status). Compact when collapsed — `<summary>`
+// shows the count — and expands to one row per annotation. Each row
+// surfaces "Select" + "Remove" buttons so keyboard / SR users have a
+// path that doesn't depend on canvas interaction.
+.npn-critique-reply-modal__a11y-list {
+  margin: 0.5em 0 0;
+  padding: 0.35em 0.5em;
+  font-size: var(--font-down-1);
+  color: var(--primary-medium);
+  border-top: 1px solid var(--primary-low);
+
+  & > summary {
+    cursor: pointer;
+    padding: 0.25em 0;
+    color: var(--primary-medium);
+    &:hover {
+      color: var(--primary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+  }
+
+  &-items {
+    list-style: none;
+    margin: 0.3em 0 0;
+    padding: 0;
+
+    & > li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4em;
+      padding: 0.25em 0;
+      border-top: 1px solid var(--primary-very-low);
+      &:first-child {
+        border-top: none;
+      }
+    }
+  }
+
+  &-label {
+    flex: 1 1 auto;
+    min-width: 6em;
+    color: var(--primary-high);
+  }
+}
+
+.npn-critique-reply-modal__clear-notes.npn-critique-reply-modal__clear-notes {
+  color: var(--primary-medium);
+
+  &:hover,
+  &:focus {
+    color: var(--danger, var(--primary-high));
+    background: var(--danger-low-or-secondary-low, var(--primary-very-low));
+  }
+}
+
+// Per-pin remove button. Visually tied to the toolbar but uses a
+// danger-tinted hover so it's clearly destructive.
+.npn-critique-reply-modal__remove-pin.npn-critique-reply-modal__remove-pin {
+  color: var(--primary-high);
+
+  &:hover,
+  &:focus {
+    color: var(--danger, var(--primary-high));
+    border-color: var(--danger, var(--primary-low-mid));
+  }
+}
+
+// =====================================================================
+// "Start a thoughtful critique" invitation panel
+// =====================================================================
+//
+// Rendered above the post stream on eligible critique topics. Compact,
+// quiet, designed to read as an invitation rather than an alert —
+// soft primary-very-low background, single border, subdued typography.
+// Layout is row-oriented on desktop (text on the left, actions on the
+// right) and stacks cleanly on mobile.
+
+.npn-critique-reply-invitation-panel {
+  display: flex;
+  gap: 0.9em;
+  align-items: center;
+  margin: 0 0 1em;
+  padding: 0.85em 1em;
+  background: var(--primary-very-low);
+  border: 1px solid var(--primary-low);
+  border-radius: 6px;
+  // Make sure inherited topic-level styles (e.g., centered headings)
+  // don't bleed in.
+  text-align: left;
+
+  // Small leading icon — purely decorative, matches the footer
+  // "Start a Critique" button so the entry points read as related.
+  &__icon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5em;
+    height: 1.5em;
+    color: var(--tertiary);
+    font-size: var(--font-up-1);
+
+    .d-icon {
+      width: 1em;
+      height: 1em;
+    }
+  }
+
+  &__content {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  &__title {
+    margin: 0 0 0.2em;
+    font-size: var(--font-up-1);
+    font-weight: 600;
+    color: var(--primary);
+    line-height: 1.25;
+  }
+
+  &__description {
+    margin: 0;
+    font-size: var(--font-0);
+    color: var(--primary-high);
+    line-height: 1.4;
+  }
+
+  &__start {
+    flex: 0 0 auto;
+
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+  }
+
+  @media (max-width: 720px) {
+    flex-wrap: wrap;
+    gap: 0.6em 0.9em;
+
+    // Icon stays at the start of the first row, text flows next to
+    // it, button drops to its own row underneath.
+    &__content {
+      flex: 1 1 12em;
+    }
+    &__start {
+      flex: 1 1 100%;
+    }
+  }
+
+  @media (forced-colors: active) {
+    border-color: ButtonText;
+  }
+}

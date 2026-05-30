@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.log
+.bundle/
+vendor/bundle/
+tmp/
+coverage/
+.rspec_status

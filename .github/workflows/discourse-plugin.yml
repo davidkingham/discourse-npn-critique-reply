@@ -1,0 +1,44 @@
+name: Plugin Tests
+
+# Triggers:
+#   - push to main      → every merge runs the full matrix
+#   - pull_request      → CI on every PR commit
+#   - workflow_dispatch → run manually from the Actions tab
+#   - schedule (weekly) → catch upstream Discourse changes that break
+#                         this plugin even when its own code is unchanged
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Mondays at 05:00 UTC. Pick a quiet time outside business hours
+    # in any major timezone so weekly runs don't compete with active
+    # PR CI for runners.
+    - cron: "0 5 * * 1"
+
+# Cancel an in-progress run when a newer commit lands on the same
+# branch. Main is excluded so post-merge runs (and the scheduled run)
+# always complete and report status to the commit history.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  ci:
+    # Calls the reusable workflow maintained by the Discourse core team:
+    # https://github.com/discourse/.github/blob/main/.github/workflows/plugin-tests.yml
+    # `@main` tracks the upstream-maintained "always-current" version
+    # of the workflow. Pin to a tag if you need stricter reproducibility.
+    uses: discourse/.github/.github/workflows/plugin-tests.yml@main
+    strategy:
+      fail-fast: false
+      matrix:
+        core_ref:
+          # "Latest" — Discourse's main branch (rolling).
+          - main
+          # "Stable" — Discourse's latest stable release branch.
+          - stable
+    with:
+      core_ref: ${{ matrix.core_ref }}

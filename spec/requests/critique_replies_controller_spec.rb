@@ -1,0 +1,136 @@
+# frozen_string_literal: true
+
+require "rails_helper"
+
+describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
+  fab!(:user)
+  fab!(:another_user) { Fabricate(:user) }
+  fab!(:topic)
+  fab!(:topic_post) { Fabricate(:post, topic: topic) }
+
+  let(:endpoint) { "/npn-critique-reply/topics/#{topic.id}/replies" }
+  let(:valid_raw) { "This is a thoughtful critique that exceeds the minimum length." }
+
+  describe "POST /npn-critique-reply/topics/:topic_id/replies" do
+    context "when not signed in" do
+      it "returns 403" do
+        post endpoint, params: { raw: valid_raw }
+        expect(response.status).to eq(403)
+      end
+    end
+
+    context "when signed in" do
+      before { sign_in(user) }
+
+      it "creates a normal reply on the topic" do
+        expect {
+          post endpoint, params: { raw: valid_raw }
+        }.to change { topic.reload.posts.count }.by(1)
+
+        expect(response.status).to eq(200)
+        body = response.parsed_body
+        expect(body["success"]).to eq(true)
+        expect(body.dig("post", "topic_id")).to eq(topic.id)
+        expect(body.dig("post", "post_number")).to be > 1
+
+        new_post = Post.find(body["post"]["id"])
+        expect(new_post.raw).to eq(valid_raw)
+        expect(new_post.user_id).to eq(user.id)
+        expect(new_post.topic_id).to eq(topic.id)
+      end
+
+      it "rejects empty raw with 422 and does not create a post" do
+        expect { post endpoint, params: { raw: "   " } }.not_to(
+          change { Post.count },
+        )
+
+        expect(response.status).to eq(422)
+        expect(response.parsed_body["errors"]).to be_present
+      end
+
+      it "rejects missing raw with 422" do
+        post endpoint, params: {}
+        expect(response.status).to eq(422)
+      end
+
+      it "returns 404 for an unknown topic_id" do
+        post "/npn-critique-reply/topics/0/replies", params: { raw: valid_raw }
+        expect(response.status).to eq(404)
+      end
+
+      it "returns 403 on a closed topic for a non-staff user" do
+        topic.update!(closed: true)
+        post endpoint, params: { raw: valid_raw }
+        expect(response.status).to eq(403)
+      end
+
+      it "returns 403 on an archived topic for a non-staff user" do
+        topic.update!(archived: true)
+        post endpoint, params: { raw: valid_raw }
+        expect(response.status).to eq(403)
+      end
+
+      it "surfaces PostCreator validation errors as 422" do
+        # Raw below SiteSetting.min_post_length triggers a PostCreator error
+        SiteSetting.min_post_length = 50
+        post endpoint, params: { raw: "too short" }
+        expect(response.status).to eq(422)
+        expect(response.parsed_body["errors"]).to be_present
+      end
+
+      it "ignores selected_image_version_key for permissions but accepts it in payload" do
+        post endpoint,
+             params: {
+               raw: valid_raw,
+               selected_image_version_key: "revision_2",
+             }
+        expect(response.status).to eq(200)
+      end
+
+      it "stores the raw exactly as submitted (does not add the revision prefix server-side)" do
+        prefixed_raw = "Regarding Revision 2:\n\n#{valid_raw}"
+        post endpoint, params: { raw: prefixed_raw }
+        expect(response.status).to eq(200)
+        new_post = Post.find(response.parsed_body["post"]["id"])
+        expect(new_post.raw).to eq(prefixed_raw)
+      end
+
+      it "accepts a visual-notes payload (heading + image markdown + body)" do
+        # Sanity-check the multi-paragraph shape produced by the modal
+        # when visual notes are included. We don't actually fetch the
+        # upload here — only that PostCreator accepts the markdown.
+        notes_raw = <<~RAW.chomp
+          Visual notes based on Revision 2:
+
+          ![visual notes](upload://abc.jpg)
+
+          #{valid_raw}
+        RAW
+        post endpoint,
+             params: {
+               raw: notes_raw,
+               selected_image_version_key: "revision_2",
+             }
+        expect(response.status).to eq(200)
+        new_post = Post.find(response.parsed_body["post"]["id"])
+        expect(new_post.raw).to eq(notes_raw)
+      end
+    end
+
+    context "with a topic the user cannot reply to (category permission)" do
+      fab!(:private_group) { Fabricate(:group) }
+      fab!(:private_category) { Fabricate(:private_category, group: private_group) }
+      fab!(:private_topic) { Fabricate(:topic, category: private_category) }
+
+      before { sign_in(another_user) }
+
+      it "returns 403" do
+        post "/npn-critique-reply/topics/#{private_topic.id}/replies",
+             params: {
+               raw: valid_raw,
+             }
+        expect(response.status).to eq(403)
+      end
+    end
+  end
+end

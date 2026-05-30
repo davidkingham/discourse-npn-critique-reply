@@ -1,0 +1,15 @@
+en:
+  npn_critique_reply:
+    errors:
+      empty_raw: "Write a critique before posting."
+      cannot_reply: "You do not have permission to reply to this topic."
+      create_failed: "Couldn't create that reply. Please try again."
+  site_settings:
+    npn_critique_reply_enabled: "Enable the NPN critique-reply plugin. When off, no critique-reply metadata or UI is exposed."
+    npn_critique_reply_enabled_category_ids: "Categories in which the critique-reply helper is active. Leave empty to allow all categories."
+    npn_critique_reply_allowed_group_ids: "Groups whose members may use the critique-reply helper. Leave empty to allow all logged-in users. Admins always have access."
+    npn_critique_reply_debug_enabled: "When enabled, log the topic's normalized critique-reply metadata to the browser console for staff users. Use for verification only."
+    npn_critique_reply_show_below_op: "Show the 'Start a Critique' helper button in the topic footer on eligible topics. Disable to hide the public UI while keeping metadata serialization."
+    npn_critique_reply_button_label: "Label for the 'Start a Critique' button. Overrides the default translation when non-blank."
+    npn_critique_reply_visual_notes_enabled: "Enable the staff/beta Visual Notes proof of concept in the Critique Helper modal. Lets eligible users place numbered pins on the reference image; pin coordinates are not persisted and the posted critique only contains the written text."
+    npn_critique_reply_visual_notes_allowed_group_ids: "Groups whose members may use Visual Notes in addition to staff. Leave empty for staff-only access."
