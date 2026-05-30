@@ -3,8 +3,14 @@
 require "rails_helper"
 
 describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
-  fab!(:user)
-  fab!(:another_user, :user)
+  # Fabricated users default to trust level 0, which trips PostCreator's
+  # newuser link/embedded-media validator on any post containing an
+  # image reference (see `newuser_links_validator`). The visual-notes
+  # test below includes image markdown, so seed both users at trust
+  # level 1+ — that bypasses the newuser limits without changing any
+  # of the permission flows the other tests exercise.
+  fab!(:user) { Fabricate(:user, trust_level: TrustLevel[2]) }
+  fab!(:another_user) { Fabricate(:user, trust_level: TrustLevel[2]) }
   fab!(:topic)
   fab!(:topic_post) { Fabricate(:post, topic: topic) }
 
