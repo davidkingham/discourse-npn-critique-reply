@@ -2,7 +2,7 @@
 
 require "rails_helper"
 
-describe SiteSetting, "discourse-npn-critique-reply" do
+describe SiteSetting do
   it "registers npn_critique_reply_enabled (default: true)" do
     expect(SiteSetting.respond_to?(:npn_critique_reply_enabled)).to eq(true)
     expect(SiteSetting.defaults[:npn_critique_reply_enabled]).to eq(true)

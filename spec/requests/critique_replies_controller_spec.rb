@@ -101,12 +101,14 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
 
       it "accepts a visual-notes payload (heading + image markdown + body)" do
         # Sanity-check the multi-paragraph shape produced by the modal
-        # when visual notes are included. We don't actually fetch the
-        # upload here — only that PostCreator accepts the markdown.
+        # when visual notes are included. PostCreator validates upload
+        # references, so reference a real fabricated upload via its
+        # short_url rather than an arbitrary `upload://abc.jpg`.
+        visual_notes_upload = Fabricate(:upload, user: user)
         notes_raw = <<~RAW.chomp
           Visual notes based on Revision 2:
 
-          ![visual notes](upload://abc.jpg)
+          ![visual notes](#{visual_notes_upload.short_url})
 
           #{valid_raw}
         RAW

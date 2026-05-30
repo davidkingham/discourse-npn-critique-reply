@@ -100,17 +100,21 @@ describe TopicViewSerializer do
     before { SiteSetting.npn_critique_reply_enabled = true }
 
     it "emits image_versions with the original + latest revision and the right default" do
+      # `upsert_custom_fields` doesn't JSON-encode Array values, so we
+      # hand it the JSON-encoded form that the `:json` field type would
+      # produce via save_custom_fields in production.
       topic.upsert_custom_fields(
         "npn_submission_type" => "image_critique",
         "npn_critique_style" => "in_depth",
         "npn_original_primary_image_upload_id" => original_upload.id,
-        "npn_revision_images" => [
-          {
-            "revision_number" => 1,
-            "upload_id" => revision_upload.id,
-            "created_at" => "2026-05-27T20:15:00Z",
-          },
-        ],
+        "npn_revision_images" =>
+          [
+            {
+              "revision_number" => 1,
+              "upload_id" => revision_upload.id,
+              "created_at" => "2026-05-27T20:15:00Z",
+            },
+          ].to_json,
       )
 
       data = serialized[:npn_critique_reply][:image_versions]

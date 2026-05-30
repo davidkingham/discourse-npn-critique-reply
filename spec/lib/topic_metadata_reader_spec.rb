@@ -6,8 +6,16 @@ describe DiscourseNpnCritiqueReply::TopicMetadataReader do
   fab!(:user)
   fab!(:topic) { Fabricate(:topic, user: user) }
 
+  # `upsert_custom_fields` writes raw values to the DB without going
+  # through the field-type descriptor's serialize step, so Array/Hash
+  # values would be stored as `Array#to_s` output (not JSON) and the
+  # reader would fail to parse them. Pre-encode them here to match how
+  # production writes arrive (sibling plugins register the keys as
+  # `:json`, so `save_custom_fields` JSON-encodes them on the way in).
   def with_fields(fields)
-    topic.upsert_custom_fields(fields)
+    encoded =
+      fields.transform_values { |v| v.is_a?(Array) || v.is_a?(Hash) ? v.to_json : v }
+    topic.upsert_custom_fields(encoded)
     topic.reload
   end
 
