@@ -28,17 +28,18 @@ concurrency:
 jobs:
   ci:
     # Calls the reusable workflow maintained by the Discourse core team:
-    # https://github.com/discourse/.github/blob/main/.github/workflows/plugin-tests.yml
+    # https://github.com/discourse/.github/blob/main/.github/workflows/discourse-plugin.yml
     # `@main` tracks the upstream-maintained "always-current" version
     # of the workflow. Pin to a tag if you need stricter reproducibility.
-    uses: discourse/.github/.github/workflows/plugin-tests.yml@main
+    uses: discourse/.github/.github/workflows/discourse-plugin.yml@main
     strategy:
       fail-fast: false
       matrix:
         core_ref:
-          # "Latest" — Discourse's main branch (rolling).
-          - main
-          # "Stable" — Discourse's latest stable release branch.
+          # "latest" is the upstream workflow's default — Discourse's
+          # most recent passing build.
+          - latest
+          # "stable" is the current Discourse stable release branch.
           - stable
     with:
       core_ref: ${{ matrix.core_ref }}
