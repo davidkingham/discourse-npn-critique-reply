@@ -2,10 +2,9 @@
 
 source "https://rubygems.org"
 
-# Development-only dependencies for linting and formatting. The plugin
+# Development/CI dependencies for linting and formatting. The plugin
 # itself has no production gem dependencies — at runtime it inherits
 # whatever Discourse core provides.
-group :development do
-  gem "rubocop-discourse"
-  gem "syntax_tree"
-end
+gem "rubocop-discourse"
+gem "syntax_tree"
+gem "syntax_tree-disable_semantic_checks"
