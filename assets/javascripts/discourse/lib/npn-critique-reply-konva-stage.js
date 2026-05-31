@@ -1772,11 +1772,16 @@ export async function createAnnotationStage({
       // Mode-aware listening. The crop rect must pass clicks through
       // for any "click image to add something" mode, otherwise an
       // existing crop blocks placement of new annotations inside its
-      // bounds. Modes that need pass-through: numbered_notes (pins),
-      // eye_path (path points). Other modes → selectable on click.
+      // bounds. Modes that need pass-through: numbered_notes (click
+      // to add pin), eye_path (click to add path point), attention_pull
+      // and strong_area (drag-to-create on empty stage). The crop rect
+      // is selectable on click only in modes that don't add anything
+      // on click — i.e. when no tool is active, or in crop mode itself.
       listening:
         state.visualMode !== "numbered_notes" &&
-        state.visualMode !== "eye_path",
+        state.visualMode !== "eye_path" &&
+        state.visualMode !== "attention_pull" &&
+        state.visualMode !== "strong_area",
       // Draggable only when the crop is the active edit target.
       draggable: canEdit,
       // Clamp drag within image bounds. `this` inside dragBoundFunc
