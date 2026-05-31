@@ -448,6 +448,9 @@ export default class NpnCritiqueImageReference extends Component {
           @visualMode
           this.pins.length
           @crop
+          @eyePath
+          @attentionPulls
+          @strongAreas
         }}
         {{willDestroy this.teardownKonva}}
       >

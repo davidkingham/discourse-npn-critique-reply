@@ -2466,6 +2466,15 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.crop?.aspectRatio) {
       this.cropAspectRatio = this.crop.aspectRatio;
     }
+    // Match the auto-select-on-placement behaviour of addCrop so the
+    // restored crop is immediately interactive (Transformer mounts,
+    // drag works in one motion). Eye path handles are always draggable
+    // so no selection flag is needed there. Multi-instance shapes
+    // (pins, attention pulls, strong areas) intentionally do not
+    // auto-select on restore — picking one would be arbitrary, and the
+    // konva stage's canDrag gate already allows single-motion drag for
+    // any marker in the right tool mode.
+    this.cropSelected = !!this.crop;
     this.eyePath = eyePathEntry ? annotationToEyePath(eyePathEntry) : null;
 
     this.attentionPulls = annotationsToAttentionPulls(synthPayload);

@@ -698,10 +698,15 @@ export async function createAnnotationStage({
         continue;
       }
       const isSelected = pull.id === state.selectedAttentionPullId;
-      const canEdit =
-        isSelected &&
+      // Split into "can drag in one motion" vs "is the active edit
+      // target". Any marker in the right mode is draggable so freshly
+      // restored markers feel as responsive as freshly placed ones —
+      // the Transformer (resize handles) still mounts only on the
+      // selected marker.
+      const canDrag =
         state.visualMode === "attention_pull" &&
         state.attentionPullEditEnabled;
+      const canEdit = canDrag && isSelected;
 
       // Three stacked ellipses so fill opacity, stroke opacity, and
       // halo don't fight each other (Konva applies node-level opacity
@@ -742,7 +747,7 @@ export async function createAnnotationStage({
         strokeEnabled: false,
         name: `attention-pull-${id}`,
         listening: true,
-        draggable: canEdit,
+        draggable: canDrag,
         // Clamp the ellipse's CENTER such that the bounding box stays
         // inside the stage. radii are the current radii (pre-scale).
         dragBoundFunc(pos) {
@@ -811,10 +816,12 @@ export async function createAnnotationStage({
         attentionPullLayer.add(labelRef);
       }
 
-      if (canEdit) {
+      if (canDrag) {
         // Live-mirror halo, stroke, and label badge to the fill body
         // during interaction so the visual stays coherent across all
-        // four nodes.
+        // four nodes. Defined under canDrag so dragmove/dragend get the
+        // same helpers as transform/transformend (which run only under
+        // canEdit) without duplicating the closures.
         const syncDecorations = () => {
           const ex = fillBody.x();
           const ey = fillBody.y();
@@ -872,69 +879,79 @@ export async function createAnnotationStage({
           onUpdateAttentionPull?.(id, xPct, yPct, widthPct, heightPct);
         };
 
+        // Drag is available for ANY marker in the right mode — selection
+        // is no longer required to start a drag. This makes restored
+        // markers as responsive as freshly placed ones (single click-and-
+        // drag motion).
         fillBody.on("dragmove", syncDecorations);
         fillBody.on("dragend", emitUpdate);
-        fillBody.on("transform", syncDecorations);
-        fillBody.on("transformend", () => {
-          // Bake the transform's scale into the radii so the next
-          // interaction starts from scale 1.
-          const sx = fillBody.scaleX();
-          const sy = fillBody.scaleY();
-          fillBody.scaleX(1);
-          fillBody.scaleY(1);
-          fillBody.radiusX(Math.max(1, fillBody.radiusX() * sx));
-          fillBody.radiusY(Math.max(1, fillBody.radiusY() * sy));
-          haloRef.radiusX(fillBody.radiusX());
-          haloRef.radiusY(fillBody.radiusY());
-          strokeRef.radiusX(fillBody.radiusX());
-          strokeRef.radiusY(fillBody.radiusY());
-          emitUpdate();
-        });
 
-        const transformer = new Konva.Transformer({
-          nodes: [fillBody],
-          rotateEnabled: false,
-          keepRatio: false,
-          enabledAnchors: [
-            "top-left",
-            "top-center",
-            "top-right",
-            "middle-left",
-            "middle-right",
-            "bottom-left",
-            "bottom-center",
-            "bottom-right",
-          ],
-          borderEnabled: false,
-          anchorSize: 10,
-          anchorCornerRadius: 2,
-          anchorStroke: amber,
-          anchorFill: secondary,
-          anchorStrokeWidth: 1.5,
-          // Reject transforms that shrink below the minimum-dimension
-          // floor or leave the stage. Konva passes us oldBox/newBox in
-          // the ellipse's local bounding-box coordinates (already
-          // scale-applied), so we just clamp against stage dimensions.
-          boundBoxFunc(oldBox, newBox) {
-            if (
-              newBox.width < minSizePx ||
-              newBox.height < minSizePx
-            ) {
-              return oldBox;
-            }
-            if (newBox.x < 0 || newBox.y < 0) {
-              return oldBox;
-            }
-            if (
-              newBox.x + newBox.width > sw ||
-              newBox.y + newBox.height > sh
-            ) {
-              return oldBox;
-            }
-            return newBox;
-          },
-        });
-        attentionPullLayer.add(transformer);
+        if (canEdit) {
+          // Resize (transform) + the visual Transformer are still gated
+          // on selection — only one marker shows resize handles at a
+          // time, and the click handler is what flips selection.
+          fillBody.on("transform", syncDecorations);
+          fillBody.on("transformend", () => {
+            // Bake the transform's scale into the radii so the next
+            // interaction starts from scale 1.
+            const sx = fillBody.scaleX();
+            const sy = fillBody.scaleY();
+            fillBody.scaleX(1);
+            fillBody.scaleY(1);
+            fillBody.radiusX(Math.max(1, fillBody.radiusX() * sx));
+            fillBody.radiusY(Math.max(1, fillBody.radiusY() * sy));
+            haloRef.radiusX(fillBody.radiusX());
+            haloRef.radiusY(fillBody.radiusY());
+            strokeRef.radiusX(fillBody.radiusX());
+            strokeRef.radiusY(fillBody.radiusY());
+            emitUpdate();
+          });
+
+          const transformer = new Konva.Transformer({
+            nodes: [fillBody],
+            rotateEnabled: false,
+            keepRatio: false,
+            enabledAnchors: [
+              "top-left",
+              "top-center",
+              "top-right",
+              "middle-left",
+              "middle-right",
+              "bottom-left",
+              "bottom-center",
+              "bottom-right",
+            ],
+            borderEnabled: false,
+            anchorSize: 10,
+            anchorCornerRadius: 2,
+            anchorStroke: amber,
+            anchorFill: secondary,
+            anchorStrokeWidth: 1.5,
+            // Reject transforms that shrink below the minimum-dimension
+            // floor or leave the stage. Konva passes us oldBox/newBox in
+            // the ellipse's local bounding-box coordinates (already
+            // scale-applied), so we just clamp against stage dimensions.
+            boundBoxFunc(oldBox, newBox) {
+              if (
+                newBox.width < minSizePx ||
+                newBox.height < minSizePx
+              ) {
+                return oldBox;
+              }
+              if (newBox.x < 0 || newBox.y < 0) {
+                return oldBox;
+              }
+              if (
+                newBox.x + newBox.width > sw ||
+                newBox.y + newBox.height > sh
+              ) {
+                return oldBox;
+              }
+              return newBox;
+            },
+          });
+          attentionPullLayer.add(transformer);
+        }
       }
     }
     attentionPullLayer.batchDraw();
@@ -981,10 +998,11 @@ export async function createAnnotationStage({
         continue;
       }
       const isSelected = area.id === state.selectedStrongAreaId;
-      const canEdit =
-        isSelected &&
-        state.visualMode === "strong_area" &&
-        state.strongAreaEditEnabled;
+      // Same canDrag/canEdit split as attention pulls so restored
+      // markers feel as responsive as freshly placed ones.
+      const canDrag =
+        state.visualMode === "strong_area" && state.strongAreaEditEnabled;
+      const canEdit = canDrag && isSelected;
 
       const haloWidth = Math.max(4, Math.round(shortEdge * 0.0055));
       const strokeWidth = isSelected
@@ -1015,7 +1033,7 @@ export async function createAnnotationStage({
         strokeEnabled: false,
         name: `strong-area-${id}`,
         listening: true,
-        draggable: canEdit,
+        draggable: canDrag,
         dragBoundFunc(pos) {
           const w = fillBody.radiusX() * fillBody.scaleX();
           const h = fillBody.radiusY() * fillBody.scaleY();
@@ -1081,7 +1099,7 @@ export async function createAnnotationStage({
         strongAreaLayer.add(labelRef);
       }
 
-      if (canEdit) {
+      if (canDrag) {
         const syncDecorations = () => {
           const ex = fillBody.x();
           const ey = fillBody.y();
@@ -1136,63 +1154,69 @@ export async function createAnnotationStage({
           onUpdateStrongArea?.(id, xPct, yPct, widthPct, heightPct);
         };
 
+        // Drag is available for ANY marker in the right mode — selection
+        // is no longer required. Resize handles still mount only on the
+        // selected marker.
         fillBody.on("dragmove", syncDecorations);
         fillBody.on("dragend", emitUpdate);
-        fillBody.on("transform", syncDecorations);
-        fillBody.on("transformend", () => {
-          const sx = fillBody.scaleX();
-          const sy = fillBody.scaleY();
-          fillBody.scaleX(1);
-          fillBody.scaleY(1);
-          fillBody.radiusX(Math.max(1, fillBody.radiusX() * sx));
-          fillBody.radiusY(Math.max(1, fillBody.radiusY() * sy));
-          haloRef.radiusX(fillBody.radiusX());
-          haloRef.radiusY(fillBody.radiusY());
-          strokeRef.radiusX(fillBody.radiusX());
-          strokeRef.radiusY(fillBody.radiusY());
-          emitUpdate();
-        });
 
-        const transformer = new Konva.Transformer({
-          nodes: [fillBody],
-          rotateEnabled: false,
-          keepRatio: false,
-          enabledAnchors: [
-            "top-left",
-            "top-center",
-            "top-right",
-            "middle-left",
-            "middle-right",
-            "bottom-left",
-            "bottom-center",
-            "bottom-right",
-          ],
-          borderEnabled: false,
-          anchorSize: 10,
-          anchorCornerRadius: 2,
-          anchorStroke: green,
-          anchorFill: secondary,
-          anchorStrokeWidth: 1.5,
-          boundBoxFunc(oldBox, newBox) {
-            if (
-              newBox.width < minSizePx ||
-              newBox.height < minSizePx
-            ) {
-              return oldBox;
-            }
-            if (newBox.x < 0 || newBox.y < 0) {
-              return oldBox;
-            }
-            if (
-              newBox.x + newBox.width > sw ||
-              newBox.y + newBox.height > sh
-            ) {
-              return oldBox;
-            }
-            return newBox;
-          },
-        });
-        strongAreaLayer.add(transformer);
+        if (canEdit) {
+          fillBody.on("transform", syncDecorations);
+          fillBody.on("transformend", () => {
+            const sx = fillBody.scaleX();
+            const sy = fillBody.scaleY();
+            fillBody.scaleX(1);
+            fillBody.scaleY(1);
+            fillBody.radiusX(Math.max(1, fillBody.radiusX() * sx));
+            fillBody.radiusY(Math.max(1, fillBody.radiusY() * sy));
+            haloRef.radiusX(fillBody.radiusX());
+            haloRef.radiusY(fillBody.radiusY());
+            strokeRef.radiusX(fillBody.radiusX());
+            strokeRef.radiusY(fillBody.radiusY());
+            emitUpdate();
+          });
+
+          const transformer = new Konva.Transformer({
+            nodes: [fillBody],
+            rotateEnabled: false,
+            keepRatio: false,
+            enabledAnchors: [
+              "top-left",
+              "top-center",
+              "top-right",
+              "middle-left",
+              "middle-right",
+              "bottom-left",
+              "bottom-center",
+              "bottom-right",
+            ],
+            borderEnabled: false,
+            anchorSize: 10,
+            anchorCornerRadius: 2,
+            anchorStroke: green,
+            anchorFill: secondary,
+            anchorStrokeWidth: 1.5,
+            boundBoxFunc(oldBox, newBox) {
+              if (
+                newBox.width < minSizePx ||
+                newBox.height < minSizePx
+              ) {
+                return oldBox;
+              }
+              if (newBox.x < 0 || newBox.y < 0) {
+                return oldBox;
+              }
+              if (
+                newBox.x + newBox.width > sw ||
+                newBox.y + newBox.height > sh
+              ) {
+                return oldBox;
+              }
+              return newBox;
+            },
+          });
+          strongAreaLayer.add(transformer);
+        }
       }
     }
     strongAreaLayer.batchDraw();
