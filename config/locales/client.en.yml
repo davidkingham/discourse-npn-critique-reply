@@ -49,7 +49,7 @@ en:
         recommended: "Recommended"
         your_critique: "Your critique"
         textarea_placeholder: "Write your critique here, or use the prompts above as a starting point."
-        reference_image: "Reference image"
+        reference_image: "Image & Visual Notes"
         image_alt: "Image being critiqued"
         image_alt_with_title: "Image being critiqued: %{title}"
         image_alt_versioned: "%{label} image being critiqued"
