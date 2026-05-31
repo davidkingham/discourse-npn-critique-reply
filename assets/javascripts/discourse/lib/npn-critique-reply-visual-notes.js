@@ -1,4 +1,12 @@
 import { ajax } from "discourse/lib/ajax";
+import {
+  ANNOTATION_BLUE,
+  ANNOTATION_HALO,
+  AREA_FILL_OPACITY_UNSELECTED,
+  ATTENTION_PULL_OCHRE,
+  CROP_DIM_FILL,
+  STRONG_AREA_SAGE,
+} from "./npn-critique-reply-colors";
 
 // Visual Notes export/upload helpers. Used by the Critique Helper modal
 // when the critic has placed pins and is about to Post Critique or Edit
@@ -27,12 +35,6 @@ const MIN_PIN_RADIUS = 20; // px — protects sub-800px exports
 const HALO_RATIO = 0.18; // halo thickness as fraction of pin radius
 const MIN_HALO = 3; // px
 
-// Fallbacks for theme variables — Discourse's default tertiary blue and
-// pure white. Used only when readCssVar can't pull the live value (e.g.
-// during a server-side render or in a stripped test environment).
-const FALLBACK_PIN_FILL = "#0088cc";
-const FALLBACK_PIN_TEXT = "#ffffff";
-const FALLBACK_HALO = "#ffffff";
 
 // Eye-path smoothing — must match the same-named constant in
 // `npn-critique-reply-konva-stage.js` so the editor and exported
@@ -128,7 +130,9 @@ function drawCropOnCanvas(ctx, crop, width, height) {
     return;
   }
 
-  const borderColor = readCssVar("--tertiary", FALLBACK_PIN_FILL);
+  // Muted blue matches the editor's crop perimeter — see
+  // npn-critique-reply-colors.js.
+  const borderColor = ANNOTATION_BLUE;
   const borderWidth = Math.max(
     2,
     Math.round(Math.min(width, height) * 0.0035)
@@ -136,9 +140,10 @@ function drawCropOnCanvas(ctx, crop, width, height) {
 
   ctx.save();
 
-  // Dim — 4 rects around the crop. Avoids needing a composite mode
-  // and renders consistently across browsers.
-  ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+  // Dim — 4 rects around the crop. Slightly less opaque than 0.5
+  // so the area outside the crop stays readable (matches the
+  // editor's CROP_DIM_FILL).
+  ctx.fillStyle = CROP_DIM_FILL;
   // Top band
   if (cy > 0) {
     ctx.fillRect(0, 0, width, cy);
@@ -184,8 +189,10 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
   if (!Array.isArray(pulls) || pulls.length === 0) {
     return;
   }
-  const amber = readCssVar("--bookmark", "#e89e2c");
-  const secondary = readCssVar("--secondary", FALLBACK_PIN_TEXT);
+  // Muted ochre matches the editor's attention-pull ellipse —
+  // see npn-critique-reply-colors.js.
+  const amber = ATTENTION_PULL_OCHRE;
+  const secondary = ANNOTATION_HALO;
   const shortEdge = Math.min(width, height);
   const haloWidth = Math.max(4, Math.round(shortEdge * 0.0055));
   const strokeWidth = Math.max(2, Math.round(shortEdge * 0.0035));
@@ -220,7 +227,9 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
     ctx.fillStyle = amber;
-    ctx.globalAlpha = 0.14;
+    // Matches AREA_FILL_OPACITY_UNSELECTED in the editor so the
+    // exported translucent fill reads the same as the modal preview.
+    ctx.globalAlpha = AREA_FILL_OPACITY_UNSELECTED;
     ctx.fill();
 
     // Dashed amber stroke on top.
@@ -273,8 +282,10 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
   if (!Array.isArray(areas) || areas.length === 0) {
     return;
   }
-  const green = readCssVar("--success", "#2a8c4a");
-  const secondary = readCssVar("--secondary", FALLBACK_PIN_TEXT);
+  // Muted sage matches the editor's strong-area ellipse — see
+  // npn-critique-reply-colors.js.
+  const green = STRONG_AREA_SAGE;
+  const secondary = ANNOTATION_HALO;
   const shortEdge = Math.min(width, height);
   const haloWidth = Math.max(4, Math.round(shortEdge * 0.0055));
   const strokeWidth = Math.max(2, Math.round(shortEdge * 0.0035));
@@ -306,7 +317,9 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
     ctx.fillStyle = green;
-    ctx.globalAlpha = 0.14;
+    // Matches AREA_FILL_OPACITY_UNSELECTED in the editor so the
+    // exported translucent fill reads the same as the modal preview.
+    ctx.globalAlpha = AREA_FILL_OPACITY_UNSELECTED;
     ctx.fill();
 
     // Solid green stroke (no dash) on top.
@@ -547,8 +560,10 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
     return;
   }
 
-  const tertiary = readCssVar("--tertiary", FALLBACK_PIN_FILL);
-  const secondary = readCssVar("--secondary", FALLBACK_PIN_TEXT);
+  // Eye path uses the same muted blue as pins/crop — see
+  // npn-critique-reply-colors.js.
+  const tertiary = ANNOTATION_BLUE;
+  const secondary = ANNOTATION_HALO;
   const shortEdge = Math.min(width, height);
 
   ctx.save();
@@ -732,9 +747,12 @@ function drawPinsOnCanvas(ctx, pins, width, height) {
   const haloThickness = Math.max(MIN_HALO, Math.round(pinRadius * HALO_RATIO));
   const fontSize = Math.round(pinRadius * 1.05);
 
-  const pinFill = readCssVar("--tertiary", FALLBACK_PIN_FILL);
-  const pinText = readCssVar("--secondary", FALLBACK_PIN_TEXT);
-  const halo = readCssVar("--secondary", FALLBACK_HALO);
+  // Numbered pins use the muted blue (most prominent of the muted
+  // family — the numbered badge is the primary critique anchor).
+  // See npn-critique-reply-colors.js.
+  const pinFill = ANNOTATION_BLUE;
+  const pinText = ANNOTATION_HALO;
+  const halo = ANNOTATION_HALO;
 
   ctx.save();
   ctx.font = `700 ${fontSize}px sans-serif`;
@@ -772,16 +790,6 @@ function drawPinsOnCanvas(ctx, pins, width, height) {
   }
 
   ctx.restore();
-}
-
-function readCssVar(name, fallback) {
-  if (typeof document === "undefined") {
-    return fallback;
-  }
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    ?.trim();
-  return value || fallback;
 }
 
 // JPEG by default (smaller files for photos; pins on a photo background

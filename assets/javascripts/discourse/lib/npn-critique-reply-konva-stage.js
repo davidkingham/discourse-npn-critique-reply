@@ -1,5 +1,14 @@
 import { getURLWithCDN } from "discourse/lib/get-url";
 import loadScript from "discourse/lib/load-script";
+import {
+  ANNOTATION_BLUE,
+  ANNOTATION_HALO,
+  AREA_FILL_OPACITY_SELECTED,
+  AREA_FILL_OPACITY_UNSELECTED,
+  ATTENTION_PULL_OCHRE,
+  CROP_DIM_FILL,
+  STRONG_AREA_SAGE,
+} from "./npn-critique-reply-colors";
 
 // Konva-backed annotation stage.
 // =================================================================
@@ -62,17 +71,6 @@ async function ensureKonva() {
   return _konvaPromise;
 }
 
-// Read a CSS custom property from :root with a fallback. Used so pins
-// match the writer's current theme tertiary color.
-function readCssVar(name, fallback) {
-  if (typeof document === "undefined") {
-    return fallback;
-  }
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    ?.trim();
-  return value || fallback;
-}
 
 // Pin radius scales with the displayed stage size so the pin reads
 // proportionally on both a 600px modal and a 1600px export. Floored
@@ -542,12 +540,13 @@ export async function createAnnotationStage({
     const y = (pin.yPct / 100) * stageHeight;
     const pinRadius = computePinRadius(stageWidth, stageHeight);
 
-    // Read theme colors at render time so dark-theme users see correct
-    // tertiary; the writer's theme determines pin color, matching the
-    // existing vanilla export pipeline.
-    const tertiary = readCssVar("--tertiary", "#0088cc");
-    const secondary = readCssVar("--secondary", "#ffffff");
-    const tertiaryHover = readCssVar("--tertiary-hover", tertiary);
+    // Annotation palette is fixed (not theme-derived) so critiques
+    // read the same across themes — see npn-critique-reply-colors.js.
+    // Pins are the most prominent of the muted family — the numbered
+    // badge is the primary critique anchor.
+    const tertiary = ANNOTATION_BLUE;
+    const secondary = ANNOTATION_HALO;
+    const tertiaryHover = ANNOTATION_BLUE;
 
     const isSelected = pin.number === state.selectedPinNumber;
     // Selected pin → draggable, unless the modal explicitly suppresses
@@ -685,10 +684,11 @@ export async function createAnnotationStage({
       attentionPullLayer.batchDraw();
       return;
     }
-    // --bookmark is Discourse's warm amber. Fallback hex if the theme
-    // doesn't define it.
-    const amber = readCssVar("--bookmark", "#e89e2c");
-    const secondary = readCssVar("--secondary", "#ffffff");
+    // Muted ochre — see npn-critique-reply-colors.js. Distinct hue
+    // from the pin/eye/crop blue family but pulled back from the
+    // alarm-bell-bright theme amber.
+    const amber = ATTENTION_PULL_OCHRE;
+    const secondary = ANNOTATION_HALO;
     const shortEdge = Math.min(sw, sh);
 
     const minSizePx = Math.max(
@@ -745,7 +745,9 @@ export async function createAnnotationStage({
         radiusX: rx,
         radiusY: ry,
         fill: amber,
-        opacity: isSelected ? 0.22 : 0.14,
+        opacity: isSelected
+          ? AREA_FILL_OPACITY_SELECTED
+          : AREA_FILL_OPACITY_UNSELECTED,
         strokeEnabled: false,
         name: `attention-pull-${id}`,
         listening: true,
@@ -968,11 +970,11 @@ export async function createAnnotationStage({
       strongAreaLayer.batchDraw();
       return;
     }
-    // --success is Discourse's confirmation green. Fallback to a
-    // muted teal that reads as supportive without competing with
-    // tertiary or amber.
-    const green = readCssVar("--success", "#2a8c4a");
-    const secondary = readCssVar("--secondary", "#ffffff");
+    // Muted sage — see npn-critique-reply-colors.js. Supportive
+    // counterpart to Attention Pull's ochre, soft enough not to
+    // compete with greens already present in the photograph.
+    const green = STRONG_AREA_SAGE;
+    const secondary = ANNOTATION_HALO;
     const shortEdge = Math.min(sw, sh);
     const minSizePx = Math.max(
       10,
@@ -1018,7 +1020,9 @@ export async function createAnnotationStage({
         radiusX: rx,
         radiusY: ry,
         fill: green,
-        opacity: isSelected ? 0.22 : 0.14,
+        opacity: isSelected
+          ? AREA_FILL_OPACITY_SELECTED
+          : AREA_FILL_OPACITY_UNSELECTED,
         strokeEnabled: false,
         name: `strong-area-${id}`,
         listening: true,
@@ -1239,9 +1243,11 @@ export async function createAnnotationStage({
       return;
     }
 
-    const tertiary = readCssVar("--tertiary", "#0088cc");
-    const secondary = readCssVar("--secondary", "#ffffff");
-    const tertiaryHover = readCssVar("--tertiary-hover", tertiary);
+    // Eye path shares the muted blue family with pins and crop —
+    // "elegant and directional, not loud" per the palette refinement.
+    const tertiary = ANNOTATION_BLUE;
+    const secondary = ANNOTATION_HALO;
+    const tertiaryHover = ANNOTATION_BLUE;
     const shortEdge = Math.min(sw, sh);
 
     // Convert percentage points → stage pixel coords. Mutable so
@@ -1729,7 +1735,10 @@ export async function createAnnotationStage({
     const cw = (state.crop.widthPct / 100) * sw;
     const ch = (state.crop.heightPct / 100) * sh;
 
-    const dimFill = "rgba(0, 0, 0, 0.5)";
+    // Slightly less opaque than 0.5 so the area outside the crop
+    // stays readable while still clearly de-emphasised. See
+    // npn-critique-reply-colors.js.
+    const dimFill = CROP_DIM_FILL;
     const dimTop = new Konva.Rect({
       x: 0,
       y: 0,
@@ -1763,8 +1772,11 @@ export async function createAnnotationStage({
       listening: false,
     });
 
-    const tertiary = readCssVar("--tertiary", "#0088cc");
-    const secondary = readCssVar("--secondary", "#ffffff");
+    // Crop shares the muted blue family with pins and eye path, but
+    // it's the quietest large annotation (thinner stroke / lower
+    // dim opacity) so it doesn't overpower the photograph.
+    const tertiary = ANNOTATION_BLUE;
+    const secondary = ANNOTATION_HALO;
     const canEdit =
       state.visualMode === "crop_suggestion" && state.cropSelected;
 
@@ -1999,11 +2011,15 @@ export async function createAnnotationStage({
       cropDecorationsRef.destroy();
       cropDecorationsRef = null;
     }
-    const stageColor = readCssVar("--tertiary", "#0088cc");
+    // Crop decoration uses the same muted blue as the perimeter
+    // (see npn-critique-reply-colors.js). Bracket / bar thickness was
+    // pulled in from 4px → 3px as part of the palette refinement so
+    // crop reads as the quietest of the large annotations.
+    const stageColor = ANNOTATION_BLUE;
     const bracketArm = 22;
-    const bracketThick = 4;
+    const bracketThick = 3;
     const edgeBarLen = 28;
-    const edgeBarThick = 4;
+    const edgeBarThick = 3;
 
     const group = new Konva.Group({ listening: false });
 
@@ -2144,7 +2160,14 @@ export async function createAnnotationStage({
 
   function renderPreview(x1, y1, x2, y2) {
     previewLayer.destroyChildren();
-    const tertiary = readCssVar("--tertiary", "#0088cc");
+    // Drag-to-create preview colour follows the active tool so the
+    // in-flight rect reads as a draft of the kind being placed.
+    let tertiary = ANNOTATION_BLUE;
+    if (state.visualMode === "attention_pull") {
+      tertiary = ATTENTION_PULL_OCHRE;
+    } else if (state.visualMode === "strong_area") {
+      tertiary = STRONG_AREA_SAGE;
+    }
     const rx = Math.min(x1, x2);
     const ry = Math.min(y1, y2);
     const rw = Math.abs(x2 - x1);
