@@ -696,6 +696,12 @@
     font-size: var(--font-down-1);
   }
 
+  &__draft-ttl-hint {
+    align-self: center;
+    font-size: var(--font-down-2);
+    color: var(--primary-medium);
+  }
+
   // Restore-time notices. Image-version edge cases surface above the
   // workspace layout rather than inline so the user sees them before
   // they start writing.

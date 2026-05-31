@@ -98,6 +98,29 @@ describe DiscourseNpnCritiqueReply::DraftStore do
       store.save(user_id: user.id, topic_id: topic.id, payload: ancient)
       expect(store.load(user_id: user.id, topic_id: topic.id)).not_to be_nil
     end
+
+    it "is inactivity-based — a new save resets the expiry window" do
+      SiteSetting.npn_critique_reply_draft_ttl_days = 30
+
+      # First save: backdate so the draft is on the verge of expiring.
+      stale = normalized_payload("critique_text" => "first")
+      stale["updated_at"] = (Time.now.utc - (25 * 24 * 60 * 60)).iso8601
+      store.save(user_id: user.id, topic_id: topic.id, payload: stale)
+
+      # A second save (modeled on the controller path — re-normalize
+      # to stamp a fresh updated_at) should reset the clock.
+      refreshed = normalized_payload("critique_text" => "second")
+      store.save(user_id: user.id, topic_id: topic.id, payload: refreshed)
+
+      # Advance time by another 25 days. The original draft would now
+      # be 50 days old, but because the second save bumped updated_at,
+      # the effective age is only 25 days — still within TTL.
+      freeze_time((Time.now.utc + (25 * 24 * 60 * 60))) do
+        loaded = store.load(user_id: user.id, topic_id: topic.id)
+        expect(loaded).not_to be_nil
+        expect(loaded["critique_text"]).to eq("second")
+      end
+    end
   end
 end
 

@@ -2275,6 +2275,24 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.draftsEnabled && this.draftHasSaved;
   }
 
+  // Quiet footer hint that surfaces the TTL policy. Inactivity-based:
+  // each autosave bumps `updated_at`, so the window only counts down
+  // once the user stops touching the draft. Hidden when expiry is
+  // disabled (TTL = 0) or when there's no draft to anchor the hint to.
+  get draftTtlHint() {
+    if (!this.draftsEnabled || !this.draftHasSaved) {
+      return null;
+    }
+    const days = parseInt(
+      this.siteSettings.npn_critique_reply_draft_ttl_days,
+      10
+    );
+    if (!Number.isFinite(days) || days <= 0) {
+      return null;
+    }
+    return i18n("npn_critique_reply.modal.drafts.ttl_hint", { count: days });
+  }
+
   get draftImageVersionOutdatedMessage() {
     const notice = this.draftRestoreNotice;
     if (notice && typeof notice === "object" && notice.kind === "image_version_outdated") {
@@ -3383,6 +3401,11 @@ export default class NpnCritiqueReplyModal extends Component {
               {{this.draftStatusLabel}}
             {{/if}}
           </span>
+          {{#if this.draftTtlHint}}
+            <span class="npn-critique-reply-modal__draft-ttl-hint">
+              {{this.draftTtlHint}}
+            </span>
+          {{/if}}
           {{#if this.showDraftDiscard}}
             <DButton
               class="btn-flat npn-critique-reply-modal__discard-draft"

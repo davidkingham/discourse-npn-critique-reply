@@ -51,6 +51,9 @@ plugins:
     client: true
 
   # Drafts older than this are ignored on load (and may be cleaned up
-  # by future tasks). 0 disables expiry.
+  # by future tasks). 0 disables expiry. Client-visible so the modal
+  # can render the "Drafts are saved for N days" hint without
+  # hardcoding the value.
   npn_critique_reply_draft_ttl_days:
     default: 30
+    client: true
