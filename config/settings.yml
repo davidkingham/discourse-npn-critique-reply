@@ -51,9 +51,8 @@ plugins:
     client: true
 
   # Drafts older than this are ignored on load (and may be cleaned up
-  # by future tasks). 0 disables expiry. Client-visible so the modal
-  # can render the "Drafts are saved for N days" hint without
-  # hardcoding the value.
+  # by future tasks). Inactivity-based: each autosave bumps the
+  # draft's updated_at, so the window resets on activity. Set to 0
+  # to disable expiry.
   npn_critique_reply_draft_ttl_days:
     default: 30
-    client: true

@@ -2275,24 +2275,6 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.draftsEnabled && this.draftHasSaved;
   }
 
-  // Quiet footer hint that surfaces the TTL policy. Inactivity-based:
-  // each autosave bumps `updated_at`, so the window only counts down
-  // once the user stops touching the draft. Hidden when expiry is
-  // disabled (TTL = 0) or when there's no draft to anchor the hint to.
-  get draftTtlHint() {
-    if (!this.draftsEnabled || !this.draftHasSaved) {
-      return null;
-    }
-    const days = parseInt(
-      this.siteSettings.npn_critique_reply_draft_ttl_days,
-      10
-    );
-    if (!Number.isFinite(days) || days <= 0) {
-      return null;
-    }
-    return i18n("npn_critique_reply.modal.drafts.ttl_hint", { count: days });
-  }
-
   get draftImageVersionOutdatedMessage() {
     const notice = this.draftRestoreNotice;
     if (notice && typeof notice === "object" && notice.kind === "image_version_outdated") {
@@ -2351,6 +2333,10 @@ export default class NpnCritiqueReplyModal extends Component {
     if (status === DRAFT_STATUS.SAVED) {
       this.draftHasSaved = true;
     }
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] draft-status", { status });
+    }
   }
 
   // Compose the current workspace state into the v1 draft shape that
@@ -2377,7 +2363,7 @@ export default class NpnCritiqueReplyModal extends Component {
     for (const area of strongAreasToAnnotations(this.strongAreas ?? [])) {
       annotations.push(area);
     }
-    return {
+    const payload = {
       schema_version: 1,
       selected_image_version_key: this.selectedVersionKey ?? null,
       critique_text: this.critiqueText ?? "",
@@ -2387,6 +2373,15 @@ export default class NpnCritiqueReplyModal extends Component {
         prompts_expanded: !!this.promptsExpanded,
       },
     };
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] draft-build-payload", {
+        textLength: payload.critique_text.length,
+        annotationCount: payload.annotations.length,
+        kinds: payload.annotations.map((a) => a.kind),
+      });
+    }
+    return payload;
   }
 
   // Apply a server-loaded draft to in-memory state. Set
@@ -3401,11 +3396,6 @@ export default class NpnCritiqueReplyModal extends Component {
               {{this.draftStatusLabel}}
             {{/if}}
           </span>
-          {{#if this.draftTtlHint}}
-            <span class="npn-critique-reply-modal__draft-ttl-hint">
-              {{this.draftTtlHint}}
-            </span>
-          {{/if}}
           {{#if this.showDraftDiscard}}
             <DButton
               class="btn-flat npn-critique-reply-modal__discard-draft"

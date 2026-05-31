@@ -43,10 +43,19 @@ export async function loadDraft(topicId) {
 // One-shot save. Returns the server-normalized draft body so the
 // caller can sync any server-side defaults (timestamps, dropped
 // invalid annotations).
+//
+// Sent as `application/json` rather than the jQuery-default
+// form-encoded body. Form-encoding round-trips deeply nested arrays
+// (e.g. `draft[annotations][0][points][1][x_pct]`) through Rack with
+// quirks that varied across jQuery + Rails versions and caused
+// annotations to drop server-side. JSON has no such ambiguity.
 export async function saveDraft(topicId, payload) {
   const response = await ajax(draftEndpoint(topicId), {
     type: "PUT",
-    data: { draft: payload },
+    data: JSON.stringify({ draft: payload }),
+    contentType: "application/json",
+    processData: false,
+    dataType: "json",
   });
   return response?.draft ?? null;
 }

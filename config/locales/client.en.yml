@@ -108,12 +108,6 @@ en:
           # Surfaced under Reply Normally when a saved draft exists, so
           # the user knows the workspace draft survives the escape hatch.
           reply_normally_kept: "Your critique workspace draft will remain saved."
-          # Quiet footer hint that sets expectation about how long the
-          # workspace draft will persist if abandoned. Inactivity-based:
-          # the count resets every time the autosave fires.
-          ttl_hint:
-            one: "Drafts are saved for %{count} day of inactivity."
-            other: "Drafts are saved for %{count} days of inactivity."
 
         submission_types:
           image_critique: "Image Critique"

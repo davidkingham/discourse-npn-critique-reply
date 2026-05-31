@@ -134,6 +134,76 @@ describe DiscourseNpnCritiqueReply::DraftsController do
         expect(response.parsed_body["draft"]["annotations"].map { |a| a["kind"] }).to eq(["pin"])
       end
 
+      it "round-trips all five annotation kinds when sent as JSON" do
+        # Mirrors the live frontend's wire format. The client switched
+        # from form-encoded to application/json because deeply nested
+        # arrays (eye_path.points, attention_pull / strong_area rect
+        # entries) sometimes failed to reconstruct correctly through
+        # Rack's bracketed-form parser.
+        annotations = [
+          { "kind" => "pin", "id" => "pin_1", "number" => 1, "x_pct" => 50, "y_pct" => 50 },
+          {
+            "kind" => "crop",
+            "id" => "crop_1",
+            "x_pct" => 10,
+            "y_pct" => 10,
+            "width_pct" => 60,
+            "height_pct" => 60,
+            "aspect_ratio" => "free",
+          },
+          {
+            "kind" => "eye_path",
+            "id" => "eye_path_1",
+            "points" => [
+              { "number" => 1, "x_pct" => 10, "y_pct" => 10 },
+              { "number" => 2, "x_pct" => 90, "y_pct" => 90 },
+            ],
+          },
+          {
+            "kind" => "attention_pull",
+            "id" => "attention_pull_1",
+            "label" => "A1",
+            "x_pct" => 20,
+            "y_pct" => 30,
+            "width_pct" => 15,
+            "height_pct" => 10,
+          },
+          {
+            "kind" => "strong_area",
+            "id" => "strong_area_1",
+            "label" => "S1",
+            "x_pct" => 40,
+            "y_pct" => 50,
+            "width_pct" => 20,
+            "height_pct" => 15,
+          },
+        ]
+        put endpoint, params: { draft: valid_payload.merge("annotations" => annotations) }.to_json,
+                      headers: {
+                        "CONTENT_TYPE" => "application/json",
+                      }
+        expect(response.status).to eq(200)
+        kinds = response.parsed_body["draft"]["annotations"].map { |a| a["kind"] }
+        expect(kinds).to contain_exactly(
+          "pin",
+          "crop",
+          "eye_path",
+          "attention_pull",
+          "strong_area",
+        )
+
+        # Confirm GET returns the same five.
+        get endpoint
+        kinds = response.parsed_body["draft"]["annotations"].map { |a| a["kind"] }
+        expect(kinds).to contain_exactly(
+          "pin",
+          "crop",
+          "eye_path",
+          "attention_pull",
+          "strong_area",
+        )
+      end
+
       it "returns 403 on a closed topic for a non-staff user" do
         topic.update!(closed: true)
         put endpoint, params: { draft: valid_payload }
