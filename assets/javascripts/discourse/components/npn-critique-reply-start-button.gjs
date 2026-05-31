@@ -77,7 +77,18 @@ export default class NpnCritiqueReplyStartButton extends Component {
     return true;
   }
 
+  // Flipped by the topic serializer when there's a saved server draft
+  // for the current user on this topic (see plugin.rb after_initialize).
+  // The button label switches to "Resume Critique Draft" so the user
+  // gets a one-glance cue that work is waiting.
+  get hasDraft() {
+    return !!this.topic?.npn_critique_reply_has_draft;
+  }
+
   get label() {
+    if (this.hasDraft) {
+      return i18n("npn_critique_reply.resume_button");
+    }
     const override = this.siteSettings.npn_critique_reply_button_label;
     return override && override.trim().length > 0
       ? override
@@ -85,7 +96,9 @@ export default class NpnCritiqueReplyStartButton extends Component {
   }
 
   get title() {
-    return i18n("npn_critique_reply.start_button_title");
+    return this.hasDraft
+      ? i18n("npn_critique_reply.resume_button_title")
+      : i18n("npn_critique_reply.start_button_title");
   }
 
   @action

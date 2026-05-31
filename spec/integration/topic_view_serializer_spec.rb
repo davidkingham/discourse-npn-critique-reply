@@ -148,4 +148,49 @@ describe TopicViewSerializer do
       expect(serialized.key?(:npn_critique_reply)).to eq(false)
     end
   end
+
+  describe "npn_critique_reply_has_draft" do
+    before { SiteSetting.npn_critique_reply_enabled = true }
+
+    let(:store) { DiscourseNpnCritiqueReply::DraftStore }
+    let(:normalizer) { DiscourseNpnCritiqueReply::DraftNormalizer }
+
+    def save_draft_for(target_user)
+      payload =
+        normalizer.normalize(
+          { "critique_text" => "in progress" },
+          topic_id: topic.id,
+          user_id: target_user.id,
+        )
+      store.save(user_id: target_user.id, topic_id: topic.id, payload: payload)
+    end
+
+    it "is true when the scoped user has a saved draft" do
+      save_draft_for(user)
+      expect(serialized[:npn_critique_reply_has_draft]).to eq(true)
+    end
+
+    it "is false when no draft exists" do
+      expect(serialized[:npn_critique_reply_has_draft]).to eq(false)
+    end
+
+    it "is scoped to the current user — other users' drafts don't leak" do
+      other_user = Fabricate(:user)
+      save_draft_for(other_user)
+      expect(serialized[:npn_critique_reply_has_draft]).to eq(false)
+    end
+
+    it "is omitted entirely for anonymous viewers" do
+      save_draft_for(user)
+      anon_view = TopicView.new(topic.id, nil)
+      anon = described_class.new(anon_view, scope: Guardian.new(nil), root: false).as_json
+      expect(anon.key?(:npn_critique_reply_has_draft)).to eq(false)
+    end
+
+    it "is omitted when server drafts are disabled site-wide" do
+      save_draft_for(user)
+      SiteSetting.npn_critique_reply_server_drafts_enabled = false
+      expect(serialized.key?(:npn_critique_reply_has_draft)).to eq(false)
+    end
+  end
 end

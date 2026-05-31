@@ -89,6 +89,38 @@ export default class NpnCritiqueReplyInvitationPanel extends Component {
     );
   }
 
+  // Flipped by the topic serializer when there's a saved server draft
+  // for the current user on this topic (see plugin.rb after_initialize).
+  // The panel keeps its same shape; only the title/description/action
+  // label flip to "Resume" copy.
+  get hasDraft() {
+    return !!this.topic?.npn_critique_reply_has_draft;
+  }
+
+  get titleKey() {
+    return this.hasDraft
+      ? "npn_critique_reply.invitation_panel.resume_title"
+      : "npn_critique_reply.invitation_panel.title";
+  }
+
+  get descriptionKey() {
+    return this.hasDraft
+      ? "npn_critique_reply.invitation_panel.resume_description"
+      : "npn_critique_reply.invitation_panel.description";
+  }
+
+  get ariaLabelKey() {
+    return this.hasDraft
+      ? "npn_critique_reply.invitation_panel.resume_aria_label"
+      : "npn_critique_reply.invitation_panel.aria_label";
+  }
+
+  get actionLabelKey() {
+    return this.hasDraft
+      ? "npn_critique_reply.resume_button"
+      : "npn_critique_reply.start_button";
+  }
+
   get eligible() {
     const topic = this.topic;
     if (!topic) {
@@ -158,11 +190,10 @@ export default class NpnCritiqueReplyInvitationPanel extends Component {
   <template>
     {{#if (and this.isFirstPost this.eligible)}}
       <aside
-        class="npn-critique-reply-invitation-panel"
+        class="npn-critique-reply-invitation-panel
+          {{if this.hasDraft 'npn-critique-reply-invitation-panel--resume'}}"
         role="complementary"
-        aria-label={{i18n
-          "npn_critique_reply.invitation_panel.aria_label"
-        }}
+        aria-label={{i18n this.ariaLabelKey}}
       >
         {{! Decorative icon — meaning is in the adjacent title. The
             far-pen-to-square glyph matches the footer "Start a
@@ -176,16 +207,16 @@ export default class NpnCritiqueReplyInvitationPanel extends Component {
         </span>
         <div class="npn-critique-reply-invitation-panel__content">
           <h3 class="npn-critique-reply-invitation-panel__title">
-            {{i18n "npn_critique_reply.invitation_panel.title"}}
+            {{i18n this.titleKey}}
           </h3>
           <p class="npn-critique-reply-invitation-panel__description">
-            {{i18n "npn_critique_reply.invitation_panel.description"}}
+            {{i18n this.descriptionKey}}
           </p>
         </div>
         <DButton
           class="btn-primary npn-critique-reply-invitation-panel__start"
           @action={{this.startCritique}}
-          @label="npn_critique_reply.start_button"
+          @label={{this.actionLabelKey}}
         />
       </aside>
     {{/if}}

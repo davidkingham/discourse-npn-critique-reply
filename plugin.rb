@@ -59,6 +59,26 @@ after_initialize do
     include_condition: -> { SiteSetting.npn_critique_reply_enabled },
   ) { DiscourseNpnCritiqueReply::TopicMetadataReader.read(object.topic) }
 
+  # Per-user "is there a saved critique draft for this topic?" flag.
+  # The Start a Critique footer button and the OP invitation panel
+  # both flip their label to "Resume Critique Draft" when this is
+  # true so the user gets a one-glance cue that work is waiting.
+  # Anonymous users always see false (drafts are user-scoped).
+  add_to_serializer(
+    :topic_view,
+    :npn_critique_reply_has_draft,
+    include_condition: -> do
+      SiteSetting.npn_critique_reply_enabled &&
+        SiteSetting.npn_critique_reply_server_drafts_enabled &&
+        scope&.user.present?
+    end,
+  ) do
+    DiscourseNpnCritiqueReply::DraftStore.exists?(
+      user_id: scope.user.id,
+      topic_id: object.topic.id,
+    )
+  end
+
   # Mount the engine at root — `config/routes.rb` carries the full
   # `/npn-critique-reply/...` prefix, matching the URL the client uses.
   Discourse::Application.routes.append { mount ::DiscourseNpnCritiqueReply::Engine, at: "/" }

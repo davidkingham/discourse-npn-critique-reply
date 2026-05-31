@@ -71,6 +71,31 @@ describe DiscourseNpnCritiqueReply::DraftStore do
     end
   end
 
+  describe ".exists?" do
+    it "returns true when a non-expired draft is stored" do
+      store.save(user_id: user.id, topic_id: topic.id, payload: normalized_payload)
+      expect(store.exists?(user_id: user.id, topic_id: topic.id)).to eq(true)
+    end
+
+    it "returns false when no draft is stored" do
+      expect(store.exists?(user_id: user.id, topic_id: topic.id)).to eq(false)
+    end
+
+    it "returns false (and prunes) when the stored draft is expired" do
+      SiteSetting.npn_critique_reply_draft_ttl_days = 30
+      stale = normalized_payload
+      stale["updated_at"] = (Time.now.utc - (60 * 24 * 60 * 60)).iso8601
+      store.save(user_id: user.id, topic_id: topic.id, payload: stale)
+      expect(store.exists?(user_id: user.id, topic_id: topic.id)).to eq(false)
+    end
+
+    it "is scoped per user" do
+      other_user = Fabricate(:user)
+      store.save(user_id: user.id, topic_id: topic.id, payload: normalized_payload)
+      expect(store.exists?(user_id: other_user.id, topic_id: topic.id)).to eq(false)
+    end
+  end
+
   describe "TTL expiry" do
     it "returns nil and prunes drafts older than the TTL" do
       SiteSetting.npn_critique_reply_draft_ttl_days = 30

@@ -50,6 +50,14 @@ module DiscourseNpnCritiqueReply
       true
     end
 
+    # Lighter-weight than .load when callers only want to know whether a
+    # draft is there (e.g. the topic-view serializer deciding whether
+    # to surface "Resume Draft" on the Start button). Behaviour matches
+    # .load: expired drafts are pruned and reported as missing.
+    def exists?(user_id:, topic_id:)
+      !load(user_id: user_id, topic_id: topic_id).nil?
+    end
+
     def expired?(payload)
       ttl_days = SiteSetting.npn_critique_reply_draft_ttl_days.to_i
       return false if ttl_days <= 0

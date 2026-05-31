@@ -3,6 +3,12 @@ en:
     npn_critique_reply:
       start_button: "Start a Critique"
       start_button_title: "Start a guided critique"
+      # Shown on the same footer button + invitation panel when the
+      # topic serializer reports a saved server-side draft for the
+      # current user. Signals at a glance that there's work waiting,
+      # so the user knows clicking will pick up where they left off.
+      resume_button: "Resume Critique Draft"
+      resume_button_title: "Pick up your saved critique draft"
       coming_soon:
         title: "Want to offer feedback?"
         body: "The critique helper modal will be added in the next step."
@@ -16,6 +22,12 @@ en:
         title: "Start a thoughtful critique"
         description: "Keep the image and request in view while you write, with optional visual notes if helpful."
         aria_label: "Start a thoughtful critique"
+        # Counterparts shown when a saved server draft exists for this
+        # user/topic. The panel keeps its same shape; only the copy
+        # and the action label change.
+        resume_title: "Resume your critique draft"
+        resume_description: "Pick up where you left off — your text and visual annotations are saved."
+        resume_aria_label: "Resume your critique draft"
 
       modal:
         title: "Start a Critique"
