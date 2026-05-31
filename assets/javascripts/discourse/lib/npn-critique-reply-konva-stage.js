@@ -1851,164 +1851,67 @@ export async function createAnnotationStage({
 
       // Photo-editor-style decoration (perimeter + brackets + edge
       // bars). Built BEFORE the Transformer so the Transformer's
-      // (invisible) anchors render on top and own the hit areas.
-      buildCropDecorations(cx, cy, cw, ch);
-
-      // Tracked across transformstart → transformend by the listener
-      // below. We use it inside `boundBoxFunc` to apply the
-      // Lightroom-style edge-resize semantics when the ratio is
-      // locked: dragging an edge expands the perpendicular dimension
-      // symmetrically about the centre line.
-      let activeAnchor = null;
+      // (invisible) anchors render on top and own the hit areas. Edge
+      // bars are only drawn when free-ratio — see comment on
+      // enabledAnchors below.
+      buildCropDecorations(cx, cy, cw, ch, isRatioLocked);
 
       const transformer = new Konva.Transformer({
         nodes: [cropRect],
         rotateEnabled: false,
-        // We enforce aspect-ratio compliance manually inside
-        // boundBoxFunc so the same code path can handle both corner
-        // anchors (resize from opposite corner) and edge anchors
-        // (resize from centre on the perpendicular axis). Konva's
-        // built-in keepRatio gets in the way of that, so we turn it
-        // off and own the logic.
-        keepRatio: false,
-        // Always expose all 8 anchors — including when ratio is
-        // locked. Edge anchors in ratio-locked mode resize via the
-        // Lightroom rule (perpendicular dimension expands from
-        // centre), implemented in boundBoxFunc.
-        enabledAnchors: [
-          "top-left",
-          "top-center",
-          "top-right",
-          "middle-left",
-          "middle-right",
-          "bottom-left",
-          "bottom-center",
-          "bottom-right",
-        ],
+        // keepRatio on Konva.Transformer maintains the rect's CURRENT
+        // aspect ratio during transform. Because renderCrop is called
+        // after the ratio change re-snaps the rect to the target
+        // ratio (see the aspectChanged handling in update()),
+        // "current" is already correct by the time the transformer
+        // mounts.
+        keepRatio: isRatioLocked,
+        // Edge anchors can only resize one axis, which would break
+        // the ratio. Disable them when the ratio is locked; restore
+        // all 8 when free. (Lightroom-style "drag edge → expand
+        // perpendicular from centre" was attempted but Konva's
+        // boundBoxFunc doesn't reliably apply perpendicular-axis
+        // changes for edge anchors — left as a follow-up.)
+        enabledAnchors: isRatioLocked
+          ? ["top-left", "top-right", "bottom-left", "bottom-right"]
+          : [
+              "top-left",
+              "top-center",
+              "top-right",
+              "middle-left",
+              "middle-right",
+              "bottom-left",
+              "bottom-center",
+              "bottom-right",
+            ],
         // The decoration group renders its own perimeter — turn off
         // the transformer's border.
         borderEnabled: false,
         // Hide the default square anchors. The visible affordance is
-        // the bracket/bar decoration drawn below; the Transformer's
-        // anchors still own the hit areas, so we keep `anchorSize`
-        // large enough to cover those visuals (~24px). Transparent
-        // fill/stroke keeps the anchors hit-testable but invisible.
+        // the bracket/bar decoration; the Transformer's anchors still
+        // own the hit areas, so we keep `anchorSize` large enough to
+        // cover those visuals (~24px). Transparent fill/stroke keeps
+        // the anchors hit-testable but invisible.
         anchorSize: 24,
         anchorStroke: "rgba(0,0,0,0)",
         anchorFill: "rgba(0,0,0,0)",
         anchorStrokeWidth: 0,
         boundBoxFunc(oldBox, newBox) {
-          // Floor check on the user-proposed box. We re-check after
-          // ratio enforcement too — both axes can flip below the
-          // floor when the derived dimension shrinks.
           if (newBox.width < minW || newBox.height < minH) {
             return oldBox;
           }
-
-          let box = newBox;
-
-          if (isRatioLocked && lockedRatio) {
-            const anchor = activeAnchor;
-            // Horizontal-edge anchors: user drags vertically, height
-            // becomes the driving dimension. Width derives from ratio
-            // and expands/contracts symmetrically about the rect's
-            // horizontal centre.
-            if (anchor === "top-center" || anchor === "bottom-center") {
-              const newH = newBox.height;
-              const newW = newH * lockedRatio;
-              box = {
-                width: newW,
-                height: newH,
-                x: oldBox.x + (oldBox.width - newW) / 2,
-                y: anchor === "top-center" ? newBox.y : oldBox.y,
-              };
-            }
-            // Vertical-edge anchors: user drags horizontally, width
-            // becomes the driving dimension; height expands from the
-            // vertical centre.
-            else if (
-              anchor === "middle-left" ||
-              anchor === "middle-right"
-            ) {
-              const newW = newBox.width;
-              const newH = newW / lockedRatio;
-              box = {
-                width: newW,
-                height: newH,
-                x: anchor === "middle-left" ? newBox.x : oldBox.x,
-                y: oldBox.y + (oldBox.height - newH) / 2,
-              };
-            }
-            // Corner anchors: user drags diagonally; both newBox.w
-            // and newBox.h reflect their drag. Pick whichever
-            // dimension produces a ratio-conforming smaller rect (the
-            // one the user has "pulled less"), and anchor to the
-            // opposite corner so it stays put.
-            else if (
-              anchor === "top-left" ||
-              anchor === "top-right" ||
-              anchor === "bottom-left" ||
-              anchor === "bottom-right"
-            ) {
-              const proposedRatio = newBox.width / newBox.height;
-              let correctedW;
-              let correctedH;
-              if (proposedRatio > lockedRatio) {
-                correctedH = newBox.height;
-                correctedW = newBox.height * lockedRatio;
-              } else {
-                correctedW = newBox.width;
-                correctedH = newBox.width / lockedRatio;
-              }
-              const oldRight = oldBox.x + oldBox.width;
-              const oldBottom = oldBox.y + oldBox.height;
-              const fixedX =
-                anchor === "top-left" || anchor === "bottom-left"
-                  ? oldRight - correctedW
-                  : oldBox.x;
-              const fixedY =
-                anchor === "top-left" || anchor === "top-right"
-                  ? oldBottom - correctedH
-                  : oldBox.y;
-              box = {
-                width: correctedW,
-                height: correctedH,
-                x: fixedX,
-                y: fixedY,
-              };
-            }
-          }
-
-          // Post-ratio floor + stage-bounds checks. If ratio
-          // enforcement pushed the rect off the image or under the
-          // floor, refuse the gesture for this tick.
-          if (box.width < minW || box.height < minH) {
-            return oldBox;
-          }
-          if (box.x < 0 || box.y < 0) {
+          if (newBox.x < 0 || newBox.y < 0) {
             return oldBox;
           }
           if (
-            box.x + box.width > sw ||
-            box.y + box.height > sh
+            newBox.x + newBox.width > sw ||
+            newBox.y + newBox.height > sh
           ) {
             return oldBox;
           }
-          return box;
+          return newBox;
         },
       });
-
-      // Konva exposes the dragged anchor name via getActiveAnchor()
-      // during a transform gesture. Capture it on start (and clear
-      // on end) so boundBoxFunc can branch on which edge / corner is
-      // being dragged.
-      transformer.on("transformstart", () => {
-        activeAnchor = transformer.getActiveAnchor();
-      });
-      transformer.on("transformend", () => {
-        activeAnchor = null;
-      });
-
       cropLayer.add(transformer);
       cropTransformerRef = transformer;
     }
@@ -2065,7 +1968,8 @@ export async function createAnnotationStage({
 
     // Re-sync the decoration group when it's mounted (selected crop).
     if (cropDecorationsRef) {
-      buildCropDecorations(x, y, w, h);
+      const isRatioLocked = ratioValueFor(state.aspectRatio) != null;
+      buildCropDecorations(x, y, w, h, isRatioLocked);
       // Keep the Transformer (invisible-anchor hit areas) on top so
       // its anchors continue to capture mouse events at the corners
       // and edges.
@@ -2078,18 +1982,19 @@ export async function createAnnotationStage({
   // Build (or rebuild) the photo-editor-style crop decoration group:
   //   • 1px solid perimeter along all 4 edges
   //   • 4 L-shaped corner brackets, ~22px arms, 4px thick
-  //   • 4 edge midpoint bars, ~28px × 4px
+  //   • 4 edge midpoint bars, ~28px × 4px (free-ratio mode only)
   //
-  // Edge bars stay visible even when the aspect ratio is locked —
-  // dragging an edge in that mode resizes the perpendicular dimension
-  // symmetrically from the centre line (Lightroom semantics, applied
-  // by the Transformer's boundBoxFunc).
+  // Edge bars are HIDDEN when the aspect ratio is locked because
+  // edge anchors are disabled in that mode (Konva's edge-resize +
+  // keepRatio combination doesn't reliably produce a stable rect).
+  // Showing a bar without behind-it functionality would mis-promise
+  // an interaction.
   //
   // Editor-only — never reaches the exported JPEG. The export pipeline
   // (npn-critique-reply-visual-notes.js#drawCropOnCanvas) is a
   // completely separate code path that keeps the simpler stroked
   // rectangle look.
-  function buildCropDecorations(x, y, w, h) {
+  function buildCropDecorations(x, y, w, h, isRatioLocked) {
     if (cropDecorationsRef) {
       cropDecorationsRef.destroy();
       cropDecorationsRef = null;
@@ -2139,54 +2044,56 @@ export async function createAnnotationStage({
     group.add(bracket(x, y + h, 1, -1)); // bottom-left
     group.add(bracket(x + w, y + h, -1, -1)); // bottom-right
 
-    // 4 edge midpoint bars. Always rendered — edge resize works in
-    // both free-ratio mode (direct one-axis resize) and ratio-locked
-    // mode (Lightroom-style perpendicular-from-centre expansion, see
-    // the Transformer's boundBoxFunc).
-    // Top
-    group.add(
-      new Konva.Rect({
-        x: x + w / 2 - edgeBarLen / 2,
-        y: y - edgeBarThick / 2,
-        width: edgeBarLen,
-        height: edgeBarThick,
-        fill: stageColor,
-        listening: false,
-      })
-    );
-    // Bottom
-    group.add(
-      new Konva.Rect({
-        x: x + w / 2 - edgeBarLen / 2,
-        y: y + h - edgeBarThick / 2,
-        width: edgeBarLen,
-        height: edgeBarThick,
-        fill: stageColor,
-        listening: false,
-      })
-    );
-    // Left
-    group.add(
-      new Konva.Rect({
-        x: x - edgeBarThick / 2,
-        y: y + h / 2 - edgeBarLen / 2,
-        width: edgeBarThick,
-        height: edgeBarLen,
-        fill: stageColor,
-        listening: false,
-      })
-    );
-    // Right
-    group.add(
-      new Konva.Rect({
-        x: x + w - edgeBarThick / 2,
-        y: y + h / 2 - edgeBarLen / 2,
-        width: edgeBarThick,
-        height: edgeBarLen,
-        fill: stageColor,
-        listening: false,
-      })
-    );
+    // 4 edge midpoint bars — only when free-ratio. Hidden in
+    // ratio-locked mode because edge anchors are disabled then
+    // (showing the bar would promise an interaction the user
+    // can't actually do).
+    if (!isRatioLocked) {
+      // Top
+      group.add(
+        new Konva.Rect({
+          x: x + w / 2 - edgeBarLen / 2,
+          y: y - edgeBarThick / 2,
+          width: edgeBarLen,
+          height: edgeBarThick,
+          fill: stageColor,
+          listening: false,
+        })
+      );
+      // Bottom
+      group.add(
+        new Konva.Rect({
+          x: x + w / 2 - edgeBarLen / 2,
+          y: y + h - edgeBarThick / 2,
+          width: edgeBarLen,
+          height: edgeBarThick,
+          fill: stageColor,
+          listening: false,
+        })
+      );
+      // Left
+      group.add(
+        new Konva.Rect({
+          x: x - edgeBarThick / 2,
+          y: y + h / 2 - edgeBarLen / 2,
+          width: edgeBarThick,
+          height: edgeBarLen,
+          fill: stageColor,
+          listening: false,
+        })
+      );
+      // Right
+      group.add(
+        new Konva.Rect({
+          x: x + w - edgeBarThick / 2,
+          y: y + h / 2 - edgeBarLen / 2,
+          width: edgeBarThick,
+          height: edgeBarLen,
+          fill: stageColor,
+          listening: false,
+        })
+      );
+    }
 
     cropDecorationsRef = group;
     cropLayer.add(group);
