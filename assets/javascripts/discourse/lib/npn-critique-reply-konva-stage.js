@@ -482,6 +482,13 @@ export async function createAnnotationStage({
   let cropRectRef = null;
   let cropTransformerRef = null;
   let dimRectsRef = null;
+  // Photo-editor-style decoration group around the selected crop:
+  // 1px perimeter + 4 L-shaped corner brackets + 4 edge midpoint bars.
+  // Editor-only (the exported JPEG draws the simpler stroked rect via
+  // npn-critique-reply-visual-notes.js, untouched here). Rebuilt on
+  // every dragmove / transform so it tracks the cropRect's effective
+  // bounding box without disturbing the underlying Konva.Transformer.
+  let cropDecorationsRef = null;
 
   function applyContainerCursor() {
     if (state.visualMode === "numbered_notes") {
@@ -1707,6 +1714,7 @@ export async function createAnnotationStage({
     cropRectRef = null;
     cropTransformerRef = null;
     dimRectsRef = null;
+    cropDecorationsRef = null;
 
     const sw = stage.width();
     const sh = stage.height();
@@ -1765,9 +1773,15 @@ export async function createAnnotationStage({
       y: cy,
       width: cw,
       height: ch,
+      // When selected we hide cropRect's own stroke and let the photo-
+      // editor-style decoration group below carry the perimeter line,
+      // corner brackets, and edge midpoint bars. When unselected we
+      // keep the lighter dashed look as a "there's a crop here, click
+      // to interact" affordance.
+      strokeEnabled: !state.cropSelected,
       stroke: tertiary,
-      strokeWidth: state.cropSelected ? 3 : 2,
-      dash: state.cropSelected ? [] : [6, 4],
+      strokeWidth: 2,
+      dash: [6, 4],
       name: "crop-rect",
       // Mode-aware listening. The crop rect must pass clicks through
       // for any "click image to add something" mode, otherwise an
@@ -1834,6 +1848,12 @@ export async function createAnnotationStage({
       const minH = (MIN_CROP_DRAG_PCT / 100) * sh;
       const lockedRatio = ratioValueFor(state.aspectRatio);
       const isRatioLocked = lockedRatio != null;
+
+      // Photo-editor-style decoration (perimeter + brackets + edge
+      // bars). Built BEFORE the Transformer so the Transformer's
+      // (invisible) anchors render on top and own the hit areas.
+      buildCropDecorations(cx, cy, cw, ch, isRatioLocked);
+
       const transformer = new Konva.Transformer({
         nodes: [cropRect],
         rotateEnabled: false,
@@ -1858,14 +1878,18 @@ export async function createAnnotationStage({
               "bottom-center",
               "bottom-right",
             ],
-        // The crop rect already renders its own border — turning off
-        // the transformer's border keeps the visual clean.
+        // The decoration group renders its own perimeter — turn off
+        // the transformer's border.
         borderEnabled: false,
-        anchorSize: 10,
-        anchorCornerRadius: 2,
-        anchorStroke: tertiary,
-        anchorFill: secondary,
-        anchorStrokeWidth: 1.5,
+        // Hide the default square anchors. The visible affordance is
+        // the bracket/bar decoration drawn below; the Transformer's
+        // anchors still own the hit areas, so we keep `anchorSize`
+        // large enough to cover those visuals (~24px). Transparent
+        // fill/stroke keeps the anchors hit-testable but invisible.
+        anchorSize: 24,
+        anchorStroke: "rgba(0,0,0,0)",
+        anchorFill: "rgba(0,0,0,0)",
+        anchorStrokeWidth: 0,
         // Reject transforms that would leave the image bounds or
         // shrink below the minimum-dimension floor. Returning oldBox
         // keeps the rect parked at the last valid state for that
@@ -1904,7 +1928,10 @@ export async function createAnnotationStage({
   // Live-resync the 4 dim rects to the crop rect's CURRENT pixel
   // position while the user is dragging or resizing. We mutate the
   // existing rect nodes rather than re-rendering the whole layer so
-  // the drag gesture stays uninterrupted.
+  // the drag gesture stays uninterrupted. The bracket / edge-bar
+  // decoration group is rebuilt from the new bounding box on each
+  // tick (cheaper than per-shape position mutation for this many
+  // shapes, and renders cleanly).
   function updateDimDuringInteraction() {
     if (!cropRectRef || !dimRectsRef) {
       return;
@@ -1937,7 +1964,133 @@ export async function createAnnotationStage({
       height: Math.max(0, h),
     });
 
+    // Re-sync the decoration group when it's mounted (selected crop).
+    if (cropDecorationsRef) {
+      const isRatioLocked = ratioValueFor(state.aspectRatio) != null;
+      buildCropDecorations(x, y, w, h, isRatioLocked);
+      // Keep the Transformer (invisible-anchor hit areas) on top so
+      // its anchors continue to capture mouse events at the corners
+      // and edges.
+      cropTransformerRef?.moveToTop();
+    }
+
     cropLayer.batchDraw();
+  }
+
+  // Build (or rebuild) the photo-editor-style crop decoration group:
+  //   • 1px solid perimeter along all 4 edges
+  //   • 4 L-shaped corner brackets, ~22px arms, 4px thick
+  //   • 4 edge midpoint bars, ~28px × 4px (hidden when ratio is
+  //     locked — edge resize is disabled in that mode, so the
+  //     affordance shouldn't appear)
+  //
+  // Editor-only — never reaches the exported JPEG. The export pipeline
+  // (npn-critique-reply-visual-notes.js#drawCropOnCanvas) is a
+  // completely separate code path that keeps the simpler stroked
+  // rectangle look.
+  function buildCropDecorations(x, y, w, h, isRatioLocked) {
+    if (cropDecorationsRef) {
+      cropDecorationsRef.destroy();
+      cropDecorationsRef = null;
+    }
+    const stageColor = readCssVar("--tertiary", "#0088cc");
+    const bracketArm = 22;
+    const bracketThick = 4;
+    const edgeBarLen = 28;
+    const edgeBarThick = 4;
+
+    const group = new Konva.Group({ listening: false });
+
+    // Thin 1px perimeter connecting the brackets.
+    group.add(
+      new Konva.Rect({
+        x,
+        y,
+        width: w,
+        height: h,
+        stroke: stageColor,
+        strokeWidth: 1,
+        listening: false,
+      })
+    );
+
+    // 4 L-shaped corner brackets. Each is a 3-point Line: the elbow
+    // sits ON the corner, the two arms reach `bracketArm` along the
+    // adjacent edges inward.
+    const bracket = (cornerX, cornerY, dx, dy) =>
+      new Konva.Line({
+        points: [
+          cornerX + dx * bracketArm,
+          cornerY,
+          cornerX,
+          cornerY,
+          cornerX,
+          cornerY + dy * bracketArm,
+        ],
+        stroke: stageColor,
+        strokeWidth: bracketThick,
+        listening: false,
+        lineCap: "square",
+        lineJoin: "miter",
+      });
+    group.add(bracket(x, y, 1, 1)); // top-left
+    group.add(bracket(x + w, y, -1, 1)); // top-right
+    group.add(bracket(x, y + h, 1, -1)); // bottom-left
+    group.add(bracket(x + w, y + h, -1, -1)); // bottom-right
+
+    // 4 edge midpoint bars — only when free ratio (edge resize is
+    // disabled when a ratio is locked, so the bar would be visually
+    // promising an interaction the user can't actually do).
+    if (!isRatioLocked) {
+      // Top
+      group.add(
+        new Konva.Rect({
+          x: x + w / 2 - edgeBarLen / 2,
+          y: y - edgeBarThick / 2,
+          width: edgeBarLen,
+          height: edgeBarThick,
+          fill: stageColor,
+          listening: false,
+        })
+      );
+      // Bottom
+      group.add(
+        new Konva.Rect({
+          x: x + w / 2 - edgeBarLen / 2,
+          y: y + h - edgeBarThick / 2,
+          width: edgeBarLen,
+          height: edgeBarThick,
+          fill: stageColor,
+          listening: false,
+        })
+      );
+      // Left
+      group.add(
+        new Konva.Rect({
+          x: x - edgeBarThick / 2,
+          y: y + h / 2 - edgeBarLen / 2,
+          width: edgeBarThick,
+          height: edgeBarLen,
+          fill: stageColor,
+          listening: false,
+        })
+      );
+      // Right
+      group.add(
+        new Konva.Rect({
+          x: x + w - edgeBarThick / 2,
+          y: y + h / 2 - edgeBarLen / 2,
+          width: edgeBarThick,
+          height: edgeBarLen,
+          fill: stageColor,
+          listening: false,
+        })
+      );
+    }
+
+    cropDecorationsRef = group;
+    cropLayer.add(group);
+    return group;
   }
 
   // Read the crop rect's pixel position back into percentages and
