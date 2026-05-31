@@ -1,9 +1,12 @@
 import Component from "@glimmer/component";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
+import { tracked } from "@glimmer/tracking";
 import DButton from "discourse/ui-kit/d-button";
 import { i18n } from "discourse-i18n";
-import NpnCritiqueReplyModal from "./modal/npn-critique-reply-modal";
+import NpnCritiqueReplyModal, {
+  DRAFT_CHANGED_EVENT,
+} from "./modal/npn-critique-reply-modal";
 
 // Pipe-separated id lists (Discourse `list` / `group_list` settings serialize
 // as "1|2|3"). Positive integers only; tolerates empty/invalid input.
@@ -25,6 +28,31 @@ export default class NpnCritiqueReplyStartButton extends Component {
   @service siteSettings;
   @service currentUser;
   @service modal;
+  @service appEvents;
+
+  // Per-session override for the serializer-provided
+  // `topic.npn_critique_reply_has_draft`. The modal emits a
+  // DRAFT_CHANGED_EVENT whenever it creates or clears a draft, and we
+  // flip this flag so the button label updates without waiting for a
+  // page navigation. `null` means "no override — fall back to the
+  // serializer value".
+  @tracked _hasDraftOverride = null;
+
+  constructor() {
+    super(...arguments);
+    this.appEvents.on(DRAFT_CHANGED_EVENT, this, "_onDraftChanged");
+  }
+
+  willDestroy() {
+    super.willDestroy(...arguments);
+    this.appEvents.off(DRAFT_CHANGED_EVENT, this, "_onDraftChanged");
+  }
+
+  _onDraftChanged({ topicId, hasDraft } = {}) {
+    if (topicId && topicId === this.topic?.id) {
+      this._hasDraftOverride = !!hasDraft;
+    }
+  }
 
   get topic() {
     return this.args.outletArgs?.topic;
@@ -79,9 +107,14 @@ export default class NpnCritiqueReplyStartButton extends Component {
 
   // Flipped by the topic serializer when there's a saved server draft
   // for the current user on this topic (see plugin.rb after_initialize).
-  // The button label switches to "Resume Critique Draft" so the user
-  // gets a one-glance cue that work is waiting.
+  // `_hasDraftOverride` lets the modal force a value at runtime when it
+  // saves or clears a draft, so the label flips without a page
+  // navigation. Override wins when set; otherwise fall back to the
+  // serializer value baked into topic JSON at page load.
   get hasDraft() {
+    if (this._hasDraftOverride !== null) {
+      return this._hasDraftOverride;
+    }
     return !!this.topic?.npn_critique_reply_has_draft;
   }
 

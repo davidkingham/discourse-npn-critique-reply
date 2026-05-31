@@ -120,11 +120,18 @@ function writeBool(key, value) {
 //   - We never bypass Guardian or PostCreator validations (server checks).
 //   - `critiqueText` is modal-local only; we don't autosave anywhere.
 
+// Broadcast on this event whenever a saved server-side draft is created
+// or cleared from inside the modal. The footer Start button and the OP
+// invitation panel listen and flip their copy to / from "Resume Draft"
+// without waiting for a page navigation. Payload: `{ topicId, hasDraft }`.
+export const DRAFT_CHANGED_EVENT = "npn-critique-reply:draft-changed";
+
 export default class NpnCritiqueReplyModal extends Component {
   @service siteSettings;
   @service currentUser;
   @service toasts;
   @service dialog;
+  @service appEvents;
 
   // Draft state ----------------------------------------------------------
   @tracked critiqueText = "";
@@ -2350,12 +2357,29 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this.draftStatus = status;
     if (status === DRAFT_STATUS.SAVED) {
+      const firstSave = !this.draftHasSaved;
       this.draftHasSaved = true;
+      // Tell sibling entry-points (footer Start button + OP invitation
+      // panel) that a draft now exists for this topic. Only fire on
+      // the FIRST save of the session — subsequent autosaves don't
+      // change the boolean state, and we don't want to spam listeners
+      // every ~1500ms while the user is typing.
+      if (firstSave) {
+        this._broadcastDraftChanged(true);
+      }
     }
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] draft-status", { status });
     }
+  }
+
+  _broadcastDraftChanged(hasDraft) {
+    const topicId = this.topic?.id;
+    if (!topicId) {
+      return;
+    }
+    this.appEvents?.trigger(DRAFT_CHANGED_EVENT, { topicId, hasDraft });
   }
 
   // Compose the current workspace state into the v1 draft shape that
@@ -2535,6 +2559,11 @@ export default class NpnCritiqueReplyModal extends Component {
   async _performDiscardDraft() {
     const topicId = this.topic?.id;
     this._autosaver?.cancel?.();
+    // Broadcast immediately so sibling entry-points flip back to
+    // "Start" copy without waiting for the DELETE round-trip.
+    if (this.draftHasSaved) {
+      this._broadcastDraftChanged(false);
+    }
     try {
       if (topicId) {
         await deleteServerDraft(topicId);
@@ -2580,6 +2609,12 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     this._autosaver?.cancel?.();
+    // Tell sibling entry-points the draft is gone even if the DELETE
+    // request itself fails — the modal is closing on success either
+    // way, and the next page render will reconcile with the server.
+    if (this.draftHasSaved) {
+      this._broadcastDraftChanged(false);
+    }
     try {
       await deleteServerDraft(topicId);
     } catch (_e) {

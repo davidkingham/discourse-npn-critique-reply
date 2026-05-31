@@ -1,11 +1,14 @@
 import Component from "@glimmer/component";
 import { action } from "@ember/object";
 import { service } from "@ember/service";
+import { tracked } from "@glimmer/tracking";
 import DButton from "discourse/ui-kit/d-button";
 import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { and } from "discourse/truth-helpers";
 import { i18n } from "discourse-i18n";
-import NpnCritiqueReplyModal from "./modal/npn-critique-reply-modal";
+import NpnCritiqueReplyModal, {
+  DRAFT_CHANGED_EVENT,
+} from "./modal/npn-critique-reply-modal";
 
 // Pipe-separated id lists ("1|2|3"). Mirrors the helper in
 // npn-critique-reply-start-button.gjs — kept inline so the two
@@ -35,9 +38,16 @@ export default class NpnCritiqueReplyInvitationPanel extends Component {
   @service siteSettings;
   @service currentUser;
   @service modal;
+  @service appEvents;
+
+  // Per-session override for the serializer-provided
+  // `topic.npn_critique_reply_has_draft`. See the matching field on
+  // npn-critique-reply-start-button.gjs for full rationale.
+  @tracked _hasDraftOverride = null;
 
   constructor() {
     super(...arguments);
+    this.appEvents.on(DRAFT_CHANGED_EVENT, this, "_onDraftChanged");
     if (this.siteSettings?.npn_critique_reply_debug_enabled) {
       const t = this.topic;
       const p = this.args.outletArgs?.post;
@@ -89,11 +99,26 @@ export default class NpnCritiqueReplyInvitationPanel extends Component {
     );
   }
 
+  willDestroy() {
+    super.willDestroy(...arguments);
+    this.appEvents.off(DRAFT_CHANGED_EVENT, this, "_onDraftChanged");
+  }
+
+  _onDraftChanged({ topicId, hasDraft } = {}) {
+    if (topicId && topicId === this.topic?.id) {
+      this._hasDraftOverride = !!hasDraft;
+    }
+  }
+
   // Flipped by the topic serializer when there's a saved server draft
   // for the current user on this topic (see plugin.rb after_initialize).
-  // The panel keeps its same shape; only the title/description/action
-  // label flip to "Resume" copy.
+  // `_hasDraftOverride` lets the modal force a value at runtime when it
+  // saves or clears a draft. Override wins when set; otherwise fall
+  // back to the serializer value.
   get hasDraft() {
+    if (this._hasDraftOverride !== null) {
+      return this._hasDraftOverride;
+    }
     return !!this.topic?.npn_critique_reply_has_draft;
   }
 
