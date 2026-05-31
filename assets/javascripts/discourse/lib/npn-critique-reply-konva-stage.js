@@ -668,6 +668,15 @@ export async function createAnnotationStage({
   function renderAttentionPulls() {
     attentionPullLayer.destroyChildren();
     const pulls = state.attentionPulls;
+    if (typeof window !== "undefined" && window.console?.debug) {
+      // eslint-disable-next-line no-console
+      window.console.debug("[npn-critique-reply] render-attention-pulls", {
+        count: pulls?.length ?? 0,
+        visualMode: state.visualMode,
+        attentionPullEditEnabled: state.attentionPullEditEnabled,
+        selectedAttentionPullId: state.selectedAttentionPullId,
+      });
+    }
     if (!Array.isArray(pulls) || pulls.length === 0) {
       attentionPullLayer.batchDraw();
       return;
@@ -968,6 +977,15 @@ export async function createAnnotationStage({
   function renderStrongAreas() {
     strongAreaLayer.destroyChildren();
     const areas = state.strongAreas;
+    if (typeof window !== "undefined" && window.console?.debug) {
+      // eslint-disable-next-line no-console
+      window.console.debug("[npn-critique-reply] render-strong-areas", {
+        count: areas?.length ?? 0,
+        visualMode: state.visualMode,
+        strongAreaEditEnabled: state.strongAreaEditEnabled,
+        selectedStrongAreaId: state.selectedStrongAreaId,
+      });
+    }
     if (!Array.isArray(areas) || areas.length === 0) {
       strongAreaLayer.batchDraw();
       return;
@@ -2388,13 +2406,15 @@ export async function createAnnotationStage({
           strongDrag = null;
           clearPreview();
         }
-        // The selected attention pull's transformer is mode-gated, so
-        // crossing the attention_pull boundary in either direction
-        // requires a re-render to mount/unmount it.
-        if (state.selectedAttentionPullId) {
+        // Mode crossing flips `canDrag` (and therefore the `draggable`
+        // attribute) on EVERY attention-pull / strong-area marker in
+        // the layer, not just the selected one — so we have to re-
+        // render whenever any markers exist, regardless of selection.
+        // The selected marker's Transformer also mounts/unmounts here.
+        if (state.attentionPulls.length > 0) {
           attentionPullsChanged = true;
         }
-        if (state.selectedStrongAreaId) {
+        if (state.strongAreas.length > 0) {
           strongAreasChanged = true;
         }
         // The crop rect's `listening` attribute depends on the active
