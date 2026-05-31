@@ -942,6 +942,12 @@ export default class NpnCritiqueReplyModal extends Component {
     if (!pin) {
       return;
     }
+    // Clicking a shape activates the corresponding tool mode so the
+    // user can immediately move / resize / edit it without a separate
+    // toolbar click. `_setVisualMode` is a no-op when the mode is
+    // already active, and it resets every selection state — we then
+    // re-set the one we want below.
+    this._setVisualMode("numbered_notes");
     // Selecting a pin deselects all other annotation kinds. The
     // toolbar only ever surfaces one Remove button at a time, so we
     // keep the model in sync across pin / crop / eye path / attention
@@ -1013,6 +1019,10 @@ export default class NpnCritiqueReplyModal extends Component {
     if (!this.crop) {
       return;
     }
+    // Clicking a shape activates the corresponding tool mode (see
+    // selectPin for rationale). `_setVisualMode` resets every
+    // selection — we re-set ours below.
+    this._setVisualMode("crop_suggestion");
     this.selectedPinNumber = null;
     this.eyePathSelected = false;
     this.selectedAttentionPullId = null;
@@ -1222,6 +1232,9 @@ export default class NpnCritiqueReplyModal extends Component {
     if (!this.hasEyePath) {
       return;
     }
+    // Clicking a shape activates the corresponding tool mode (see
+    // selectPin for rationale).
+    this._setVisualMode("eye_path");
     // Mirror the pin/crop mutex — only one annotation reads as the
     // toolbar's active selection at a time.
     this.selectedPinNumber = null;
@@ -1333,6 +1346,9 @@ export default class NpnCritiqueReplyModal extends Component {
     if (!exists) {
       return;
     }
+    // Clicking a shape activates the corresponding tool mode (see
+    // selectPin for rationale).
+    this._setVisualMode("attention_pull");
     // Mirror the pin/crop/eye-path/strong-area mutex.
     this.selectedPinNumber = null;
     this.cropSelected = false;
@@ -1523,6 +1539,9 @@ export default class NpnCritiqueReplyModal extends Component {
     if (!exists) {
       return;
     }
+    // Clicking a shape activates the corresponding tool mode (see
+    // selectPin for rationale).
+    this._setVisualMode("strong_area");
     this.selectedPinNumber = null;
     this.cropSelected = false;
     this.eyePathSelected = false;
