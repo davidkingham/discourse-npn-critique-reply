@@ -42,3 +42,15 @@ plugins:
     list_type: compact
     allow_any: false
     client: true
+
+  # Server-side critique workspace drafts. When true, the modal
+  # autosaves to PluginStore and restores on next open across any
+  # browser/device for the same user/topic.
+  npn_critique_reply_server_drafts_enabled:
+    default: true
+    client: true
+
+  # Drafts older than this are ignored on load (and may be cleaned up
+  # by future tasks). 0 disables expiry.
+  npn_critique_reply_draft_ttl_days:
+    default: 30

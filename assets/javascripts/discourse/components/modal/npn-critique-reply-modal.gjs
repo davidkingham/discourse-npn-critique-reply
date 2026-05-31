@@ -31,9 +31,26 @@ import {
   MAX_ATTENTION_PULL_COUNT,
   MAX_EYE_PATH_POINTS,
   MAX_STRONG_AREA_COUNT,
+  annotationsToAttentionPulls,
+  annotationsToPins,
+  annotationsToStrongAreas,
+  annotationToCrop,
+  annotationToEyePath,
+  attentionPullsToAnnotations,
+  cropToAnnotation,
+  eyePathToAnnotation,
   nextAttentionPullLabel,
   nextStrongAreaLabel,
+  pinsToAnnotations,
+  strongAreasToAnnotations,
 } from "../../lib/npn-critique-reply-annotation-schema";
+import didUpdate from "@ember/render-modifiers/modifiers/did-update";
+import {
+  DRAFT_STATUS,
+  DraftAutosaver,
+  deleteDraft as deleteServerDraft,
+  loadDraft as loadServerDraft,
+} from "../../lib/npn-critique-reply-drafts";
 
 // How many prompts the compact view shows. Tuned so a typical critic
 // sees their textarea above the fold on a 13" laptop modal.
@@ -57,6 +74,14 @@ function parseIdList(value) {
 // strings — used by the constructor (read) and the toggle actions (write).
 const STORAGE_KEY_HIDDEN = "npn-critique-reply.prompts-hidden";
 const STORAGE_KEY_EXPANDED = "npn-critique-reply.prompts-expanded";
+
+// Pull the numeric suffix off an id like "attention_pull_3" → 3. Used
+// only during draft restore so newly-created markers don't collide
+// with restored ones.
+function extractIdSuffix(id) {
+  const m = typeof id === "string" ? id.match(/_(\d+)$/) : null;
+  return m ? parseInt(m[1], 10) : null;
+}
 
 // Safe localStorage helpers — Safari private mode, sandboxed iframes,
 // and disabled storage all throw on access. We always fall back rather
@@ -227,9 +252,34 @@ export default class NpnCritiqueReplyModal extends Component {
   // disable the DModal X button, so this is the safety net.
   _destroyed = false;
 
+  // Server-side critique workspace draft. State + autosaver instance
+  // are kept here so the modal can wire load-on-open, debounced save
+  // on every meaningful state change, and clear-on-success paths
+  // (Post Critique, Edit in Composer, explicit Discard).
+  //   draftStatus            — DRAFT_STATUS string driving the small
+  //                            "Saving… / Draft saved / Couldn't save"
+  //                            text near the modal footer.
+  //   draftHasSaved          — true once we've stored at least one
+  //                            draft for this modal session (used to
+  //                            decide whether to show the Discard
+  //                            action — nothing to discard otherwise).
+  //   draftRestoreNotice     — null | "restored" | "image_version_missing"
+  //                            | { kind: "image_version_outdated", label }
+  //   _restoringDraft        — internal flag set during initial state
+  //                            restoration so the autosave scheduler
+  //                            doesn't immediately re-PUT the payload
+  //                            we just received.
+  @tracked draftStatus = DRAFT_STATUS.IDLE;
+  @tracked draftHasSaved = false;
+  @tracked draftRestoreNotice = null;
+  _autosaver = null;
+  _restoringDraft = false;
+
   willDestroy() {
     super.willDestroy(...arguments);
     this._destroyed = true;
+    this._autosaver?.destroy?.();
+    this._autosaver = null;
   }
 
   constructor() {
@@ -237,6 +287,11 @@ export default class NpnCritiqueReplyModal extends Component {
     // Restore prompt visibility preferences from a previous session.
     this.promptsHidden = readBool(STORAGE_KEY_HIDDEN, false);
     this.promptsExpanded = readBool(STORAGE_KEY_EXPANDED, false);
+
+    // Kick off the server-draft restore + autosaver setup. Async, so
+    // the modal renders an empty workspace first and fills it in once
+    // the GET resolves (or stays empty if there's no draft).
+    this._initializeDraftSync();
   }
 
   get metadata() {
@@ -1905,6 +1960,10 @@ export default class NpnCritiqueReplyModal extends Component {
         },
       });
 
+      // Post succeeded → drop the saved draft. Fire-and-forget; the
+      // toast and modal close don't depend on the delete completing.
+      this._clearDraftAfterSuccess();
+
       this.args.closeModal();
     } catch (error) {
       if (this._destroyed) {
@@ -2094,6 +2153,19 @@ export default class NpnCritiqueReplyModal extends Component {
         rawLength: replyText?.length ?? 0,
       });
     }
+
+    // Edit in Composer transfers the critique into the composer →
+    // the saved draft has done its job; clear it. Reply Normally has
+    // no replyText and intentionally keeps the workspace draft.
+    if (replyText) {
+      this._clearDraftAfterSuccess();
+    } else {
+      // Reply Normally: cancel pending autosave but DON'T delete —
+      // the user explicitly asked to escape to the normal composer
+      // without losing the workspace draft.
+      this._autosaver?.cancel?.();
+    }
+
     this.args.closeModal();
 
     if (replyText) {
@@ -2137,6 +2209,343 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
+  // ---- Server-side critique workspace draft ---------------------------
+
+  get draftsEnabled() {
+    return (
+      this.siteSettings.npn_critique_reply_server_drafts_enabled !== false
+    );
+  }
+
+  // Stable identity that changes whenever any field worth saving
+  // changes. The `{{didUpdate}}` modifier on a hidden anchor watches
+  // this and calls `scheduleDraftAutosave` whenever it flips, so we
+  // don't have to thread an autosave call through every mutator
+  // (~20+ actions). Keep it cheap to compute — it runs on every
+  // render. Annotations are length-tagged to avoid stringifying a
+  // potentially large array; the autosave PUT will pick up exact
+  // contents.
+  get draftSignature() {
+    if (!this.draftsEnabled) {
+      return "";
+    }
+    return [
+      this.critiqueText.length,
+      this.critiqueText,
+      this.selectedVersionKey ?? "",
+      this.notes.length,
+      this.notes.map((n) => `${n.number}:${n.xPct}:${n.yPct}`).join(","),
+      this.crop
+        ? `${this.crop.xPct}:${this.crop.yPct}:${this.crop.widthPct}:${this.crop.heightPct}:${this.crop.aspectRatio}`
+        : "",
+      this.eyePath
+        ? `ep:${this.eyePath.points
+            ?.map((p) => `${p.number}:${p.xPct}:${p.yPct}`)
+            .join(",")}`
+        : "",
+      this.attentionPulls.length,
+      this.attentionPulls
+        .map((a) => `${a.id}:${a.xPct}:${a.yPct}:${a.widthPct}:${a.heightPct}`)
+        .join(","),
+      this.strongAreas.length,
+      this.strongAreas
+        .map((s) => `${s.id}:${s.xPct}:${s.yPct}:${s.widthPct}:${s.heightPct}`)
+        .join(","),
+      this.promptsHidden ? 1 : 0,
+      this.promptsExpanded ? 1 : 0,
+    ].join("|");
+  }
+
+  get draftStatusLabel() {
+    switch (this.draftStatus) {
+      case DRAFT_STATUS.SAVING:
+        return i18n("npn_critique_reply.modal.drafts.status_saving");
+      case DRAFT_STATUS.SAVED:
+        return i18n("npn_critique_reply.modal.drafts.status_saved");
+      case DRAFT_STATUS.ERROR:
+        return i18n("npn_critique_reply.modal.drafts.status_error");
+      default:
+        return null;
+    }
+  }
+
+  get showDraftDiscard() {
+    // Only meaningful once we know there's a server-side draft to
+    // remove — either restored on open or saved during this session.
+    return this.draftsEnabled && this.draftHasSaved;
+  }
+
+  get draftImageVersionOutdatedMessage() {
+    const notice = this.draftRestoreNotice;
+    if (notice && typeof notice === "object" && notice.kind === "image_version_outdated") {
+      return i18n("npn_critique_reply.modal.drafts.image_version_outdated", {
+        label: notice.label,
+      });
+    }
+    return null;
+  }
+
+  get draftImageVersionMissingMessage() {
+    return this.draftRestoreNotice === "image_version_missing"
+      ? i18n("npn_critique_reply.modal.drafts.image_version_missing")
+      : null;
+  }
+
+  // Async kickoff from the constructor: fetch any saved draft, apply
+  // it to local state, set up the debounced autosaver. Stays a no-op
+  // when drafts are disabled or the topic is missing.
+  async _initializeDraftSync() {
+    if (!this.draftsEnabled) {
+      return;
+    }
+    const topicId = this.topic?.id;
+    if (!topicId) {
+      return;
+    }
+
+    this._autosaver = new DraftAutosaver({
+      topicId,
+      onStatus: (status) => this._onDraftSaveStatus(status),
+      buildPayload: () => this._buildDraftPayload(),
+    });
+
+    try {
+      const draft = await loadServerDraft(topicId);
+      if (this._destroyed) {
+        return;
+      }
+      if (draft) {
+        this._restoreDraft(draft);
+        this.draftHasSaved = true;
+      }
+    } catch (_e) {
+      // Restore failures are non-fatal — the modal still opens, the
+      // user can type, and the next autosave will overwrite whatever
+      // was there before. We deliberately do NOT surface a banner.
+    }
+  }
+
+  _onDraftSaveStatus(status) {
+    if (this._destroyed) {
+      return;
+    }
+    this.draftStatus = status;
+    if (status === DRAFT_STATUS.SAVED) {
+      this.draftHasSaved = true;
+    }
+  }
+
+  // Compose the current workspace state into the v1 draft shape that
+  // the server expects. Annotation conversion reuses the existing
+  // schema-aware helpers, so any geometry caps / id normalization
+  // applied client-side mirrors the server's normalizer.
+  _buildDraftPayload() {
+    const annotations = pinsToAnnotations(this.notes ?? []);
+    if (this.crop) {
+      const cropAnnotation = cropToAnnotation(this.crop);
+      if (cropAnnotation) {
+        annotations.push(cropAnnotation);
+      }
+    }
+    if (this.eyePath) {
+      const eyePathAnnotation = eyePathToAnnotation(this.eyePath);
+      if (eyePathAnnotation) {
+        annotations.push(eyePathAnnotation);
+      }
+    }
+    for (const pull of attentionPullsToAnnotations(this.attentionPulls ?? [])) {
+      annotations.push(pull);
+    }
+    for (const area of strongAreasToAnnotations(this.strongAreas ?? [])) {
+      annotations.push(area);
+    }
+    return {
+      schema_version: 1,
+      selected_image_version_key: this.selectedVersionKey ?? null,
+      critique_text: this.critiqueText ?? "",
+      annotations,
+      ui: {
+        prompts_hidden: !!this.promptsHidden,
+        prompts_expanded: !!this.promptsExpanded,
+      },
+    };
+  }
+
+  // Apply a server-loaded draft to in-memory state. Set
+  // `_restoringDraft` first so the didUpdate autosave hook ignores
+  // the burst of setter calls — we don't want to immediately PUT
+  // back the same payload we just GET'd.
+  _restoreDraft(draft) {
+    this._restoringDraft = true;
+
+    try {
+      this.critiqueText = draft.critique_text ?? "";
+
+      const versionKey = draft.selected_image_version_key ?? null;
+      const versionStillExists = versionKey
+        ? this.versions.some((v) => v.key === versionKey)
+        : true;
+
+      if (!versionKey || versionStillExists) {
+        // Apply the saved version selection (or leave the current one
+        // alone for a "no version specified" draft).
+        if (versionKey) {
+          this._selectedVersionKey = versionKey;
+          this._selectedVersionInitialized = true;
+        }
+        this._restoreAnnotations(draft.annotations, draft.selected_image_version_key);
+
+        // Notice when a newer revision exists than the one the draft
+        // was started on — informational, not blocking.
+        const defaultKey = this.imageVersions?.default_key;
+        if (versionKey && defaultKey && versionKey !== defaultKey) {
+          const savedVersion = this.versions.find((v) => v.key === versionKey);
+          this.draftRestoreNotice = {
+            kind: "image_version_outdated",
+            label: savedVersion?.label ?? versionKey,
+          };
+        } else {
+          this.draftRestoreNotice = "restored";
+        }
+      } else {
+        // Saved version no longer exists. Restore text only; drop
+        // visual annotations and surface a notice.
+        this.draftRestoreNotice = "image_version_missing";
+      }
+
+      if (draft.ui && typeof draft.ui === "object") {
+        if (typeof draft.ui.prompts_hidden === "boolean") {
+          this.promptsHidden = draft.ui.prompts_hidden;
+        }
+        if (typeof draft.ui.prompts_expanded === "boolean") {
+          this.promptsExpanded = draft.ui.prompts_expanded;
+        }
+      }
+    } finally {
+      // Defer clearing the restoring flag until the next microtask so
+      // the didUpdate hook sees one stable signature this render.
+      queueMicrotask(() => {
+        this._restoringDraft = false;
+      });
+    }
+  }
+
+  _restoreAnnotations(annotations, versionKey) {
+    const list = Array.isArray(annotations) ? annotations : [];
+    const synthPayload = {
+      source: { image_version_key: versionKey ?? null },
+      annotations: list,
+    };
+
+    const pins = annotationsToPins(synthPayload);
+    this.notes = pins.map((p) => ({
+      number: p.number,
+      xPct: p.xPct,
+      yPct: p.yPct,
+      note: p.note ?? null,
+    }));
+
+    // The crop/eye_path converters take a SINGLE annotation, not a
+    // payload, so pluck the first matching entry from the list.
+    const cropEntry = list.find((a) => a?.kind === "crop");
+    const eyePathEntry = list.find((a) => a?.kind === "eye_path");
+    this.crop = cropEntry ? annotationToCrop(cropEntry) : null;
+    if (this.crop?.aspectRatio) {
+      this.cropAspectRatio = this.crop.aspectRatio;
+    }
+    this.eyePath = eyePathEntry ? annotationToEyePath(eyePathEntry) : null;
+
+    this.attentionPulls = annotationsToAttentionPulls(synthPayload);
+    this.strongAreas = annotationsToStrongAreas(synthPayload);
+
+    // Bump id counters past any restored ids so newly-created
+    // markers don't collide.
+    this._attentionPullIdCounter = this.attentionPulls.reduce(
+      (max, p) => Math.max(max, extractIdSuffix(p.id) ?? 0),
+      this._attentionPullIdCounter ?? 0
+    );
+    this._strongAreaIdCounter = this.strongAreas.reduce(
+      (max, s) => Math.max(max, extractIdSuffix(s.id) ?? 0),
+      this._strongAreaIdCounter ?? 0
+    );
+  }
+
+  // Called by the didUpdate modifier whenever `draftSignature`
+  // changes. Skips the no-op restore burst at the start of the
+  // session and forwards to the per-topic debounce timer.
+  @action
+  scheduleDraftAutosave() {
+    if (!this.draftsEnabled || this._restoringDraft) {
+      return;
+    }
+    this._autosaver?.schedule();
+  }
+
+  @action
+  discardDraft() {
+    this.dialog.confirm({
+      message: i18n("npn_critique_reply.modal.drafts.discard_confirm_message"),
+      confirmButtonLabel: "npn_critique_reply.modal.drafts.discard_confirm_yes",
+      cancelButtonLabel: "npn_critique_reply.modal.drafts.discard_confirm_no",
+      didConfirm: () => this._performDiscardDraft(),
+    });
+  }
+
+  async _performDiscardDraft() {
+    const topicId = this.topic?.id;
+    this._autosaver?.cancel?.();
+    try {
+      if (topicId) {
+        await deleteServerDraft(topicId);
+      }
+    } catch (_e) {
+      // Network failure — still clear local state so the user isn't
+      // stuck staring at a draft they asked to throw away.
+    }
+    if (this._destroyed) {
+      return;
+    }
+    this._restoringDraft = true;
+    this.critiqueText = "";
+    this.notes = [];
+    this.crop = null;
+    this.eyePath = null;
+    this.attentionPulls = [];
+    this.strongAreas = [];
+    this.cropSelected = false;
+    this.eyePathSelected = false;
+    this.selectedPinNumber = null;
+    this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
+    this.draftRestoreNotice = null;
+    this.draftStatus = DRAFT_STATUS.IDLE;
+    this.draftHasSaved = false;
+    queueMicrotask(() => {
+      this._restoringDraft = false;
+    });
+  }
+
+  // Called from success paths in Post Critique and Edit in Composer.
+  // Cancels any pending autosave (so it doesn't race the delete) and
+  // removes the server-side draft. Failures here are silent — the
+  // worst case is a stale draft that gets garbage-collected by the
+  // TTL cleanup down the line.
+  async _clearDraftAfterSuccess() {
+    if (!this.draftsEnabled) {
+      return;
+    }
+    const topicId = this.topic?.id;
+    if (!topicId) {
+      return;
+    }
+    this._autosaver?.cancel?.();
+    try {
+      await deleteServerDraft(topicId);
+    } catch (_e) {
+      // Silent — the toast already says "critique posted".
+    }
+  }
+
   <template>
     <DModal
       @title={{i18n "npn_critique_reply.modal.title"}}
@@ -2145,6 +2554,36 @@ export default class NpnCritiqueReplyModal extends Component {
         {{unless this.hasImage 'npn-critique-reply-modal--no-image'}}"
     >
       <:body>
+        {{! Hidden autosave anchor. didUpdate fires whenever any
+            draft-relevant tracked state changes (via draftSignature),
+            and the scheduler debounces the actual PUT. Keeps every
+            mutator path autosave-aware without threading an explicit
+            schedule() call through 20+ action methods. }}
+        <span
+          hidden="true"
+          aria-hidden="true"
+          {{didUpdate this.scheduleDraftAutosave this.draftSignature}}
+        ></span>
+
+        {{#if this.draftImageVersionMissingMessage}}
+          <div
+            class="npn-critique-reply-modal__draft-notice
+              npn-critique-reply-modal__draft-notice--image-missing"
+            role="status"
+          >
+            {{this.draftImageVersionMissingMessage}}
+          </div>
+        {{/if}}
+        {{#if this.draftImageVersionOutdatedMessage}}
+          <div
+            class="npn-critique-reply-modal__draft-notice
+              npn-critique-reply-modal__draft-notice--image-outdated"
+            role="status"
+          >
+            {{this.draftImageVersionOutdatedMessage}}
+          </div>
+        {{/if}}
+
         <div class="npn-critique-reply-modal__layout">
           {{#if this.hasImage}}
             <aside
@@ -2931,6 +3370,29 @@ export default class NpnCritiqueReplyModal extends Component {
           @label="npn_critique_reply.modal.reply_normally"
           @disabled={{this.isPosting}}
         />
+
+        {{! Server-side draft status + Discard action. Quiet — sits in
+            the middle of the footer alongside the primary buttons. }}
+        {{#if this.draftsEnabled}}
+          <span
+            class="npn-critique-reply-modal__draft-status
+              npn-critique-reply-modal__draft-status--{{this.draftStatus}}"
+            aria-live="polite"
+          >
+            {{#if this.draftStatusLabel}}
+              {{this.draftStatusLabel}}
+            {{/if}}
+          </span>
+          {{#if this.showDraftDiscard}}
+            <DButton
+              class="btn-flat npn-critique-reply-modal__discard-draft"
+              @action={{this.discardDraft}}
+              @label="npn_critique_reply.modal.drafts.discard"
+              @disabled={{this.isPosting}}
+            />
+          {{/if}}
+        {{/if}}
+
         {{! Quiet — pushed to the far right via flex on the footer. }}
         <DButton
           class="btn-flat npn-critique-reply-modal__cancel"

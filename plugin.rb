@@ -35,7 +35,10 @@ require_relative "lib/discourse_npn_critique_reply/engine"
 
 after_initialize do
   require_relative "lib/discourse_npn_critique_reply/topic_metadata_reader"
+  require_relative "lib/discourse_npn_critique_reply/draft_normalizer"
+  require_relative "lib/discourse_npn_critique_reply/draft_store"
   require_relative "app/controllers/discourse_npn_critique_reply/critique_replies_controller"
+  require_relative "app/controllers/discourse_npn_critique_reply/drafts_controller"
 
   # These topic custom fields are populated by sibling plugins
   # (discourse-npn-submissions, discourse-revised-critique-image), but we

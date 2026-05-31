@@ -88,6 +88,27 @@ en:
         # the workspace textarea still has unsaved text.
         confirm_reply_normally: "Open a normal reply? Your critique draft in this workspace will not be transferred."
 
+        # Server-side critique workspace drafts. Drafts are stored per
+        # user/topic in PluginStore and restore automatically on open.
+        drafts:
+          status_saving: "Saving…"
+          status_saved: "Draft saved"
+          status_error: "Couldn't save draft"
+          restored: "Draft restored"
+          discard: "Discard draft"
+          discard_confirm_message: "Discard this critique draft?"
+          discard_confirm_yes: "Discard draft"
+          discard_confirm_no: "Cancel"
+          # Notice rendered above the workspace when the saved draft
+          # referenced an image version that's no longer available.
+          image_version_missing: "This draft was started from an image version that is no longer available, so visual notes were not restored."
+          # Notice when the saved draft's image version still exists but
+          # a newer revision is available since the draft was started.
+          image_version_outdated: "This draft was started on %{label}. A newer revision is available."
+          # Surfaced under Reply Normally when a saved draft exists, so
+          # the user knows the workspace draft survives the escape hatch.
+          reply_normally_kept: "Your critique workspace draft will remain saved."
+
         submission_types:
           image_critique: "Image Critique"
           weekly_challenge: "Weekly Challenge"

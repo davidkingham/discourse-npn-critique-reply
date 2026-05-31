@@ -667,6 +667,53 @@
     margin-left: auto;
   }
 
+  // Server-side draft autosave status + Discard. Sits between the
+  // action buttons and Cancel in the footer flex row. Deliberately
+  // quiet — feedback that the system is working, not an action peer.
+  &__draft-status {
+    align-self: center;
+    font-size: var(--font-down-1);
+    color: var(--primary-medium);
+    min-width: 6em;
+    // Reserve a slot even when the status is empty so footer button
+    // positions don't shift each time the autosave state changes.
+    &:empty {
+      min-height: 1em;
+    }
+    &--saving {
+      color: var(--primary-medium);
+    }
+    &--saved {
+      color: var(--success);
+    }
+    &--error {
+      color: var(--danger);
+    }
+  }
+
+  &__discard-draft.npn-critique-reply-modal__discard-draft {
+    color: var(--primary-medium);
+    font-size: var(--font-down-1);
+  }
+
+  // Restore-time notices. Image-version edge cases surface above the
+  // workspace layout rather than inline so the user sees them before
+  // they start writing.
+  &__draft-notice {
+    margin: 0 0 0.75em;
+    padding: 0.5em 0.75em;
+    border-radius: 3px;
+    background: var(--highlight-low);
+    color: var(--primary);
+    font-size: var(--font-down-1);
+    &--image-missing {
+      background: var(--danger-low);
+    }
+    &--image-outdated {
+      background: var(--highlight-low);
+    }
+  }
+
   // Let footer buttons wrap on narrow viewports rather than overflow.
   // DModal's footer is flex by default; we only nudge wrapping + gap.
   .d-modal__footer {
