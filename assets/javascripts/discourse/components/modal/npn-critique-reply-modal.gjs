@@ -846,33 +846,6 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.visualMode === "strong_area";
   }
 
-  // Gate for the two-row toolbar's secondary row (per-mode actions
-  // + crop's aspect-ratio chooser). Returns true when the row would
-  // have anything to render, false when it'd be empty — so we hide
-  // the strip entirely in the empty case and don't burn vertical
-  // pixels above the image.
-  get hasSecondaryActions() {
-    if (this.noteMode) {
-      return !!this.selectedPin || this.notes.length > 0;
-    }
-    if (this.cropMode) {
-      // Crop mode always has at least the aspect-ratio chooser.
-      return true;
-    }
-    if (this.eyePathMode) {
-      return this.hasEyePath || this.eyePathSelected;
-    }
-    if (this.attentionPullMode) {
-      return (
-        !!this.selectedAttentionPull || this.attentionPulls.length > 0
-      );
-    }
-    if (this.strongAreaMode) {
-      return !!this.selectedStrongArea || this.strongAreas.length > 0;
-    }
-    return false;
-  }
-
   @action
   toggleNoteMode() {
     this._setVisualMode(this.noteMode ? null : "numbered_notes");
@@ -2821,18 +2794,18 @@ export default class NpnCritiqueReplyModal extends Component {
                 </div>
 
                 {{! Row 2 — per-mode contextual actions + crop's
-                    aspect-ratio chooser. Rendered only when the
-                    active mode has something to surface, so the
-                    strip doesn't burn vertical pixels above the
-                    image when idle. }}
-                {{#if this.hasSecondaryActions}}
-                  <div
-                    class="npn-critique-reply-modal__visual-notes-secondary"
-                    role="toolbar"
-                    aria-label={{i18n
-                      "npn_critique_reply.visual_notes.toolbar_label"
-                    }}
-                  >
+                    aspect-ratio chooser. Always rendered so its
+                    reserved height keeps the image position stable
+                    when modes change. When the active mode has
+                    nothing to surface (or no mode is active), the
+                    strip is empty but maintains its min-height. }}
+                <div
+                  class="npn-critique-reply-modal__visual-notes-secondary"
+                  role="toolbar"
+                  aria-label={{i18n
+                    "npn_critique_reply.visual_notes.toolbar_label"
+                  }}
+                >
                     {{! Pin mode actions. }}
                     {{#if this.noteMode}}
                       {{#if this.selectedPin}}
@@ -2975,8 +2948,7 @@ export default class NpnCritiqueReplyModal extends Component {
                         />
                       {{/if}}
                     {{/if}}
-                  </div>
-                {{/if}}
+                </div>
               {{/if}}
 
               <NpnCritiqueImageReference

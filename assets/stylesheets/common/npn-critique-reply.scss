@@ -1108,8 +1108,11 @@
   // rather than a peer of the primary toggle row.
   font-size: var(--font-down-1);
   margin: 0 0 0.6em;
-  padding-top: 0.3em;
-  border-top: 1px solid var(--primary-very-low);
+  // Always reserve roughly button-height of vertical space so the
+  // image below doesn't jump up/down as the user switches tool modes
+  // (or has no mode active). When populated, the buttons fill this
+  // height naturally; when empty, the empty space holds the position.
+  min-height: 2.4em;
 }
 
 .npn-critique-reply-modal__crop-ratio-label {
