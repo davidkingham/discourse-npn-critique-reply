@@ -719,12 +719,18 @@ export async function createAnnotationStage({
       //      captures clicks anywhere inside the ellipse and is the
       //      single Konva node the Transformer scales/drags)
       //   3. opaque amber dashed/solid stroke (on top)
-      const haloWidth = Math.max(4, Math.round(shortEdge * 0.0055));
+      // Widened from 0.55% → 0.75% of short edge so the white halo
+      // gives the muted ochre / sage stroke enough contrast on
+      // foliage / sky / similarly-toned backgrounds.
+      const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
       const strokeWidth = isSelected
         ? Math.max(3, Math.round(shortEdge * 0.005))
         : Math.max(2, Math.round(shortEdge * 0.0035));
-      const dashOn = Math.max(7, Math.round(shortEdge * 0.012));
-      const dashOff = Math.max(5, Math.round(shortEdge * 0.008));
+      // Slightly larger gap between dashes so the dashed stroke
+      // reads calmer on small markers (kept in sync with the export
+      // in npn-critique-reply-visual-notes.js).
+      const dashOn = Math.max(8, Math.round(shortEdge * 0.013));
+      const dashOff = Math.max(7, Math.round(shortEdge * 0.011));
       const id = pull.id;
 
       const haloRef = new Konva.Ellipse({
@@ -996,7 +1002,10 @@ export async function createAnnotationStage({
         state.visualMode === "strong_area" &&
         state.strongAreaEditEnabled;
 
-      const haloWidth = Math.max(4, Math.round(shortEdge * 0.0055));
+      // Widened from 0.55% → 0.75% of short edge so the white halo
+      // gives the muted ochre / sage stroke enough contrast on
+      // foliage / sky / similarly-toned backgrounds.
+      const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
       const strokeWidth = isSelected
         ? Math.max(3, Math.round(shortEdge * 0.005))
         : Math.max(2, Math.round(shortEdge * 0.0035));
@@ -1440,65 +1449,13 @@ export async function createAnnotationStage({
           })
         );
 
-        // In-segment chevrons. Positioned and oriented along the
-        // exact Konva-tension curve via getKonvaSegment + samplePos /
-        // sampleTangent. Cap 2 per segment, ~250% spacing. Elongated
-        // triangle shape (taller than wide) so the direction reads
-        // clearly even at modest sizes.
-        const arrowSize = Math.max(10, Math.round(shortEdge * 0.015));
-        const targetSpacing = Math.max(160, Math.round(shortEdge * 0.25));
-        const ARROWS_PER_SEGMENT_CAP = 2;
-        for (let i = 0; i < pts.length - 1; i++) {
-          const p1 = pts[i];
-          const p2 = pts[i + 1];
-          const chord = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-          if (chord < arrowSize * 2.5) {
-            continue;
-          }
-          const seg = getKonvaSegment(pts, i);
-          const arrowCount = Math.min(
-            ARROWS_PER_SEGMENT_CAP,
-            Math.max(1, Math.round(chord / targetSpacing))
-          );
-          for (let k = 1; k <= arrowCount; k++) {
-            const tParam = k / (arrowCount + 1);
-            const center = samplePos(seg, tParam);
-            const tang = sampleTangent(seg, tParam);
-            const dlen = Math.hypot(tang.x, tang.y);
-            if (dlen === 0) {
-              continue;
-            }
-            const ux = tang.x / dlen;
-            const uy = tang.y / dlen;
-            const perpX = -uy;
-            const perpY = ux;
-            // Elongated arrow head: tip well forward, base close to
-            // center, base half-width narrow. 1.0:0.7 aspect makes
-            // the direction read clearly at any size.
-            const tipX = center.x + ux * arrowSize * 0.7;
-            const tipY = center.y + uy * arrowSize * 0.7;
-            const baseCx = center.x - ux * arrowSize * 0.3;
-            const baseCy = center.y - uy * arrowSize * 0.3;
-            const baseHalf = arrowSize * 0.35;
-            decorationsGroup.add(
-              new Konva.Line({
-                points: [
-                  tipX,
-                  tipY,
-                  baseCx + perpX * baseHalf,
-                  baseCy + perpY * baseHalf,
-                  baseCx - perpX * baseHalf,
-                  baseCy - perpY * baseHalf,
-                ],
-                closed: true,
-                fill: tertiary,
-                stroke: secondary,
-                strokeWidth: 1.5,
-                listening: false,
-              })
-            );
-          }
-        }
+        // Mid-line directional arrows are EXPORT-ONLY. In the editor
+        // the waypoint dots (rendered below) already convey both
+        // direction and editability — stacking arrows on top makes
+        // the path read busy. The exported JPEG has no waypoint dots
+        // (`drawEyePathOnCanvas` in npn-critique-reply-visual-notes.js
+        // draws line + start dot + mid arrows + terminal arrow), so
+        // arrows still carry the directional cue there.
       }
 
       // Interior waypoint markers — editor-only visual cue so the
@@ -1511,7 +1468,10 @@ export async function createAnnotationStage({
       // line + arrows + start dot + terminal arrow, so the posted
       // image stays free of editing UI.
       if (pts.length >= 3) {
-        const waypointR = Math.max(3, Math.round(shortEdge * 0.0045));
+        // Floor bumped (3 → 4) so the dots are easier to mouse-target
+        // on smaller stages. Still smaller than the start dot's
+        // radius (~5+ px) so the start still reads as the path origin.
+        const waypointR = Math.max(4, Math.round(shortEdge * 0.0045));
         const waypointHaloR =
           waypointR + Math.max(2, Math.round(waypointR * 0.5));
         for (let i = 1; i < pts.length - 1; i++) {
@@ -1573,11 +1533,26 @@ export async function createAnnotationStage({
           const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
           const badgeHeight = badgeFontSize + 2 * badgePadding;
           const badgeOffset = Math.max(6, Math.round(shortEdge * 0.006));
+          // Estimated badge width — Konva won't tell us the rendered
+          // width until after the Text node is measured, so we
+          // estimate from font size × character count. Good enough to
+          // bounds-flip; the visible offset is tiny if we over-shoot.
+          const estimatedBadgeW =
+            badgeFontSize * 0.65 * label.length + 2 * badgePadding;
+          // Prefer above-right of the start dot. Flip to above-left
+          // if the right edge would overflow the stage, and flip to
+          // below if the top edge would overflow.
+          let labelX = start.x + badgeOffset;
+          let labelY = start.y - badgeHeight - badgeOffset;
+          if (labelX + estimatedBadgeW > sw) {
+            labelX = start.x - estimatedBadgeW - badgeOffset;
+          }
+          if (labelY < 0) {
+            labelY = start.y + badgeOffset;
+          }
           const labelNode = new Konva.Label({
-            // Above-right of the start dot — leaves the dot itself
-            // visually unobstructed and reads as a tag on the path.
-            x: start.x + badgeOffset,
-            y: start.y - badgeHeight - badgeOffset,
+            x: labelX,
+            y: labelY,
             listening: false,
           });
           labelNode.add(
@@ -2049,18 +2024,21 @@ export async function createAnnotationStage({
       cropDecorationsRef = null;
     }
     // Crop decoration uses the same muted blue as the perimeter
-    // (see npn-critique-reply-colors.js). Bracket / bar thickness
-    // pushed to 8px so the corner / edge handles read as solidly
-    // editable affordances on top of the photograph.
+    // (see npn-critique-reply-colors.js). Bracket / bar thickness at
+    // 8px so the corner / edge handles read as solidly editable
+    // affordances; arm length extended to 30px so the L's actually
+    // reach far enough to read as brackets instead of thick stubs.
     const stageColor = ANNOTATION_BLUE;
-    const bracketArm = 22;
+    const bracketArm = 30;
     const bracketThick = 8;
     const edgeBarLen = 28;
     const edgeBarThick = 8;
 
     const group = new Konva.Group({ listening: false });
 
-    // Thin 1px perimeter connecting the brackets.
+    // Perimeter connecting the brackets. 2 px at 0.7 opacity so it
+    // reads as quieter than the 8 px brackets but still anchors the
+    // four corners as a single rectangle on busy photographs.
     group.add(
       new Konva.Rect({
         x,
@@ -2068,7 +2046,8 @@ export async function createAnnotationStage({
         width: w,
         height: h,
         stroke: stageColor,
-        strokeWidth: 1,
+        strokeWidth: 2,
+        opacity: 0.7,
         listening: false,
       })
     );

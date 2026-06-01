@@ -196,10 +196,15 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
   const amber = ATTENTION_PULL_OCHRE;
   const secondary = ANNOTATION_HALO;
   const shortEdge = Math.min(width, height);
-  const haloWidth = Math.max(4, Math.round(shortEdge * 0.0055));
+  // Halo widened (0.55% → 0.75%) to match the editor — gives the
+  // muted ochre enough contrast on similarly-toned backgrounds.
+  const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
   const strokeWidth = Math.max(2, Math.round(shortEdge * 0.0035));
-  const dashOn = Math.max(7, Math.round(shortEdge * 0.012));
-  const dashOff = Math.max(5, Math.round(shortEdge * 0.008));
+  // Slightly larger dash gap so the dashed stroke reads calmer on
+  // small markers (previously the dashes packed tight and felt
+  // "buzzy" against detailed photographs).
+  const dashOn = Math.max(8, Math.round(shortEdge * 0.013));
+  const dashOff = Math.max(7, Math.round(shortEdge * 0.011));
 
   const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
   const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
@@ -289,7 +294,9 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
   const green = STRONG_AREA_SAGE;
   const secondary = ANNOTATION_HALO;
   const shortEdge = Math.min(width, height);
-  const haloWidth = Math.max(4, Math.round(shortEdge * 0.0055));
+  // Halo widened to match the editor — sage can blend into greenery
+  // in the photograph; the wider halo gives the stroke more contrast.
+  const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
   const strokeWidth = Math.max(2, Math.round(shortEdge * 0.0035));
   const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
   const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
@@ -600,7 +607,11 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
     // shared with the line trace above.
     const arrowSize = Math.max(10, Math.round(shortEdge * 0.015));
     const targetSpacing = Math.max(160, Math.round(shortEdge * 0.25));
-    const ARROWS_PER_SEGMENT_CAP = 2;
+    // Pulled in from 2 → 1: one mid-line arrow per segment is enough
+    // to convey direction in the static JPEG, and avoids the path
+    // feeling arrow-heavy on short segments. The editor doesn't draw
+    // these at all (waypoint dots carry the cue there).
+    const ARROWS_PER_SEGMENT_CAP = 1;
     ctx.fillStyle = tertiary;
     ctx.strokeStyle = secondary;
     ctx.lineWidth = Math.max(1, lineWidth * 0.6);
