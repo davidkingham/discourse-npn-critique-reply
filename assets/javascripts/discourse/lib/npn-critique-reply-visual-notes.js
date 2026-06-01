@@ -30,8 +30,10 @@ export const JPEG_QUALITY = 0.9;
 
 // Pin geometry constants — derived at draw time from the export
 // dimensions so pins stay readable on 800px and 1600px images alike.
-const PIN_RADIUS_RATIO = 0.025; // 2.5% of the short edge
-const MIN_PIN_RADIUS = 20; // px — protects sub-800px exports
+// Keep in sync with npn-critique-reply-konva-stage.js so the modal
+// preview and the posted JPEG render at the same proportional size.
+const PIN_RADIUS_RATIO = 0.021; // 2.1% of the short edge (was 2.5%)
+const MIN_PIN_RADIUS = 17; // px — protects sub-800px exports
 const HALO_RATIO = 0.18; // halo thickness as fraction of pin radius
 const MIN_HALO = 3; // px
 

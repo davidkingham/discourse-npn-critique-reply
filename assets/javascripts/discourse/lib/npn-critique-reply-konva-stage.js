@@ -75,8 +75,9 @@ async function ensureKonva() {
 // Pin radius scales with the displayed stage size so the pin reads
 // proportionally on both a 600px modal and a 1600px export. Floored
 // at MIN_PIN_RADIUS so tiny displays still get a tappable circle.
-const MIN_PIN_RADIUS = 14;
-const PIN_RADIUS_RATIO = 0.025;
+// 2.1% (down from 2.5%) keeps the badge legible but a touch softer.
+const MIN_PIN_RADIUS = 12;
+const PIN_RADIUS_RATIO = 0.021;
 
 function computePinRadius(width, height) {
   const shortEdge = Math.min(width, height);
@@ -2048,14 +2049,14 @@ export async function createAnnotationStage({
       cropDecorationsRef = null;
     }
     // Crop decoration uses the same muted blue as the perimeter
-    // (see npn-critique-reply-colors.js). Bracket / bar thickness was
-    // pulled in from 4px → 3px as part of the palette refinement so
-    // crop reads as the quietest of the large annotations.
+    // (see npn-critique-reply-colors.js). Bracket / bar thickness
+    // pushed to 8px so the corner / edge handles read as solidly
+    // editable affordances on top of the photograph.
     const stageColor = ANNOTATION_BLUE;
     const bracketArm = 22;
-    const bracketThick = 3;
+    const bracketThick = 8;
     const edgeBarLen = 28;
-    const edgeBarThick = 3;
+    const edgeBarThick = 8;
 
     const group = new Konva.Group({ listening: false });
 
