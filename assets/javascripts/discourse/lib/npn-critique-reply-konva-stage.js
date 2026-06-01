@@ -1500,6 +1500,43 @@ export async function createAnnotationStage({
         }
       }
 
+      // Interior waypoint markers — editor-only visual cue so the
+      // critic can see exactly where the draggable handles are
+      // without hovering to find the "move" cursor. Skipped for the
+      // start (already has its own dot) and end (already has its
+      // own arrowhead). NOT drawn in the exported JPEG —
+      // `drawEyePathOnCanvas` in npn-critique-reply-visual-notes.js
+      // is a separate code path that intentionally renders only
+      // line + arrows + start dot + terminal arrow, so the posted
+      // image stays free of editing UI.
+      if (pts.length >= 3) {
+        const waypointR = Math.max(3, Math.round(shortEdge * 0.0045));
+        const waypointHaloR =
+          waypointR + Math.max(2, Math.round(waypointR * 0.5));
+        for (let i = 1; i < pts.length - 1; i++) {
+          const wp = pts[i];
+          decorationsGroup.add(
+            new Konva.Circle({
+              x: wp.x,
+              y: wp.y,
+              radius: waypointHaloR,
+              fill: secondary,
+              opacity: 0.9,
+              listening: false,
+            })
+          );
+          decorationsGroup.add(
+            new Konva.Circle({
+              x: wp.x,
+              y: wp.y,
+              radius: waypointR,
+              fill: state.eyePathSelected ? tertiaryHover : tertiary,
+              listening: false,
+            })
+          );
+        }
+      }
+
       // Start dot.
       if (pts.length >= 1) {
         const startR = Math.max(4, Math.round(shortEdge * 0.0065));
@@ -1620,11 +1657,10 @@ export async function createAnnotationStage({
     // Initial decoration draw with the current geometry.
     buildDecorations(livePts);
 
-    // Invisible drag handles at each point — the only on-canvas
-    // editing affordance. opacity: 0 keeps the path visually clean
-    // (no waypoint dots), but Konva's separate hit canvas still
-    // detects clicks/touches. Mouse users discover them via the
-    // "move" cursor on hover; touch users by tapping near a point.
+    // Invisible drag handles at each point — large hit-targets so
+    // touch users can grab the path without precision. Visible
+    // waypoint dots above (in decorationsGroup) tell the critic
+    // where the handles ARE; these are the underlying hit areas.
     // Handles are added AFTER the decorations group so they sit on
     // top in the hit canvas.
     const handleHitR = Math.max(10, Math.round(shortEdge * 0.014));
