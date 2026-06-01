@@ -846,6 +846,33 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.visualMode === "strong_area";
   }
 
+  // Gate for the two-row toolbar's secondary row (per-mode actions
+  // + crop's aspect-ratio chooser). Returns true when the row would
+  // have anything to render, false when it'd be empty — so we hide
+  // the strip entirely in the empty case and don't burn vertical
+  // pixels above the image.
+  get hasSecondaryActions() {
+    if (this.noteMode) {
+      return !!this.selectedPin || this.notes.length > 0;
+    }
+    if (this.cropMode) {
+      // Crop mode always has at least the aspect-ratio chooser.
+      return true;
+    }
+    if (this.eyePathMode) {
+      return this.hasEyePath || this.eyePathSelected;
+    }
+    if (this.attentionPullMode) {
+      return (
+        !!this.selectedAttentionPull || this.attentionPulls.length > 0
+      );
+    }
+    if (this.strongAreaMode) {
+      return !!this.selectedStrongArea || this.strongAreas.length > 0;
+    }
+    return false;
+  }
+
   @action
   toggleNoteMode() {
     this._setVisualMode(this.noteMode ? null : "numbered_notes");
@@ -2791,151 +2818,163 @@ export default class NpnCritiqueReplyModal extends Component {
                     @disabled={{this.isPosting}}
                   />
 
-                  {{! Contextual remove / clear actions. }}
-                  {{#if this.selectedPin}}
-                    <DButton
-                      class="btn-default npn-critique-reply-modal__remove-pin"
-                      @icon="trash-can"
-                      @action={{this.removeSelectedPin}}
-                      @translatedLabel={{i18n
-                        "npn_critique_reply.visual_notes.remove_note"
-                        number=this.selectedPin.number
-                      }}
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-                  {{#if this.cropSelected}}
-                    <DButton
-                      class="btn-default npn-critique-reply-modal__remove-pin"
-                      @icon="trash-can"
-                      @action={{this.clearCrop}}
-                      @label="npn_critique_reply.visual_notes.crop_remove"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-                  {{#if (and this.crop this.cropMode)}}
-                    <DButton
-                      class="btn-flat npn-critique-reply-modal__clear-notes"
-                      @action={{this.replaceCrop}}
-                      @label="npn_critique_reply.visual_notes.crop_replace"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-                  {{#if this.notes.length}}
-                    <DButton
-                      class="btn-flat npn-critique-reply-modal__clear-notes"
-                      @action={{this.clearNotes}}
-                      @label="npn_critique_reply.visual_notes.clear"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-                  {{#if this.crop}}
-                    <DButton
-                      class="btn-flat npn-critique-reply-modal__clear-notes"
-                      @action={{this.clearCrop}}
-                      @label="npn_critique_reply.visual_notes.crop_clear"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-                  {{! Eye-path contextual actions. }}
-                  {{#if this.eyePathSelected}}
-                    <DButton
-                      class="btn-default npn-critique-reply-modal__remove-pin"
-                      @icon="trash-can"
-                      @action={{this.clearEyePath}}
-                      @label="npn_critique_reply.visual_notes.eye_path_remove"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-                  {{#if (and this.hasEyePath this.eyePathMode)}}
-                    <DButton
-                      class="btn-flat npn-critique-reply-modal__clear-notes"
-                      @action={{this.removeLastEyePathPoint}}
-                      @label="npn_critique_reply.visual_notes.eye_path_remove_last"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-                  {{#if this.hasEyePath}}
-                    <DButton
-                      class="btn-flat npn-critique-reply-modal__clear-notes"
-                      @action={{this.clearEyePath}}
-                      @label="npn_critique_reply.visual_notes.eye_path_clear"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-                  {{! Attention-pull contextual actions. }}
-                  {{#if this.selectedAttentionPull}}
-                    <DButton
-                      class="btn-default npn-critique-reply-modal__remove-pin"
-                      @icon="trash-can"
-                      @action={{this.removeSelectedAttentionPull}}
-                      @label="npn_critique_reply.visual_notes.attention_pull_remove"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-                  {{#if this.attentionPulls.length}}
-                    <DButton
-                      class="btn-flat npn-critique-reply-modal__clear-notes"
-                      @action={{this.clearAttentionPulls}}
-                      @label="npn_critique_reply.visual_notes.attention_pull_clear"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-                  {{! Strong-area contextual actions. }}
-                  {{#if this.selectedStrongArea}}
-                    <DButton
-                      class="btn-default npn-critique-reply-modal__remove-pin"
-                      @icon="trash-can"
-                      @action={{this.removeSelectedStrongArea}}
-                      @label="npn_critique_reply.visual_notes.strong_area_remove"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-                  {{#if this.strongAreas.length}}
-                    <DButton
-                      class="btn-flat npn-critique-reply-modal__clear-notes"
-                      @action={{this.clearStrongAreas}}
-                      @label="npn_critique_reply.visual_notes.strong_area_clear"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
                 </div>
 
-                {{! Aspect ratio chooser — only rendered when in crop
-                    mode. Affects new crop drags AND snaps the existing
-                    crop to the chosen ratio on click. }}
-                {{#if this.cropMode}}
+                {{! Row 2 — per-mode contextual actions + crop's
+                    aspect-ratio chooser. Rendered only when the
+                    active mode has something to surface, so the
+                    strip doesn't burn vertical pixels above the
+                    image when idle. }}
+                {{#if this.hasSecondaryActions}}
                   <div
-                    class="npn-critique-reply-modal__crop-ratio-row"
-                    role="group"
+                    class="npn-critique-reply-modal__visual-notes-secondary"
+                    role="toolbar"
                     aria-label={{i18n
-                      "npn_critique_reply.visual_notes.crop_ratio_label"
+                      "npn_critique_reply.visual_notes.toolbar_label"
                     }}
                   >
-                    <span
-                      class="npn-critique-reply-modal__crop-ratio-label"
-                    >{{i18n
-                        "npn_critique_reply.visual_notes.crop_ratio_label"
-                      }}</span>
-                    {{#each this.cropRatioOptions as |option|}}
-                      <button
-                        type="button"
-                        class="npn-critique-reply-modal__crop-ratio-button
-                          {{if
+                    {{! Pin mode actions. }}
+                    {{#if this.noteMode}}
+                      {{#if this.selectedPin}}
+                        <DButton
+                          class="btn-default npn-critique-reply-modal__remove-pin"
+                          @icon="trash-can"
+                          @action={{this.removeSelectedPin}}
+                          @translatedLabel={{i18n
+                            "npn_critique_reply.visual_notes.remove_note"
+                            number=this.selectedPin.number
+                          }}
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                      {{#if this.notes.length}}
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__clear-notes"
+                          @action={{this.clearNotes}}
+                          @label="npn_critique_reply.visual_notes.clear"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                    {{/if}}
+
+                    {{! Crop mode actions. The Remove (trash) and
+                        Replace flat are kept; "Clear crop" used to be
+                        a separate flat button that called the same
+                        action as Remove crop — dropped that
+                        duplicate. }}
+                    {{#if this.cropMode}}
+                      {{#if this.crop}}
+                        <DButton
+                          class="btn-default npn-critique-reply-modal__remove-pin"
+                          @icon="trash-can"
+                          @action={{this.clearCrop}}
+                          @label="npn_critique_reply.visual_notes.crop_remove"
+                          @disabled={{this.isPosting}}
+                        />
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__clear-notes"
+                          @action={{this.replaceCrop}}
+                          @label="npn_critique_reply.visual_notes.crop_replace"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+
+                      {{! Aspect-ratio chooser folds into the
+                          secondary row instead of being its own
+                          third strip. }}
+                      <span
+                        class="npn-critique-reply-modal__crop-ratio-label"
+                      >{{i18n
+                          "npn_critique_reply.visual_notes.crop_ratio_label"
+                        }}</span>
+                      {{#each this.cropRatioOptions as |option|}}
+                        <button
+                          type="button"
+                          class="npn-critique-reply-modal__crop-ratio-button
+                            {{if
+                              (eq option this.cropAspectRatio)
+                              'is-selected'
+                            }}"
+                          aria-pressed={{if
                             (eq option this.cropAspectRatio)
-                            'is-selected'
-                          }}"
-                        aria-pressed={{if
-                          (eq option this.cropAspectRatio)
-                          "true"
-                          "false"
-                        }}
-                        disabled={{this.isPosting}}
-                        {{on "click" (fn this.setCropAspectRatio option)}}
-                      >{{#if (eq option "free")}}{{i18n
-                            "npn_critique_reply.visual_notes.crop_ratio_free"
-                          }}{{else}}{{option}}{{/if}}</button>
-                    {{/each}}
+                            "true"
+                            "false"
+                          }}
+                          disabled={{this.isPosting}}
+                          {{on
+                            "click"
+                            (fn this.setCropAspectRatio option)
+                          }}
+                        >{{#if (eq option "free")}}{{i18n
+                              "npn_critique_reply.visual_notes.crop_ratio_free"
+                            }}{{else}}{{option}}{{/if}}</button>
+                      {{/each}}
+                    {{/if}}
+
+                    {{! Eye-path mode actions. "Clear eye path" was a
+                        duplicate of "Remove eye path" — same action,
+                        kept only the trash-can version. }}
+                    {{#if this.eyePathMode}}
+                      {{#if this.eyePathSelected}}
+                        <DButton
+                          class="btn-default npn-critique-reply-modal__remove-pin"
+                          @icon="trash-can"
+                          @action={{this.clearEyePath}}
+                          @label="npn_critique_reply.visual_notes.eye_path_remove"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                      {{#if this.hasEyePath}}
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__clear-notes"
+                          @action={{this.removeLastEyePathPoint}}
+                          @label="npn_critique_reply.visual_notes.eye_path_remove_last"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                    {{/if}}
+
+                    {{! Attention-pull mode actions. }}
+                    {{#if this.attentionPullMode}}
+                      {{#if this.selectedAttentionPull}}
+                        <DButton
+                          class="btn-default npn-critique-reply-modal__remove-pin"
+                          @icon="trash-can"
+                          @action={{this.removeSelectedAttentionPull}}
+                          @label="npn_critique_reply.visual_notes.attention_pull_remove"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                      {{#if this.attentionPulls.length}}
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__clear-notes"
+                          @action={{this.clearAttentionPulls}}
+                          @label="npn_critique_reply.visual_notes.attention_pull_clear"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                    {{/if}}
+
+                    {{! Strong-area mode actions. }}
+                    {{#if this.strongAreaMode}}
+                      {{#if this.selectedStrongArea}}
+                        <DButton
+                          class="btn-default npn-critique-reply-modal__remove-pin"
+                          @icon="trash-can"
+                          @action={{this.removeSelectedStrongArea}}
+                          @label="npn_critique_reply.visual_notes.strong_area_remove"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                      {{#if this.strongAreas.length}}
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__clear-notes"
+                          @action={{this.clearStrongAreas}}
+                          @label="npn_critique_reply.visual_notes.strong_area_clear"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                    {{/if}}
                   </div>
                 {{/if}}
               {{/if}}

@@ -1084,30 +1084,32 @@
   }
 }
 
-// Visual Notes toolbar — sits between the reference image and the
-// "Showing Revision N" status line. Wraps on narrow viewports.
+// Visual Notes toolbar — sits above the reference image. Two-row
+// layout: row 1 carries the five mode toggles (always present
+// when visual notes are available); row 2 carries the per-mode
+// contextual actions + crop's aspect-ratio chooser, only rendered
+// when there's something to show. Splitting the rows means
+// contextual actions can't push the image down when they overflow
+// horizontally on portrait viewports.
 .npn-critique-reply-modal__visual-notes-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5em;
-  // Sits ABOVE the image so the visual tool CTAs are visible without
-  // scrolling. With crop added, the toolbar may have 2-5 buttons; flex
-  // wrapping handles it.
-  margin: 0 0 0.6em;
+  margin: 0 0 0.4em;
 }
 
-// Crop aspect-ratio chooser. Sits as a sub-row under the visual-notes
-// toolbar — only rendered when crop mode is active. Compact pill-style
-// buttons follow the same selected-state pattern as the version
-// selector so the visual language stays consistent across the modal.
-.npn-critique-reply-modal__crop-ratio-row {
+.npn-critique-reply-modal__visual-notes-secondary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.4em;
-  margin: 0 0 0.6em;
+  gap: 0.5em;
+  // Compact font-down to read as "options for the active tool"
+  // rather than a peer of the primary toggle row.
   font-size: var(--font-down-1);
+  margin: 0 0 0.6em;
+  padding-top: 0.3em;
+  border-top: 1px solid var(--primary-very-low);
 }
 
 .npn-critique-reply-modal__crop-ratio-label {
