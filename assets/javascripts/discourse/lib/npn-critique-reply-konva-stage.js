@@ -428,19 +428,29 @@ export async function createAnnotationStage({
   // two area markers share a visual band and read as paired tools.
   // Pins remain on top because their numbered semantics require
   // unobstructed readability.
-  const cropLayer = new Konva.Layer();
-  const attentionPullLayer = new Konva.Layer();
-  const strongAreaLayer = new Konva.Layer();
-  const eyePathLayer = new Konva.Layer();
-  const pinLayer = new Konva.Layer();
-  stage.add(cropLayer);
-  stage.add(attentionPullLayer);
-  stage.add(strongAreaLayer);
-  stage.add(eyePathLayer);
-  stage.add(pinLayer);
+  // Annotation kinds live in Konva.Group children of a single layer.
+  // Konva renders each Layer as its own <canvas>; one canvas with
+  // grouped sub-trees is faster than five canvases (the engine's own
+  // warning at >5 layers). Group add-order = z-order: crop → attention
+  // pull → strong area → eye path → pins (pins always on top for
+  // numbered-badge readability).
+  const annotationsLayer = new Konva.Layer();
+  const cropLayer = new Konva.Group();
+  const attentionPullLayer = new Konva.Group();
+  const strongAreaLayer = new Konva.Group();
+  const eyePathLayer = new Konva.Group();
+  const pinLayer = new Konva.Group();
+  annotationsLayer.add(cropLayer);
+  annotationsLayer.add(attentionPullLayer);
+  annotationsLayer.add(strongAreaLayer);
+  annotationsLayer.add(eyePathLayer);
+  annotationsLayer.add(pinLayer);
+  stage.add(annotationsLayer);
 
-  // Drawing-preview layer reused for the live drag-to-crop rectangle.
-  // Sits above crop layer so the preview is unambiguous.
+  // Drawing-preview lives on its own layer so the drag-to-create rect
+  // can clear/redraw on every mousemove without re-batching the
+  // annotations layer. Sits above the annotations layer so the
+  // preview is unambiguous over existing markers.
   const previewLayer = new Konva.Layer();
   stage.add(previewLayer);
 
