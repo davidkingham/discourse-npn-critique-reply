@@ -781,12 +781,15 @@
 .npn-critique-image-reference {
   margin: 0;
   width: 100%;
-  // The image figure flexes to fill whatever vertical space remains in
-  // the (height-capped) image column after the heading / selector /
-  // toolbar / status take their natural space. `min-height: 0` is the
-  // standard flex-child unlock that lets the inner image shrink below
-  // its intrinsic size.
-  flex: 1 1 auto;
+  // flex-basis: 0 (not auto) so the figure's height comes purely
+  // from the flex distribution inside the column — NOT from its
+  // children's natural sizes. Without this, the IMG's natural
+  // height "leaks up" and `max-height: 100%` on the img can't
+  // resolve, leaving the img taller than its parent and clipped
+  // by the frame's `overflow: hidden`. Especially noticeable on
+  // portrait photos after the two-row toolbar shaved vertical
+  // space off the image column.
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -794,7 +797,11 @@
   &__frame {
     position: relative;
     width: 100%;
-    flex: 1 1 auto;
+    // Same rationale as the parent figure — basis 0 makes the
+    // frame's height definite so the IMG's `max-height: 100%`
+    // resolves and the photograph is fully visible regardless of
+    // orientation.
+    flex: 1 1 0;
     min-height: 0;
     // Center the image inside the frame so portrait photos don't pile
     // up against the top edge when the column is wider than the image.
