@@ -101,15 +101,12 @@
     border: 1px solid var(--primary-low);
     border-radius: var(--d-border-radius, 4px);
 
-    // Definite height (not just max-height) so the column's inner
-    // flex distribution has a concrete space to fill. With max-height
-    // alone the column collapsed to content size, the figure + frame
-    // at `flex: 1 1 0` had no space to grow into, and the image
-    // disappeared on desktop. The mobile media query below restores
-    // `height: auto` so the stacked layout still flows naturally.
-    // 80vh - 4em leaves room for the modal's own chrome (header/
-    // footer).
-    height: calc(80vh - 4em);
+    // Cap the column at the modal body's effective height so the entire
+    // image + surrounding controls fit on screen without scrolling.
+    // The img inside uses `position: absolute` (see below) which makes
+    // its `max-height: 100%` resolve against the frame regardless of
+    // whether the flex chain produces a definite height.
+    max-height: calc(80vh - 4em);
     display: flex;
     flex-direction: column;
     gap: 0.5em;
@@ -737,9 +734,7 @@
       padding: 0.5em;
       // Drop the desktop height cap on mobile — the stacked layout
       // doesn't have a sticky column to keep in view, and the body
-      // scrolls naturally. Both `height` and `max-height` overridden
-      // since the desktop rule sets a definite height.
-      height: auto;
+      // scrolls naturally.
       max-height: none;
       display: block;
     }
@@ -786,45 +781,48 @@
 .npn-critique-image-reference {
   margin: 0;
   width: 100%;
-  // flex-basis: 0 (not auto) so the figure's height comes purely
-  // from the flex distribution inside the column — NOT from its
-  // children's natural sizes. Without this, the IMG's natural
-  // height "leaks up" and `max-height: 100%` on the img can't
-  // resolve, leaving the img taller than its parent and clipped
-  // by the frame's `overflow: hidden`. Especially noticeable on
-  // portrait photos after the two-row toolbar shaved vertical
-  // space off the image column.
-  flex: 1 1 0;
+  // The image figure flexes to fill whatever vertical space remains in
+  // the (height-capped) image column after the heading / selector /
+  // toolbar / status take their natural space. `min-height: 0` is the
+  // standard flex-child unlock that lets the inner image shrink below
+  // its intrinsic size.
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
 
   &__frame {
+    // `position: relative` is the containing block for the absolute
+    // image AND the absolute Konva canvas — both center on the
+    // frame's rendered box, so percentage sizing on them resolves
+    // against the frame's actual width / height regardless of how
+    // the flex chain produces that height.
     position: relative;
     width: 100%;
-    // Same rationale as the parent figure — basis 0 makes the
-    // frame's height definite so the IMG's `max-height: 100%`
-    // resolves and the photograph is fully visible regardless of
-    // orientation.
-    flex: 1 1 0;
+    flex: 1 1 auto;
     min-height: 0;
-    // Center the image inside the frame so portrait photos don't pile
-    // up against the top edge when the column is wider than the image.
-    display: flex;
-    align-items: center;
-    justify-content: center;
     background: var(--secondary);
     border: 1px solid var(--primary-low);
     border-radius: var(--d-border-radius, 4px);
     overflow: hidden;
   }
 
-  // `object-fit: contain` plus `max-*: 100%` makes the image scale to
-  // fit the frame in BOTH dimensions while preserving aspect ratio.
-  // Wide panoramas fit by width; tall portraits fit by height; the
-  // result is always fully visible without scrolling.
+  // Positioned absolutely + centered via auto margins so that
+  // `max-width / max-height: 100%` resolves against the frame's
+  // actual rendered size regardless of how the flex chain produces
+  // that size. Previously, with the IMG in the flex flow, the
+  // percentage maxes couldn't resolve through the figure → frame
+  // chain when the figure was sized by flex distribution, causing
+  // portrait photos to overflow the frame and get clipped by the
+  // frame's `overflow: hidden`. With absolute positioning, the
+  // containing block (the relatively-positioned frame) has a known
+  // size by the time the IMG is laid out, so the maxes work.
+  // `object-fit: contain` keeps aspect ratio, letterboxing as needed.
   &__img {
     display: block;
+    position: absolute;
+    inset: 0;
+    margin: auto;
     width: auto;
     height: auto;
     max-width: 100%;
