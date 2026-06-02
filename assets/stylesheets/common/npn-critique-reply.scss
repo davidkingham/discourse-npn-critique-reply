@@ -783,11 +783,18 @@
   width: 100%;
   // The image figure flexes to fill whatever vertical space remains in
   // the (height-capped) image column after the heading / selector /
-  // toolbar / status take their natural space. `min-height: 0` is the
-  // standard flex-child unlock that lets the inner image shrink below
-  // its intrinsic size.
+  // toolbar / status take their natural space.
   flex: 1 1 auto;
-  min-height: 0;
+  // Min-height floor in viewport units. The IMG inside is positioned
+  // absolutely so it doesn't contribute any natural size — without
+  // this floor the figure + frame collapse to 0 height and the
+  // image becomes invisible. 40vh is generous enough to read on any
+  // reasonable desktop viewport (the mobile media query at 720 px
+  // takes over below that) but small enough that the column never
+  // overflows its `max-height: calc(80vh - 4em)` cap given the
+  // toolbar / heading / status chrome above it (chrome is ~200 px,
+  // 40 vh + 200 px ≤ 80 vh - 4 em on viewports ≥ 720 px).
+  min-height: 40vh;
   display: flex;
   flex-direction: column;
 
