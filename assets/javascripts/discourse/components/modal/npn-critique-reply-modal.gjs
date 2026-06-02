@@ -37,6 +37,7 @@ import {
   annotationToCrop,
   annotationToEyePath,
   attentionPullsToAnnotations,
+  buildVisualAnnotationPayload,
   cropToAnnotation,
   eyePathToAnnotation,
   nextAttentionPullLabel,
@@ -646,7 +647,8 @@ export default class NpnCritiqueReplyModal extends Component {
   // exactly the same plumbing without re-trying the failed pipeline.
   async _prepareReplyText({ skipVisualNotes = false } = {}) {
     if (skipVisualNotes || !this.hasVisualAnnotations) {
-      return this._textOnlyRaw();
+      // Text-only path — no visual upload, no annotation payload.
+      return { raw: this._textOnlyRaw(), upload: null };
     }
 
     const url = this.effectiveImageUrl;
@@ -694,7 +696,10 @@ export default class NpnCritiqueReplyModal extends Component {
       throw this._wrapVisualNotesError("upload", e);
     }
 
-    return this._composeVisualNotesRaw(upload);
+    // Caller (Post Critique) needs the upload reference to build the
+    // structured visual-notes metadata persisted on the created post
+    // — the markdown alone is enough for Edit-in-Composer.
+    return { raw: this._composeVisualNotesRaw(upload), upload };
   }
 
   // Compose: heading (already names the version, so we DON'T also emit
@@ -1948,14 +1953,41 @@ export default class NpnCritiqueReplyModal extends Component {
     }
 
     try {
-      const raw = await this._prepareReplyText({ skipVisualNotes });
+      const { raw, upload } = await this._prepareReplyText({
+        skipVisualNotes,
+      });
       if (this._destroyed) {
         return;
       }
 
       this.statusMessage = i18n("npn_critique_reply.modal.posting_critique");
 
-      const response = await postCritiqueRequest(topicId, raw, selectedKey);
+      // Structured visual-annotation metadata is sent ONLY when the
+      // visual export + upload pipeline succeeded AND the user has
+      // annotations. Text-only critiques, Post-without-visual-notes
+      // fallback, and Edit-in-Composer all skip this — the server
+      // stores the payload as a `npn_visual_notes` post custom field
+      // on the just-created reply for future overlay / reopen use.
+      const visualNotes =
+        upload && this.hasVisualAnnotations
+          ? buildVisualAnnotationPayload({
+              topic: this.topic,
+              selectedVersion: this.selectedVersion,
+              visualUpload: upload,
+              pins: this.notes,
+              crop: this.crop,
+              eyePath: this.eyePath,
+              attentionPulls: this.attentionPulls,
+              strongAreas: this.strongAreas,
+            })
+          : null;
+
+      const response = await postCritiqueRequest(
+        topicId,
+        raw,
+        selectedKey,
+        visualNotes
+      );
       if (this._destroyed) {
         // Post was created server-side; modal is gone. MessageBus will
         // deliver the new reply to any open topic page.
@@ -2068,7 +2100,13 @@ export default class NpnCritiqueReplyModal extends Component {
     this.statusMessage = null;
 
     try {
-      const ourText = await this._prepareReplyText({ skipVisualNotes });
+      // Edit-in-Composer only needs the raw markdown — the structured
+      // visual-notes metadata isn't persisted for this flow because
+      // the plugin does not create the final reply post (the native
+      // composer does). See plugin docs / next-step roadmap.
+      const { raw: ourText } = await this._prepareReplyText({
+        skipVisualNotes,
+      });
       if (this._destroyed) {
         return;
       }

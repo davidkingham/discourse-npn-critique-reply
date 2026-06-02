@@ -51,6 +51,8 @@ module DiscourseNpnCritiqueReply
         return
       end
 
+      attach_visual_notes(post, params[:visual_notes], topic_id: topic.id)
+
       render json: {
         success: true,
         post: {
@@ -60,6 +62,40 @@ module DiscourseNpnCritiqueReply
           url: post.url,
         },
       }
+    end
+
+    private
+
+    # Persists the structured visual-annotation metadata onto the
+    # just-created reply as a JSON post custom field. Never raises:
+    # the flattened JPEG + critique text are already valid in the post
+    # body, so if storing the metadata fails we log and move on
+    # rather than failing the reply the user already posted.
+    def attach_visual_notes(post, raw, topic_id:)
+      return if raw.blank?
+      payload = raw.respond_to?(:to_unsafe_h) ? raw.to_unsafe_h : raw
+      normalized = VisualNotesNormalizer.normalize(payload, topic_id: topic_id)
+
+      # Skip storage when normalisation produced nothing meaningful
+      # (e.g. annotations all dropped + no visual_output). Saving an
+      # empty wrapper would just be noise for future readers.
+      return if blank_visual_notes?(normalized)
+
+      post.custom_fields["npn_visual_notes"] = normalized
+      post.save_custom_fields
+    rescue => e
+      Discourse.warn_exception(
+        e,
+        message: "[discourse-npn-critique-reply] failed to attach " \
+          "npn_visual_notes (post=#{post&.id})",
+      )
+    end
+
+    def blank_visual_notes?(payload)
+      return true unless payload.is_a?(Hash)
+      annotations = payload["annotations"]
+      visual_output = payload["visual_output"]
+      annotations.blank? && visual_output.blank?
     end
   end
 end

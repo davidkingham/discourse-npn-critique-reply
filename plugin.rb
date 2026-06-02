@@ -37,8 +37,16 @@ after_initialize do
   require_relative "lib/discourse_npn_critique_reply/topic_metadata_reader"
   require_relative "lib/discourse_npn_critique_reply/draft_normalizer"
   require_relative "lib/discourse_npn_critique_reply/draft_store"
+  require_relative "lib/discourse_npn_critique_reply/visual_notes_normalizer"
   require_relative "app/controllers/discourse_npn_critique_reply/critique_replies_controller"
   require_relative "app/controllers/discourse_npn_critique_reply/drafts_controller"
+
+  # Structured visual-annotation metadata for posted critique replies.
+  # The flattened JPEG stays the visible artifact in the post body;
+  # this field preserves the editor's annotation schema so future
+  # features (reopen-to-edit, interactive overlays, debug, renderer
+  # migration) have something to work with.
+  register_post_custom_field_type("npn_visual_notes", :json)
 
   # These topic custom fields are populated by sibling plugins
   # (discourse-npn-submissions, discourse-revised-critique-image), but we
