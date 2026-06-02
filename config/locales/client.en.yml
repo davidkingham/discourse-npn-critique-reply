@@ -9,9 +9,6 @@ en:
       # so the user knows clicking will pick up where they left off.
       resume_button: "Resume Critique Draft"
       resume_button_title: "Pick up your saved critique draft"
-      coming_soon:
-        title: "Want to offer feedback?"
-        body: "The critique helper modal will be added in the next step."
 
       # Compact, single-action invitation panel rendered below the OP
       # on eligible critique topics. The panel is a second entry point
@@ -96,9 +93,11 @@ en:
         edit_existing_message: "The composer already has text. How would you like to combine it with your critique?"
         edit_append: "Append critique"
         edit_replace: "Replace with critique"
-        # Reply Normally: shown when the user clicks the escape hatch while
-        # the workspace textarea still has unsaved text.
-        confirm_reply_normally: "Open a normal reply? Your critique draft in this workspace will not be transferred."
+        # Reply Normally: shown when the user clicks the escape hatch
+        # while the workspace textarea still has unsaved text. The
+        # server-side draft is intentionally NOT cleared by this
+        # flow, so the user can resume from where they left off.
+        confirm_reply_normally: "Open a normal reply? Your critique workspace draft will stay saved for next time."
 
         # Server-side critique workspace drafts. Drafts are stored per
         # user/topic in PluginStore and restore automatically on open.
@@ -117,9 +116,6 @@ en:
           # Notice when the saved draft's image version still exists but
           # a newer revision is available since the draft was started.
           image_version_outdated: "This draft was started on %{label}. A newer revision is available."
-          # Surfaced under Reply Normally when a saved draft exists, so
-          # the user knows the workspace draft survives the escape hatch.
-          reply_normally_kept: "Your critique workspace draft will remain saved."
 
         submission_types:
           image_critique: "Image Critique"
