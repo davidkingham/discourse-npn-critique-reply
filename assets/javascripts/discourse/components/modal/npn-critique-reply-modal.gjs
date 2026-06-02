@@ -1981,16 +1981,6 @@ export default class NpnCritiqueReplyModal extends Component {
               strongAreas: this.strongAreas,
             })
           : null;
-      if (this.siteSettings.npn_critique_reply_debug_enabled) {
-        // eslint-disable-next-line no-console
-        console.info("[npn-critique-reply] post-critique visualNotes", {
-          uploadPresent: !!upload,
-          hasAnnotations: this.hasVisualAnnotations,
-          payloadPresent: !!visualNotes,
-          annotationCount: visualNotes?.annotations?.length ?? 0,
-          visualOutputPresent: !!visualNotes?.visual_output,
-        });
-      }
 
       const response = await postCritiqueRequest(
         topicId,

@@ -72,44 +72,18 @@ module DiscourseNpnCritiqueReply
     # body, so if storing the metadata fails we log and move on
     # rather than failing the reply the user already posted.
     def attach_visual_notes(post, raw, topic_id:)
-      debug = SiteSetting.npn_critique_reply_debug_enabled
-      if debug
-        Rails.logger.info(
-          "[npn-critique-reply] attach_visual_notes: " \
-            "raw_class=#{raw.class.name} raw_blank=#{raw.blank?} " \
-            "post=#{post&.id}",
-        )
-      end
-
       return if raw.blank?
 
       payload = raw.respond_to?(:to_unsafe_h) ? raw.to_unsafe_h : raw
       normalized = VisualNotesNormalizer.normalize(payload, topic_id: topic_id)
 
-      if debug
-        Rails.logger.info(
-          "[npn-critique-reply] attach_visual_notes: normalized " \
-            "annotations=#{normalized["annotations"]&.length} " \
-            "visual_output_present=#{normalized["visual_output"].present?}",
-        )
-      end
-
       # Skip storage when normalisation produced nothing meaningful
       # (e.g. annotations all dropped + no visual_output). Saving an
       # empty wrapper would just be noise for future readers.
-      if blank_visual_notes?(normalized)
-        Rails.logger.info(
-          "[npn-critique-reply] attach_visual_notes: skipping blank payload",
-        ) if debug
-        return
-      end
+      return if blank_visual_notes?(normalized)
 
       post.custom_fields["npn_visual_notes"] = normalized
       post.save_custom_fields
-
-      Rails.logger.info(
-        "[npn-critique-reply] attach_visual_notes: saved (post=#{post.id})",
-      ) if debug
     rescue => e
       Discourse.warn_exception(
         e,
