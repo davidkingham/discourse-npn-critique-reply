@@ -101,12 +101,15 @@
     border: 1px solid var(--primary-low);
     border-radius: var(--d-border-radius, 4px);
 
-    // Cap the column at the modal body's effective height so the entire
-    // image + surrounding controls (heading, version selector, toolbar,
-    // status) fit on screen without scrolling. The modal itself maxes at
-    // 80vh; subtract the modal chrome (~4em) and the column's own padding
-    // so the image has room to flex.
-    max-height: calc(80vh - 4em);
+    // Definite height (not just max-height) so the column's inner
+    // flex distribution has a concrete space to fill. With max-height
+    // alone the column collapsed to content size, the figure + frame
+    // at `flex: 1 1 0` had no space to grow into, and the image
+    // disappeared on desktop. The mobile media query below restores
+    // `height: auto` so the stacked layout still flows naturally.
+    // 80vh - 4em leaves room for the modal's own chrome (header/
+    // footer).
+    height: calc(80vh - 4em);
     display: flex;
     flex-direction: column;
     gap: 0.5em;
@@ -734,7 +737,9 @@
       padding: 0.5em;
       // Drop the desktop height cap on mobile — the stacked layout
       // doesn't have a sticky column to keep in view, and the body
-      // scrolls naturally.
+      // scrolls naturally. Both `height` and `max-height` overridden
+      // since the desktop rule sets a definite height.
+      height: auto;
       max-height: none;
       display: block;
     }
