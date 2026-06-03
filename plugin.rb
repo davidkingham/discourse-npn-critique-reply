@@ -90,12 +90,12 @@ after_initialize do
   # Surface the stored visual-notes payload on the Post JSON so the
   # client can reopen a critique reply for editing. Restricted to
   # signed-in viewers (anon has no edit affordance) and to posts
-  # that actually have the field set (avoid emitting `null` for
-  # every post in the topic). Preloaded via TopicView so the
-  # serializer attribute reads from memory, not a per-post DB hit.
-  TopicView.default_post_custom_fields << "npn_visual_notes" unless TopicView
-    .default_post_custom_fields
-    .include?("npn_visual_notes")
+  # that actually have the field set (skip emitting `null` for every
+  # post in the topic). Each include_condition read triggers a
+  # Post#custom_fields lookup — acceptable for the small number of
+  # posts visible on a topic page; can be revisited with a proper
+  # preload hook if topics with hundreds of critique replies become
+  # common.
   add_to_serializer(
     :post,
     :npn_visual_notes,
