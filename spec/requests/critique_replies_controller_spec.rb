@@ -420,9 +420,16 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
       }
     end
 
+    # Sentinel for "do NOT include the visual_notes key in the request
+    # body at all" (vs `nil`, which means "include the key with an
+    # explicit null value"). The server distinguishes these — explicit
+    # null clears the custom field, missing key preserves it — so the
+    # helper has to be able to express both.
+    OMITTED_VISUAL_NOTES = Object.new.freeze
+
     def put_update(post_id, raw: updated_raw, visual_notes: updated_visual_notes)
       body = { raw: raw }
-      body[:visual_notes] = visual_notes if visual_notes
+      body[:visual_notes] = visual_notes unless visual_notes.equal?(OMITTED_VISUAL_NOTES)
       put "/npn-critique-reply/posts/#{post_id}/critique.json",
           params: body.to_json,
           headers: {
@@ -486,6 +493,96 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
         stored =
           Post.find(critique_reply.id).custom_fields["npn_visual_notes"]
         expect(stored.dig("source", "topic_id")).to eq(critique_topic.id)
+      end
+
+      # ---- annotation-clearing behavior ----------------------------
+      #
+      # When the modal sends an explicit `visual_notes: null` (user
+      # removed every annotation, or chose "Continue without visual
+      # notes" in edit mode) the server must delete the
+      # `npn_visual_notes` custom field so the post body and the
+      # stored payload stay in sync.
+
+      it "clears npn_visual_notes when the client sends visual_notes: null" do
+        text_only_raw = "Revised — softer edit. The light feels good now."
+
+        put_update(critique_reply.id, raw: text_only_raw, visual_notes: nil)
+
+        expect(response.status).to eq(200)
+        reloaded = Post.find(critique_reply.id)
+        expect(reloaded.raw).to eq(text_only_raw)
+        expect(reloaded.custom_fields["npn_visual_notes"]).to be_blank
+        # PostCustomField row should be gone, not just nilled out in
+        # the in-memory hash — otherwise a stale row would resurface
+        # the next time custom_fields is read.
+        expect(
+          PostCustomField.where(post_id: critique_reply.id, name: "npn_visual_notes").exists?,
+        ).to eq(false)
+      end
+
+      it "is a no-op (preserves existing) when visual_notes key is absent" do
+        # Backwards compatibility: an older client that doesn't yet
+        # include the `visual_notes` key in update requests must NOT
+        # see its existing payload wiped just by saving a text edit.
+        text_only_raw = "Revised — softer edit. The light feels good now."
+
+        put_update(
+          critique_reply.id,
+          raw: text_only_raw,
+          visual_notes: OMITTED_VISUAL_NOTES,
+        )
+
+        expect(response.status).to eq(200)
+        reloaded = Post.find(critique_reply.id)
+        expect(reloaded.raw).to eq(text_only_raw)
+        expect(reloaded.custom_fields["npn_visual_notes"]).to be_present
+      end
+
+      it "clears npn_visual_notes when a non-null payload normalises to blank" do
+        # Defensive case: client somehow sends a wrapper with no
+        # annotations and no visual_output. In update mode that
+        # should clear (not silently leave a stale field behind).
+        empty_wrapper = {
+          "source" => { "image_version_key" => "original" },
+          "visual_output" => nil,
+          "annotations" => [],
+        }
+        put_update(critique_reply.id, visual_notes: empty_wrapper)
+        expect(response.status).to eq(200)
+        expect(
+          Post.find(critique_reply.id).custom_fields["npn_visual_notes"],
+        ).to be_blank
+      end
+
+      it "does NOT clear npn_visual_notes when the post body update fails" do
+        # PostRevisor failure path. The 422 must leave both raw and
+        # the custom field unchanged.
+        original_raw = critique_reply.raw
+        put_update(critique_reply.id, raw: "   ", visual_notes: nil)
+
+        expect(response.status).to eq(422)
+        reloaded = Post.find(critique_reply.id)
+        expect(reloaded.raw).to eq(original_raw)
+        expect(reloaded.custom_fields["npn_visual_notes"]).to be_present
+      end
+
+      it "stops serializing npn_visual_notes after the field is cleared" do
+        # End-to-end check that the post-menu button's visibility
+        # gate goes false: the button reads `post.npn_visual_notes`
+        # from the post serializer, which is itself gated on
+        # `custom_fields["npn_visual_notes"].present?` (see
+        # plugin.rb add_to_serializer block).
+        put_update(critique_reply.id, raw: "Text-only revision.", visual_notes: nil)
+        expect(response.status).to eq(200)
+
+        SiteSetting.npn_critique_reply_enabled = true
+        serialized =
+          PostSerializer.new(
+            Post.find(critique_reply.id),
+            scope: Guardian.new(author),
+            root: false,
+          ).as_json
+        expect(serialized).not_to include(:npn_visual_notes)
       end
     end
 

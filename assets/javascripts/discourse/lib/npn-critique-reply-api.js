@@ -48,14 +48,23 @@ export function postCritique(
 /**
  * Update a previously-posted critique reply. Server replaces both
  * the post's raw markdown (via PostRevisor) and the saved
- * npn_visual_notes payload. Same shape as postCritique but no
- * draft-side concerns (drafts only apply to in-progress critiques,
- * not edits).
+ * npn_visual_notes payload. Same shape as postCritique but with one
+ * deliberate difference: the `visual_notes` key is ALWAYS sent —
+ * either with a payload (normal edit) or as explicit `null` (user
+ * removed all annotations, or chose "Continue without visual notes"
+ * in edit mode). The server treats the explicit `null` as the
+ * signal to delete the post's `npn_visual_notes` custom field, so
+ * the visible post body and the stored payload stay in sync.
+ *
+ * Create mode (`postCritique`) keeps the older behavior of omitting
+ * the key for text-only critiques because there's nothing pre-
+ * existing to clear on a brand-new post.
  *
  * @param {number} postId — the post being edited (NOT the topic id).
  * @param {string} raw
  * @param {?string} selectedImageVersionKey
- * @param {?object} visualNotes
+ * @param {?object} visualNotes — pass null to explicitly clear the
+ *   stored payload; pass a wrapper object to replace it.
  * @returns {Promise<{success: true, post: {id, post_number, topic_id, url}}>}
  */
 export function updateCritique(
@@ -64,13 +73,16 @@ export function updateCritique(
   selectedImageVersionKey,
   visualNotes = null
 ) {
+  // Note: `visual_notes` is intentionally always present in the body
+  // payload. Distinguishing "key absent" (preserve existing) from
+  // "key present with null value" (clear) is the entire mechanism
+  // the server uses to know it should delete the custom field. See
+  // `CritiqueRepliesController#sync_visual_notes_for_update`.
   const body = {
     raw,
     selected_image_version_key: selectedImageVersionKey ?? null,
+    visual_notes: visualNotes ?? null,
   };
-  if (visualNotes) {
-    body.visual_notes = visualNotes;
-  }
   return ajax(`/npn-critique-reply/posts/${postId}/critique`, {
     type: "PUT",
     data: JSON.stringify(body),

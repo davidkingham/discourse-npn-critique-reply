@@ -104,12 +104,15 @@ module DiscourseNpnCritiqueReply
       success = revisor.revise!(current_user, raw: raw)
 
       unless success
+        # Failure path returns BEFORE we touch the visual-notes
+        # custom field so a 422 leaves the post (raw + custom field)
+        # completely unchanged.
         render_json_error post.errors.full_messages.join(". ").presence ||
           I18n.t("npn_critique_reply.errors.create_failed"), status: 422
         return
       end
 
-      attach_visual_notes(post, params[:visual_notes], topic_id: post.topic_id)
+      sync_visual_notes_for_update(post)
 
       render json: {
         success: true,
@@ -123,6 +126,79 @@ module DiscourseNpnCritiqueReply
     end
 
     private
+
+    # Edit-mode visual-notes reconciliation. The client always sends a
+    # `visual_notes` key in update payloads; the value distinguishes
+    # the three cases:
+    #
+    #   • non-blank payload  → replace the stored npn_visual_notes
+    #     custom field with the freshly-normalised wrapper (same
+    #     path the create endpoint takes via `attach_visual_notes`).
+    #
+    #   • explicit null/blank → DELETE the custom field. This is the
+    #     signal the modal sends when the user removed every
+    #     annotation OR clicked "Continue without visual notes" in
+    #     edit mode. Without this branch the post body would become
+    #     text-only while the stored payload stayed stale, and the
+    #     "Edit Visual Critique" post-menu button (gated on the
+    #     custom field's presence via the post serializer) would
+    #     keep appearing on a post that no longer has visuals.
+    #
+    #   • key absent         → no-op. Defensive case for a stale
+    #     client (e.g. a browser tab loaded before the deploy that
+    #     introduced the always-include-the-key contract). Leaves
+    #     the existing field untouched rather than wiping it.
+    def sync_visual_notes_for_update(post)
+      return unless params.key?(:visual_notes)
+
+      payload = params[:visual_notes]
+      if payload.blank?
+        clear_visual_notes(post)
+        return
+      end
+
+      # Non-blank payload: normalize first, then decide. The
+      # normaliser may reduce a malformed wrapper (e.g. an empty
+      # annotations array with no visual_output) to something
+      # effectively blank — in update mode that should ALSO clear,
+      # not silently leave a stale field behind. Create mode
+      # preserves the older "skip" behavior because there's nothing
+      # pre-existing to clear there.
+      payload_hash = payload.respond_to?(:to_unsafe_h) ? payload.to_unsafe_h : payload
+      normalized =
+        VisualNotesNormalizer.normalize(payload_hash, topic_id: post.topic_id)
+
+      if blank_visual_notes?(normalized)
+        clear_visual_notes(post)
+      else
+        post.custom_fields["npn_visual_notes"] = normalized
+        post.save_custom_fields
+      end
+    rescue => e
+      Discourse.warn_exception(
+        e,
+        message: "[discourse-npn-critique-reply] failed to sync " \
+          "npn_visual_notes (post=#{post&.id})",
+      )
+    end
+
+    # Drop the npn_visual_notes post custom field if present. No-op
+    # when the field isn't there so a redundant clear doesn't churn
+    # the database. Swallowed-and-logged on failure for the same
+    # reason `attach_visual_notes` is non-fatal: the user-visible
+    # update (the post body) already succeeded, so a custom-field
+    # save error shouldn't surface as a 5xx.
+    def clear_visual_notes(post)
+      return if post.custom_fields["npn_visual_notes"].blank?
+      post.custom_fields.delete("npn_visual_notes")
+      post.save_custom_fields
+    rescue => e
+      Discourse.warn_exception(
+        e,
+        message: "[discourse-npn-critique-reply] failed to clear " \
+          "npn_visual_notes (post=#{post&.id})",
+      )
+    end
 
     # Persists the structured visual-annotation metadata onto the
     # just-created reply as a JSON post custom field. Never raises:
