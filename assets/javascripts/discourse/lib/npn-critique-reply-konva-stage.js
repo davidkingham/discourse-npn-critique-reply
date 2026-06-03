@@ -686,13 +686,13 @@ export async function createAnnotationStage({
     attentionPullLayer.destroyChildren();
     const pulls = state.attentionPulls;
     if (!Array.isArray(pulls) || pulls.length === 0) {
-      attentionPullLayer.batchDraw();
+      annotationsLayer.batchDraw();
       return;
     }
     const sw = stage.width();
     const sh = stage.height();
     if (sw === 0 || sh === 0) {
-      attentionPullLayer.batchDraw();
+      annotationsLayer.batchDraw();
       return;
     }
     // Muted ochre — see npn-critique-reply-colors.js. Distinct hue
@@ -858,7 +858,7 @@ export async function createAnnotationStage({
               y: ey - ery + badgeOffset,
             });
           }
-          attentionPullLayer.batchDraw();
+          annotationsLayer.batchDraw();
         };
 
         const emitUpdate = () => {
@@ -963,7 +963,7 @@ export async function createAnnotationStage({
         attentionPullLayer.add(transformer);
       }
     }
-    attentionPullLayer.batchDraw();
+    annotationsLayer.batchDraw();
   }
 
   // Strong-area renderer. Twin of attention-pull renderer with two
@@ -978,13 +978,13 @@ export async function createAnnotationStage({
     strongAreaLayer.destroyChildren();
     const areas = state.strongAreas;
     if (!Array.isArray(areas) || areas.length === 0) {
-      strongAreaLayer.batchDraw();
+      annotationsLayer.batchDraw();
       return;
     }
     const sw = stage.width();
     const sh = stage.height();
     if (sw === 0 || sh === 0) {
-      strongAreaLayer.batchDraw();
+      annotationsLayer.batchDraw();
       return;
     }
     // Muted sage — see npn-critique-reply-colors.js. Supportive
@@ -1130,7 +1130,7 @@ export async function createAnnotationStage({
               y: ey - ery + badgeOffset,
             });
           }
-          strongAreaLayer.batchDraw();
+          annotationsLayer.batchDraw();
         };
 
         const emitUpdate = () => {
@@ -1226,7 +1226,7 @@ export async function createAnnotationStage({
         strongAreaLayer.add(transformer);
       }
     }
-    strongAreaLayer.batchDraw();
+    annotationsLayer.batchDraw();
   }
 
   function renderPins() {
@@ -1234,7 +1234,7 @@ export async function createAnnotationStage({
     for (const pin of state.pins) {
       pinLayer.add(buildPinGroup(pin));
     }
-    pinLayer.batchDraw();
+    annotationsLayer.batchDraw();
   }
 
   // Eye-path renderer. The path reads as direction-from-start-to-end:
@@ -1253,13 +1253,13 @@ export async function createAnnotationStage({
 
     const path = state.eyePath;
     if (!path || !Array.isArray(path.points) || path.points.length === 0) {
-      eyePathLayer.batchDraw();
+      annotationsLayer.batchDraw();
       return;
     }
     const sw = stage.width();
     const sh = stage.height();
     if (sw === 0 || sh === 0) {
-      eyePathLayer.batchDraw();
+      annotationsLayer.batchDraw();
       return;
     }
 
@@ -1687,7 +1687,7 @@ export async function createAnnotationStage({
           j === pointIndex ? { x: handle.x(), y: handle.y() } : pt
         );
         buildDecorations(updated);
-        eyePathLayer.batchDraw();
+        annotationsLayer.batchDraw();
       });
 
       handle.on("dragend", () => {
@@ -1717,7 +1717,7 @@ export async function createAnnotationStage({
         // dragend coords (defensive — dragmove already ran on the
         // same coords, but this guards against any rounding drift).
         buildDecorations(livePts);
-        eyePathLayer.batchDraw();
+        annotationsLayer.batchDraw();
         onMoveEyePathPoint?.(pointNumber, newXPct, newYPct);
       });
 
@@ -1730,7 +1730,7 @@ export async function createAnnotationStage({
       eyePathLayer.add(handle);
     }
 
-    eyePathLayer.batchDraw();
+    annotationsLayer.batchDraw();
   }
 
   // Crop layer = 4 dim rects + bordered rect (+ Konva.Transformer
@@ -1748,7 +1748,7 @@ export async function createAnnotationStage({
     const sh = stage.height();
 
     if (!state.crop || sw === 0 || sh === 0) {
-      cropLayer.batchDraw();
+      annotationsLayer.batchDraw();
       return;
     }
 
@@ -1958,7 +1958,7 @@ export async function createAnnotationStage({
       right: dimRight,
     };
 
-    cropLayer.batchDraw();
+    annotationsLayer.batchDraw();
   }
 
   // Live-resync the 4 dim rects to the crop rect's CURRENT pixel
@@ -2010,7 +2010,7 @@ export async function createAnnotationStage({
       cropTransformerRef?.moveToTop();
     }
 
-    cropLayer.batchDraw();
+    annotationsLayer.batchDraw();
   }
 
   // Build (or rebuild) the photo-editor-style crop decoration group:
