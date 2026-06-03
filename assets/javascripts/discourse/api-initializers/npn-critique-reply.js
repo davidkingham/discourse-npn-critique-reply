@@ -1,8 +1,6 @@
 import { apiInitializer } from "discourse/lib/api";
-import { getOwner } from "@ember/owner";
 import NpnCritiqueReplyInvitationPanel from "../components/npn-critique-reply-invitation-panel";
 import NpnCritiqueReplyStartButton from "../components/npn-critique-reply-start-button";
-import NpnCritiqueReplyModal from "../components/modal/npn-critique-reply-modal";
 
 // Wires up three things:
 //
@@ -41,45 +39,14 @@ export default apiInitializer((api) => {
     NpnCritiqueReplyInvitationPanel
   );
 
-  // "Edit critique" action on the post menu. Visible only on critique
-  // replies (posts carrying a persisted `npn_visual_notes` payload)
-  // and only to viewers who can edit the post (Discourse's own
-  // `post.can_edit` flag — author + staff under default permissions).
-  // Opens the critique workspace modal in edit mode; on save the
-  // modal calls PUT /npn-critique-reply/posts/:id/critique which
-  // updates both the post's raw and the saved annotation payload.
-  api.addPostMenuButton("npn-edit-critique", (post) => {
-    if (!post?.npn_visual_notes) {
-      return;
-    }
-    if (!post?.can_edit) {
-      return;
-    }
-    return {
-      action: "npnEditCritique",
-      icon: "far-pen-to-square",
-      title: "npn_critique_reply.modal.edit_critique_button_title",
-      label: "npn_critique_reply.modal.edit_critique_button",
-      className: "btn-flat npn-critique-reply-edit-action",
-      position: "second-last-hidden",
-    };
-  });
-
-  api.attachWidgetAction("post", "npnEditCritique", function () {
-    const modalService = getOwner(this).lookup("service:modal");
-    const post = this.findAncestorModel?.();
-    if (!post || !modalService) {
-      return;
-    }
-    const topic = post.topic;
-    modalService.show(NpnCritiqueReplyModal, {
-      model: {
-        topic,
-        metadata: topic?.get?.("npn_critique_reply") ?? topic?.npn_critique_reply,
-        editingPost: post,
-      },
-    });
-  });
+  // "Edit critique" post-menu button registration was deferred —
+  // earlier attempt with `api.addPostMenuButton` +
+  // `api.attachWidgetAction` broke the app boot on current Discourse
+  // (the post is being migrated from widget-based to Glimmer, and
+  // the widget action API doesn't behave consistently anymore). The
+  // server-side endpoint + modal edit mode are in place, so a
+  // follow-up commit can re-add the entry point via a Glimmer-
+  // friendly hook without disturbing the rest of the modal.
 
   const siteSettings = api.container.lookup("service:site-settings");
   const currentUser = api.container.lookup("service:current-user");
