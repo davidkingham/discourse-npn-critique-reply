@@ -583,16 +583,19 @@ export async function createAnnotationStage({
       },
     });
 
-    if (canMove) {
-      // Cursor affordance: "move" while hovering a draggable pin,
-      // revert to the mode-default on leave.
-      group.on("mouseenter", () => {
-        container.style.cursor = "move";
-      });
-      group.on("mouseleave", () => {
-        applyContainerCursor();
-      });
+    // Cursor affordance: "move" while hovering a draggable pin
+    // (signals drag), "pointer" when the pin is only clickable
+    // (signals selectability). Either way revert to the mode-default
+    // on leave. Matches the pattern used on the other annotation
+    // kinds — every interactive marker now has a hover cursor cue.
+    group.on("mouseenter", () => {
+      container.style.cursor = canMove ? "move" : "pointer";
+    });
+    group.on("mouseleave", () => {
+      applyContainerCursor();
+    });
 
+    if (canMove) {
       group.on("dragend", () => {
         const sw = stage.width();
         const sh = stage.height();
@@ -785,6 +788,16 @@ export async function createAnnotationStage({
       fillBody.on("click tap", (e) => {
         e.cancelBubble = true;
         onSelectAttentionPull?.(id);
+      });
+      // "move" cursor while draggable (signals drag-to-reposition),
+      // "pointer" when only clickable (signals select-on-click). The
+      // mode-default crosshair returns on leave via
+      // applyContainerCursor.
+      fillBody.on("mouseenter", () => {
+        container.style.cursor = canEdit ? "move" : "pointer";
+      });
+      fillBody.on("mouseleave", () => {
+        applyContainerCursor();
       });
       attentionPullLayer.add(fillBody);
 
@@ -1061,6 +1074,14 @@ export async function createAnnotationStage({
       fillBody.on("click tap", (e) => {
         e.cancelBubble = true;
         onSelectStrongArea?.(id);
+      });
+      // Cursor cue matching attention pulls — "move" when draggable,
+      // "pointer" when only clickable.
+      fillBody.on("mouseenter", () => {
+        container.style.cursor = canEdit ? "move" : "pointer";
+      });
+      fillBody.on("mouseleave", () => {
+        applyContainerCursor();
       });
       strongAreaLayer.add(fillBody);
 
@@ -1544,7 +1565,15 @@ export async function createAnnotationStage({
       // is a separate code path that intentionally renders only
       // line + arrows + start dot + terminal arrow, so the posted
       // image stays free of editing UI.
-      if (pts.length >= 3) {
+      //
+      // Only rendered when the path is selected. Hiding the dots in
+      // the unselected state is the primary selected-vs-unselected
+      // visual cue for the eye path (the other annotation kinds get
+      // theirs from fill opacity / outer ring / dash → solid; the
+      // eye path's stroke colour and tension don't lend themselves
+      // to a comparable swap). Curve-hit-zone selection still works
+      // — users see the line, click it, the dots appear.
+      if (pts.length >= 3 && state.eyePathSelected) {
         // Floor bumped (3 → 4) so the dots are easier to mouse-target
         // on smaller stages. Still smaller than the start dot's
         // radius (~5+ px) so the start still reads as the path origin.
@@ -1575,30 +1604,43 @@ export async function createAnnotationStage({
         }
       }
 
-      // Start dot.
+      // Start dot + label badge. The start dot is the "begin here"
+      // cue but doubles as a tap target — render it whenever the
+      // path is selected, OR when the path has only 1 point yet
+      // (no line to read direction from, so the dot is the only
+      // thing on screen). For 2+ point unselected paths the dot
+      // hides; the terminal arrow + label badge are enough to read
+      // direction, and dot-hiding becomes the selected-vs-unselected
+      // state cue (paired with the interior waypoint hiding above).
+      //
+      // The label badge is rendered EVERY time (independent of the
+      // dot) so the path remains identifiable when unselected.
       if (pts.length >= 1) {
         const startR = Math.max(4, Math.round(shortEdge * 0.0065));
         const startHaloR = startR + Math.max(2, Math.round(startR * 0.4));
         const start = pts[0];
-        decorationsGroup.add(
-          new Konva.Circle({
-            x: start.x,
-            y: start.y,
-            radius: startHaloR,
-            fill: secondary,
-            opacity: 0.9,
-            listening: false,
-          })
-        );
-        decorationsGroup.add(
-          new Konva.Circle({
-            x: start.x,
-            y: start.y,
-            radius: startR,
-            fill: state.eyePathSelected ? tertiaryHover : tertiary,
-            listening: false,
-          })
-        );
+        const showStartDot = state.eyePathSelected || pts.length < 2;
+        if (showStartDot) {
+          decorationsGroup.add(
+            new Konva.Circle({
+              x: start.x,
+              y: start.y,
+              radius: startHaloR,
+              fill: secondary,
+              opacity: 0.9,
+              listening: false,
+            })
+          );
+          decorationsGroup.add(
+            new Konva.Circle({
+              x: start.x,
+              y: start.y,
+              radius: startR,
+              fill: state.eyePathSelected ? tertiaryHover : tertiary,
+              listening: false,
+            })
+          );
+        }
 
         // Label badge — small tertiary pill near the start dot.
         // Uses the same Konva.Label pattern as attention pulls but
@@ -1917,6 +1959,17 @@ export async function createAnnotationStage({
     cropRect.on("click tap", (e) => {
       e.cancelBubble = true;
       onSelectCrop?.();
+    });
+
+    // Cursor cue — "move" while the rect is the active edit target
+    // (draggable), "pointer" when only clickable. Matches the pin
+    // and area-marker pattern. The transformer handles draw their
+    // own resize cursors via Konva's built-in anchor styling.
+    cropRect.on("mouseenter", () => {
+      container.style.cursor = canEdit ? "move" : "pointer";
+    });
+    cropRect.on("mouseleave", () => {
+      applyContainerCursor();
     });
 
     // Drag (move) handlers — dim rects follow the crop in real time
