@@ -1989,6 +1989,69 @@ export async function createAnnotationStage({
     cropLayer.add(dimRight);
     cropLayer.add(cropRect);
 
+    // Perimeter-only hit zone for cross-mode crop selection.
+    //
+    // The cropRect above is mode-conditionally non-listening (see its
+    // `listening` block) so a click anywhere INSIDE the crop area
+    // passes through to the stage and adds the active tool's
+    // annotation. That made the crop the only marker that couldn't
+    // be picked up by clicking it from another tool's mode — pins,
+    // attention pulls, and strong areas can all be selected at any
+    // time because they're small enough that you can click them
+    // intentionally, but the crop's bounded interior had to stay
+    // pass-through so users could place annotations inside it.
+    //
+    // This hit zone is a closed polyline tracing the crop perimeter
+    // with a fat invisible stroke. Hit-testable only on the BORDER
+    // (not the fill) so clicking the visible dashed frame selects
+    // the crop and switches to crop mode, while clicks well inside
+    // the crop area still pass through to the stage. Active only in
+    // the tool modes that disable cropRect's own listening; in crop
+    // mode (or no mode) cropRect handles its own clicks so the hit
+    // zone stays out of the way of drag/transform interactions.
+    const inToolMode =
+      state.visualMode === "numbered_notes" ||
+      state.visualMode === "eye_path" ||
+      state.visualMode === "attention_pull" ||
+      state.visualMode === "strong_area";
+    if (inToolMode) {
+      const hitStrokeWidth = Math.max(
+        14,
+        Math.round(Math.min(sw, sh) * 0.02)
+      );
+      const cropHitBorder = new Konva.Line({
+        points: [cx, cy, cx + cw, cy, cx + cw, cy + ch, cx, cy + ch],
+        closed: true,
+        // Opacity 0 hides it visually; Konva still rasterises it to
+        // the hit graph (the same pattern this file already uses for
+        // the eye-path curve hit and the waypoint handles).
+        stroke: "black",
+        strokeWidth: hitStrokeWidth,
+        // No fill, no fill hit — only the stroke contributes to hit
+        // testing, so the interior of the rect stays pass-through.
+        fillEnabled: false,
+        opacity: 0,
+        listening: true,
+        lineCap: "round",
+        lineJoin: "round",
+        name: "crop-hit-border",
+      });
+      cropHitBorder.on("mouseenter", () => {
+        container.style.cursor = "pointer";
+      });
+      cropHitBorder.on("mouseleave", () => {
+        applyContainerCursor();
+      });
+      cropHitBorder.on("click tap", (e) => {
+        // cancelBubble stops the stage-level click handler from also
+        // firing — otherwise the click would BOTH select the crop
+        // AND add a tool annotation at the click location.
+        e.cancelBubble = true;
+        onSelectCrop?.();
+      });
+      cropLayer.add(cropHitBorder);
+    }
+
     if (canEdit) {
       const minW = (MIN_CROP_DRAG_PCT / 100) * sw;
       const minH = (MIN_CROP_DRAG_PCT / 100) * sh;
