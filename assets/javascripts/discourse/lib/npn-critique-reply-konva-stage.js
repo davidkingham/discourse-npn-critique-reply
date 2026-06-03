@@ -1604,43 +1604,35 @@ export async function createAnnotationStage({
         }
       }
 
-      // Start dot + label badge. The start dot is the "begin here"
-      // cue but doubles as a tap target — render it whenever the
-      // path is selected, OR when the path has only 1 point yet
-      // (no line to read direction from, so the dot is the only
-      // thing on screen). For 2+ point unselected paths the dot
-      // hides; the terminal arrow + label badge are enough to read
-      // direction, and dot-hiding becomes the selected-vs-unselected
-      // state cue (paired with the interior waypoint hiding above).
-      //
-      // The label badge is rendered EVERY time (independent of the
-      // dot) so the path remains identifiable when unselected.
+      // Start dot — the "begin here" anchor, always visible so the
+      // path's direction reads at a glance regardless of selection
+      // state. Interior waypoint dots above are the selected-state
+      // cue (they appear when the user clicks the curve and vanish
+      // when selection clears); the start dot stays put as the
+      // permanent direction anchor and matches the exported JPEG.
       if (pts.length >= 1) {
         const startR = Math.max(4, Math.round(shortEdge * 0.0065));
         const startHaloR = startR + Math.max(2, Math.round(startR * 0.4));
         const start = pts[0];
-        const showStartDot = state.eyePathSelected || pts.length < 2;
-        if (showStartDot) {
-          decorationsGroup.add(
-            new Konva.Circle({
-              x: start.x,
-              y: start.y,
-              radius: startHaloR,
-              fill: secondary,
-              opacity: 0.9,
-              listening: false,
-            })
-          );
-          decorationsGroup.add(
-            new Konva.Circle({
-              x: start.x,
-              y: start.y,
-              radius: startR,
-              fill: state.eyePathSelected ? tertiaryHover : tertiary,
-              listening: false,
-            })
-          );
-        }
+        decorationsGroup.add(
+          new Konva.Circle({
+            x: start.x,
+            y: start.y,
+            radius: startHaloR,
+            fill: secondary,
+            opacity: 0.9,
+            listening: false,
+          })
+        );
+        decorationsGroup.add(
+          new Konva.Circle({
+            x: start.x,
+            y: start.y,
+            radius: startR,
+            fill: state.eyePathSelected ? tertiaryHover : tertiary,
+            listening: false,
+          })
+        );
 
         // Label badge — small tertiary pill near the start dot.
         // Uses the same Konva.Label pattern as attention pulls but
