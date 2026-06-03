@@ -87,6 +87,24 @@ after_initialize do
     )
   end
 
+  # Surface the stored visual-notes payload on the Post JSON so the
+  # client can reopen a critique reply for editing. Restricted to
+  # signed-in viewers (anon has no edit affordance) and to posts
+  # that actually have the field set (avoid emitting `null` for
+  # every post in the topic). Preloaded via TopicView so the
+  # serializer attribute reads from memory, not a per-post DB hit.
+  TopicView.default_post_custom_fields << "npn_visual_notes" unless TopicView
+    .default_post_custom_fields
+    .include?("npn_visual_notes")
+  add_to_serializer(
+    :post,
+    :npn_visual_notes,
+    include_condition: -> do
+      SiteSetting.npn_critique_reply_enabled && scope&.user.present? &&
+        object.custom_fields["npn_visual_notes"].present?
+    end,
+  ) { object.custom_fields["npn_visual_notes"] }
+
   # Mount the engine at root — `config/routes.rb` carries the full
   # `/npn-critique-reply/...` prefix, matching the URL the client uses.
   Discourse::Application.routes.append { mount ::DiscourseNpnCritiqueReply::Engine, at: "/" }

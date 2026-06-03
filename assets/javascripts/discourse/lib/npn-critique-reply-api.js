@@ -44,3 +44,38 @@ export function postCritique(
     dataType: "json",
   });
 }
+
+/**
+ * Update a previously-posted critique reply. Server replaces both
+ * the post's raw markdown (via PostRevisor) and the saved
+ * npn_visual_notes payload. Same shape as postCritique but no
+ * draft-side concerns (drafts only apply to in-progress critiques,
+ * not edits).
+ *
+ * @param {number} postId — the post being edited (NOT the topic id).
+ * @param {string} raw
+ * @param {?string} selectedImageVersionKey
+ * @param {?object} visualNotes
+ * @returns {Promise<{success: true, post: {id, post_number, topic_id, url}}>}
+ */
+export function updateCritique(
+  postId,
+  raw,
+  selectedImageVersionKey,
+  visualNotes = null
+) {
+  const body = {
+    raw,
+    selected_image_version_key: selectedImageVersionKey ?? null,
+  };
+  if (visualNotes) {
+    body.visual_notes = visualNotes;
+  }
+  return ajax(`/npn-critique-reply/posts/${postId}/critique`, {
+    type: "PUT",
+    data: JSON.stringify(body),
+    contentType: "application/json",
+    processData: false,
+    dataType: "json",
+  });
+}

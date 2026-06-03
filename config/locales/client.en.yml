@@ -64,6 +64,14 @@ en:
         insert_prompt_aria: "Insert prompt: %{question}"
         post_critique: "Post Critique"
         posting: "Posting…"
+        # Edit-existing-critique flow. Same modal, primary action
+        # flipped to PUT the saved post + visual_notes instead of
+        # POST a new reply.
+        edit_critique_button: "Edit critique"
+        edit_critique_button_title: "Reopen this critique to edit the text or annotations"
+        update_critique: "Update critique"
+        updating: "Updating…"
+        critique_updated: "Critique updated."
         edit_in_composer: "Edit in Composer"
         reply_normally: "Reply Normally"
         cancel: "Cancel"

@@ -356,4 +356,148 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
       end
     end
   end
+
+  describe "PUT /npn-critique-reply/posts/:post_id/critique (edit)" do
+    fab!(:author) { Fabricate(:user, trust_level: TrustLevel[2]) }
+    fab!(:other_user) { Fabricate(:user, trust_level: TrustLevel[2]) }
+    fab!(:critique_topic) { Fabricate(:topic) }
+    fab!(:critique_op) { Fabricate(:post, topic: critique_topic) }
+
+    let(:existing_visual_notes) do
+      DiscourseNpnCritiqueReply::VisualNotesNormalizer.normalize(
+        {
+          "source" => { "image_version_key" => "original" },
+          "visual_output" => { "upload_id" => 1, "url" => "/x.jpg", "short_url" => "upload://x.jpg" },
+          "annotations" => [
+            { "kind" => "pin", "id" => "pin_1", "number" => 1, "x_pct" => 50, "y_pct" => 50 },
+          ],
+        },
+        topic_id: critique_topic.id,
+      )
+    end
+
+    let(:critique_reply) do
+      reply =
+        Fabricate(
+          :post,
+          topic: critique_topic,
+          user: author,
+          raw: "Visual notes based on Original:\n\n![visual notes](upload://x.jpg)\n\nFirst pass — too tight in the foreground.",
+        )
+      reply.custom_fields["npn_visual_notes"] = existing_visual_notes
+      reply.save_custom_fields
+      reply
+    end
+
+    let(:updated_raw) do
+      "Visual notes based on Original:\n\n![visual notes](upload://x.jpg)\n\nRevised — softer edit. The light feels good now."
+    end
+
+    let(:updated_visual_notes) do
+      {
+        "source" => { "image_version_key" => "original" },
+        "visual_output" => {
+          "upload_id" => 2,
+          "url" => "/y.jpg",
+          "short_url" => "upload://y.jpg",
+        },
+        "annotations" => [
+          {
+            "id" => "pin_1",
+            "kind" => "pin",
+            "number" => 1,
+            "x_pct" => 60,
+            "y_pct" => 40,
+          },
+          {
+            "id" => "pin_2",
+            "kind" => "pin",
+            "number" => 2,
+            "x_pct" => 30,
+            "y_pct" => 70,
+          },
+        ],
+      }
+    end
+
+    def put_update(post_id, raw: updated_raw, visual_notes: updated_visual_notes)
+      body = { raw: raw }
+      body[:visual_notes] = visual_notes if visual_notes
+      put "/npn-critique-reply/posts/#{post_id}/critique.json",
+          params: body.to_json,
+          headers: {
+            "CONTENT_TYPE" => "application/json",
+          }
+    end
+
+    context "when not signed in" do
+      it "returns 403" do
+        put_update(critique_reply.id)
+        expect(response.status).to eq(403)
+      end
+    end
+
+    context "when signed in as the author" do
+      before { sign_in(author) }
+
+      it "updates the raw + replaces npn_visual_notes" do
+        put_update(critique_reply.id)
+        expect(response.status).to eq(200)
+        expect(response.parsed_body["success"]).to eq(true)
+
+        reloaded = Post.find(critique_reply.id)
+        expect(reloaded.raw).to eq(updated_raw)
+        stored = reloaded.custom_fields["npn_visual_notes"]
+        expect(stored).to be_present
+        expect(stored["annotations"].length).to eq(2)
+        expect(stored["annotations"].map { |a| a["number"] }).to contain_exactly(1, 2)
+      end
+
+      it "rejects updates when the post has no existing npn_visual_notes" do
+        plain_reply = Fabricate(:post, topic: critique_topic, user: author)
+        put_update(plain_reply.id)
+        expect(response.status).to eq(403)
+      end
+
+      it "rejects updates to a post the user doesn't own" do
+        other_post = Fabricate(:post, topic: critique_topic, user: other_user)
+        other_post.custom_fields["npn_visual_notes"] = existing_visual_notes
+        other_post.save_custom_fields
+        put_update(other_post.id)
+        expect(response.status).to eq(403)
+      end
+
+      it "rejects empty raw" do
+        put_update(critique_reply.id, raw: "   ")
+        expect(response.status).to eq(422)
+      end
+
+      it "returns 404 for unknown post_id" do
+        put_update(0)
+        expect(response.status).to eq(404)
+      end
+
+      it "ignores spoofed source.topic_id in the visual_notes payload" do
+        spoofed =
+          updated_visual_notes.merge(
+            "source" => updated_visual_notes["source"].merge("topic_id" => 999_999),
+          )
+        put_update(critique_reply.id, visual_notes: spoofed)
+        stored =
+          Post.find(critique_reply.id).custom_fields["npn_visual_notes"]
+        expect(stored.dig("source", "topic_id")).to eq(critique_topic.id)
+      end
+    end
+
+    context "when signed in as staff (not the author)" do
+      fab!(:admin) { Fabricate(:admin) }
+      before { sign_in(admin) }
+
+      it "is allowed to edit anyone's critique" do
+        put_update(critique_reply.id)
+        expect(response.status).to eq(200)
+        expect(Post.find(critique_reply.id).raw).to eq(updated_raw)
+      end
+    end
+  end
 end

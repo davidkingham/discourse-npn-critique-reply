@@ -20,7 +20,10 @@ import {
   feedbackFocusLabel,
 } from "../../lib/npn-critique-reply-labels";
 import { buildPrompts } from "../../lib/npn-critique-reply-prompts";
-import { postCritique as postCritiqueRequest } from "../../lib/npn-critique-reply-api";
+import {
+  postCritique as postCritiqueRequest,
+  updateCritique as updateCritiqueRequest,
+} from "../../lib/npn-critique-reply-api";
 import {
   buildVisualNotesCanvas,
   exportCanvasToBlob,
@@ -296,10 +299,19 @@ export default class NpnCritiqueReplyModal extends Component {
     this.promptsHidden = readBool(STORAGE_KEY_HIDDEN, false);
     this.promptsExpanded = readBool(STORAGE_KEY_EXPANDED, false);
 
-    // Kick off the server-draft restore + autosaver setup. Async, so
-    // the modal renders an empty workspace first and fills it in once
-    // the GET resolves (or stays empty if there's no draft).
-    this._initializeDraftSync();
+    if (this.isEditing) {
+      // Edit flow: restore directly from the post's saved metadata
+      // and parsed raw — no draft involvement. Drafts are an
+      // in-progress concept and don't apply when reopening a
+      // posted reply.
+      this._initializeFromPost();
+    } else {
+      // New-critique flow: kick off the server-draft restore +
+      // autosaver setup. Async, so the modal renders an empty
+      // workspace first and fills it in once the GET resolves (or
+      // stays empty if there's no draft).
+      this._initializeDraftSync();
+    }
   }
 
   get metadata() {
@@ -308,6 +320,37 @@ export default class NpnCritiqueReplyModal extends Component {
 
   get topic() {
     return this.args.model?.topic ?? null;
+  }
+
+  // Set by callers that open the modal to EDIT an existing critique
+  // reply (rather than create a new one). When present the modal:
+  //   • restores annotations from `editingPost.npn_visual_notes`
+  //   • restores text by parsing the heading + image markdown out of
+  //     `editingPost.raw`
+  //   • skips draft load/save/clear entirely (drafts are an
+  //     in-progress concept; edits go straight to the post)
+  //   • flips the primary footer label to "Update Critique" and
+  //     calls the PUT update endpoint instead of POST create
+  //   • hides Edit-in-Composer and Reply-Normally (escape hatches
+  //     for the new-critique flow don't apply when editing)
+  get editingPost() {
+    return this.args.model?.editingPost ?? null;
+  }
+
+  get isEditing() {
+    return !!this.editingPost;
+  }
+
+  // Footer primary-action label — swaps on edit / posting state.
+  get postButtonLabel() {
+    if (this.isPosting) {
+      return this.isEditing
+        ? "npn_critique_reply.modal.updating"
+        : "npn_critique_reply.modal.posting";
+    }
+    return this.isEditing
+      ? "npn_critique_reply.modal.update_critique"
+      : "npn_critique_reply.modal.post_critique";
   }
 
   // ---- Image versions --------------------------------------------------
@@ -1982,12 +2025,18 @@ export default class NpnCritiqueReplyModal extends Component {
             })
           : null;
 
-      const response = await postCritiqueRequest(
-        topicId,
-        raw,
-        selectedKey,
-        visualNotes
-      );
+      // Edit mode → PUT /posts/:id/critique (PostRevisor + custom
+      // field replace). New-critique mode → POST /topics/:id/replies.
+      // Same payload shape; the server endpoint difference is the
+      // entire branch here.
+      const response = this.isEditing
+        ? await updateCritiqueRequest(
+            this.editingPost.id,
+            raw,
+            selectedKey,
+            visualNotes
+          )
+        : await postCritiqueRequest(topicId, raw, selectedKey, visualNotes);
       if (this._destroyed) {
         // Post was created server-side; modal is gone. MessageBus will
         // deliver the new reply to any open topic page.
@@ -2007,15 +2056,14 @@ export default class NpnCritiqueReplyModal extends Component {
         // MessageBus will catch up.
       }
 
+      const toastKey = this.isEditing
+        ? "npn_critique_reply.modal.critique_updated"
+        : includedPins > 0
+          ? "npn_critique_reply.modal.critique_posted_with_notes"
+          : "npn_critique_reply.modal.critique_posted";
       this.toasts.success({
         duration: "short",
-        data: {
-          message: i18n(
-            includedPins > 0
-              ? "npn_critique_reply.modal.critique_posted_with_notes"
-              : "npn_critique_reply.modal.critique_posted"
-          ),
-        },
+        data: { message: i18n(toastKey) },
       });
 
       // Post succeeded → drop the saved draft. Fire-and-forget; the
@@ -2276,6 +2324,13 @@ export default class NpnCritiqueReplyModal extends Component {
   // ---- Server-side critique workspace draft ---------------------------
 
   get draftsEnabled() {
+    // Drafts apply to in-progress critiques only. When the modal is
+    // reopened for editing an existing post, the post itself is the
+    // canonical state and the drafts pipeline is bypassed entirely
+    // (no autosave, no resume, no discard).
+    if (this.isEditing) {
+      return false;
+    }
     return (
       this.siteSettings.npn_critique_reply_server_drafts_enabled !== false
     );
@@ -2466,6 +2521,55 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   // Apply a server-loaded draft to in-memory state. Set
+  // Edit-mode bootstrap. Mirrors the structure of `_restoreDraft` so
+  // the same low-level annotation restore (`_restoreAnnotations`)
+  // handles both flows. Read state from the post's serializer
+  // attribute + parsed raw rather than from the drafts endpoint.
+  // No async — the post JSON was loaded by the caller before
+  // showing the modal.
+  _initializeFromPost() {
+    const post = this.editingPost;
+    if (!post) {
+      return;
+    }
+    const payload = post.npn_visual_notes;
+
+    // Critique text: the post's raw is composed as
+    //   "<heading>\n\n![visual notes](upload://...)\n\n<text>"
+    // by `_composeVisualNotesRaw`. Split on the image-markdown
+    // line and take everything after it. Falls back to the whole
+    // raw if the format doesn't match (e.g. a hand-edited post).
+    this.critiqueText = this._parseCritiqueTextFromRaw(post.raw);
+
+    if (payload) {
+      const versionKey = payload?.source?.image_version_key ?? null;
+      if (versionKey && this.versions.some((v) => v.key === versionKey)) {
+        this._selectedVersionKey = versionKey;
+        this._selectedVersionInitialized = true;
+      }
+      this._restoreAnnotations(payload.annotations, versionKey);
+    }
+  }
+
+  // Helper for `_initializeFromPost`. Looks for the visual-notes
+  // image markdown line and returns everything after it. If the post
+  // doesn't have a visual-notes image (text-only critique that's
+  // somehow being reopened), or if the format has drifted, returns
+  // the raw unchanged so the user can hand-fix it.
+  _parseCritiqueTextFromRaw(raw) {
+    if (!raw) {
+      return "";
+    }
+    // The image markdown is `![alt](upload://...)`. Match on the
+    // first occurrence of an upload-scheme image link.
+    const match = raw.match(/^!\[[^\]]*\]\(upload:\/\/[^\s)]+\)\s*$/m);
+    if (!match) {
+      return raw;
+    }
+    const afterImageIdx = (match.index ?? 0) + match[0].length;
+    return raw.slice(afterImageIdx).replace(/^\s+/, "");
+  }
+
   // `_restoringDraft` first so the didUpdate autosave hook ignores
   // the burst of setter calls — we don't want to immediately PUT
   // back the same payload we just GET'd.
@@ -3467,34 +3571,35 @@ export default class NpnCritiqueReplyModal extends Component {
       </:body>
 
       <:footer>
-        {{! Primary: direct post — bypasses the composer. }}
+        {{! Primary action — POST in new-critique mode, PUT in edit
+            mode. Label changes to "Update critique" while editing. }}
         <DButton
           class="btn-primary npn-critique-reply-modal__post"
           @action={{this.postCritique}}
           @icon="reply"
-          @label={{if
-            this.isPosting
-            "npn_critique_reply.modal.posting"
-            "npn_critique_reply.modal.post_critique"
-          }}
+          @label={{this.postButtonLabel}}
           @disabled={{this.isPosting}}
           @isLoading={{this.isPosting}}
         />
-        {{! Secondary accent: transfer text to the composer for a final pass. }}
-        <DButton
-          class="npn-critique-reply-modal__edit-composer"
-          @action={{this.editInComposer}}
-          @icon="far-pen-to-square"
-          @label="npn_critique_reply.modal.edit_in_composer"
-          @disabled={{this.isPosting}}
-        />
-        {{! Neutral escape hatch: clean composer, no transfer. }}
-        <DButton
-          class="btn-default npn-critique-reply-modal__reply-normally"
-          @action={{this.replyNormally}}
-          @label="npn_critique_reply.modal.reply_normally"
-          @disabled={{this.isPosting}}
-        />
+        {{! Secondary actions only apply to the new-critique flow.
+            Edit mode posts straight back to the same reply, so the
+            "transfer to composer" / "open a clean reply" escape
+            hatches don't have a sensible analogue. }}
+        {{#unless this.isEditing}}
+          <DButton
+            class="npn-critique-reply-modal__edit-composer"
+            @action={{this.editInComposer}}
+            @icon="far-pen-to-square"
+            @label="npn_critique_reply.modal.edit_in_composer"
+            @disabled={{this.isPosting}}
+          />
+          <DButton
+            class="btn-default npn-critique-reply-modal__reply-normally"
+            @action={{this.replyNormally}}
+            @label="npn_critique_reply.modal.reply_normally"
+            @disabled={{this.isPosting}}
+          />
+        {{/unless}}
 
         {{! Server-side draft status + Discard action. Quiet — sits in
             the middle of the footer alongside the primary buttons. }}

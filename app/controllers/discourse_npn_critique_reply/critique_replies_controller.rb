@@ -64,6 +64,64 @@ module DiscourseNpnCritiqueReply
       }
     end
 
+    # PUT /npn-critique-reply/posts/:post_id/critique
+    #
+    # Reopens a previously-posted critique for editing. Updates the
+    # post's raw markdown via the standard PostRevisor (creates a
+    # normal Discourse edit revision) and replaces the
+    # `npn_visual_notes` custom field with the freshly-normalised
+    # payload. Only the post author (or staff) can call this — we
+    # require an existing `npn_visual_notes` payload on the post so
+    # this endpoint can't be used to retroactively attach
+    # metadata to arbitrary posts.
+    def update
+      post_id = params.require(:post_id).to_i
+      raw = params[:raw].to_s.strip
+
+      if raw.blank?
+        render_json_error I18n.t("npn_critique_reply.errors.empty_raw"), status: 422
+        return
+      end
+
+      post = Post.find_by(id: post_id)
+      raise Discourse::NotFound unless post
+
+      # Only the author (or staff) — guard against editing someone
+      # else's critique even if they happen to have edit permissions
+      # through other Discourse mechanisms.
+      unless post.user_id == current_user.id || current_user.staff?
+        raise Discourse::InvalidAccess
+      end
+
+      # Gate the endpoint to existing critique replies. Without this,
+      # a user could attach a visual_notes payload to any post they
+      # own via this endpoint, bypassing the create path entirely.
+      if post.custom_fields["npn_visual_notes"].blank?
+        raise Discourse::InvalidAccess
+      end
+
+      revisor = PostRevisor.new(post)
+      success = revisor.revise!(current_user, raw: raw)
+
+      unless success
+        render_json_error post.errors.full_messages.join(". ").presence ||
+          I18n.t("npn_critique_reply.errors.create_failed"), status: 422
+        return
+      end
+
+      attach_visual_notes(post, params[:visual_notes], topic_id: post.topic_id)
+
+      render json: {
+        success: true,
+        post: {
+          id: post.id,
+          post_number: post.post_number,
+          topic_id: post.topic_id,
+          url: post.url,
+        },
+      }
+    end
+
     private
 
     # Persists the structured visual-annotation metadata onto the
