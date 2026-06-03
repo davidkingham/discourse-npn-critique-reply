@@ -1286,6 +1286,30 @@ export async function createAnnotationStage({
     const decorationsGroup = new Konva.Group({ listening: false });
     eyePathLayer.add(decorationsGroup);
 
+    // Hit-zone group — a transparent fat-stroke line that mirrors
+    // the visible curve geometry (same points, same tension) so
+    // clicks anywhere ON the curve select the eye path. Without
+    // this, the only hit targets are the small waypoint handles;
+    // users had to know to click a point dot rather than the curve
+    // itself, which made selection finicky. We use a separate
+    // listening sub-group rather than flipping `listening: true` on
+    // decorationsGroup so the visible polyline + halo + arrowheads
+    // stay non-listening (they cover large areas and would
+    // intercept clicks meant for the underlying image or other
+    // annotations).
+    //
+    // Z-order inside eyePathLayer (back → front):
+    //   1. decorationsGroup   (visual, listening: false)
+    //   2. hitGroup           (invisible, listening: true)
+    //   3. handles (added after this function)
+    // Konva hit-tests front-to-back, so a click on a waypoint
+    // hits the handle first (correct — drag/select that point);
+    // a click on the curve away from any waypoint falls to the
+    // hitGroup and selects the path; clicks fully off the curve
+    // pass through to the stage.
+    const hitGroup = new Konva.Group({ listening: true });
+    eyePathLayer.add(hitGroup);
+
     // Konva-tension geometry helpers. Konva.Line's `tension` uses a
     // chord-length-weighted Catmull-Rom + splits the path into a
     // quadratic first segment, cubic middle segments, and a quadratic
@@ -1418,8 +1442,16 @@ export async function createAnnotationStage({
       };
     }
 
+    // Click-anywhere-on-curve selection. Sized generously so the
+    // hit zone is comfortable on touch screens too — roughly 2.5×
+    // the visible line width. Pulled out as a const so the click +
+    // cursor handlers below and the hit-line construction inside
+    // buildDecorations stay in sync on width.
+    const curveHitWidth = Math.max(18, Math.round(shortEdge * 0.025));
+
     function buildDecorations(pts) {
       decorationsGroup.destroyChildren();
+      hitGroup.destroyChildren();
 
       if (pts.length >= 2) {
         const flat = [];
@@ -1428,6 +1460,41 @@ export async function createAnnotationStage({
         }
         const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
         const lineWidth = Math.max(2, Math.round(shortEdge * 0.004));
+
+        // Invisible fat-stroke hit-zone line. Same `points` and
+        // `tension` as the visible polyline below so the hit area
+        // tracks the actual rendered curve (not a straight-segment
+        // approximation). `opacity: 0` hides it visually while
+        // Konva still rasterises it to the hit graph — the same
+        // pattern this file already uses for the waypoint handles.
+        // Listening must be enabled because the parent group has
+        // it on by default and we want this node to receive clicks.
+        const hitLine = new Konva.Line({
+          points: flat,
+          stroke: "black",
+          strokeWidth: curveHitWidth,
+          opacity: 0,
+          lineCap: "round",
+          lineJoin: "round",
+          tension: EYE_PATH_SMOOTH ? EYE_PATH_SMOOTH_TENSION : 0,
+          listening: true,
+          name: "eye-path-curve-hit",
+        });
+        hitLine.on("mouseenter", () => {
+          container.style.cursor = "pointer";
+        });
+        hitLine.on("mouseleave", () => {
+          applyContainerCursor();
+        });
+        // Plain click on the curve = select the path, matching
+        // the click-on-handle behavior. cancelBubble stops the
+        // stage-level click handler from also firing (which would
+        // add a new point in eye_path creation mode).
+        hitLine.on("click tap", (e) => {
+          e.cancelBubble = true;
+          onSelectEyePath?.();
+        });
+        hitGroup.add(hitLine);
 
         // White halo for readability over dark image areas.
         decorationsGroup.add(
