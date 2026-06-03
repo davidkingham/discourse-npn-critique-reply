@@ -67,8 +67,8 @@ en:
         # Edit-existing-critique flow. Same modal, primary action
         # flipped to PUT the saved post + visual_notes instead of
         # POST a new reply.
-        edit_critique_button: "Edit critique"
-        edit_critique_button_title: "Reopen this critique to edit the text or annotations"
+        edit_critique_button: "Edit Visual Critique"
+        edit_critique_button_title: "Reopen the critique workspace to edit the text or visual annotations on this post"
         update_critique: "Update critique"
         updating: "Updating…"
         critique_updated: "Critique updated."

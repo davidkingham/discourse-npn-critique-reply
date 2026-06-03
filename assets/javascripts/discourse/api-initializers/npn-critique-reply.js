@@ -1,6 +1,7 @@
 import { apiInitializer } from "discourse/lib/api";
 import NpnCritiqueReplyInvitationPanel from "../components/npn-critique-reply-invitation-panel";
 import NpnCritiqueReplyStartButton from "../components/npn-critique-reply-start-button";
+import NpnEditVisualCritiqueButton from "../components/npn-edit-visual-critique-button";
 
 // Wires up three things:
 //
@@ -24,7 +25,20 @@ import NpnCritiqueReplyStartButton from "../components/npn-critique-reply-start-
 //    `npn_critique_reply_show_below_op` so admins can dial each entry
 //    point on/off independently of the footer button.
 //
-// 3. A staff-only, debug-only console log of the serialized
+// 3. The "Edit Visual Critique" post-menu button, registered via
+//    `api.registerValueTransformer("post-menu-buttons", …)`. This is
+//    the documented Glimmer-friendly replacement for the now-
+//    decommissioned `api.addPostMenuButton` hook (see
+//    `discourse/app/lib/plugin-api.gjs` for the decommission notice
+//    and `discourse/app/components/post/menu.gjs` for the
+//    transformer call). The earlier widget-API attempt crashed app
+//    boot — this transformer integrates with the new Glimmer post
+//    component without touching widget internals. Visibility is
+//    gated twice: once at the DAG level here (no entry added when
+//    the post has no visual notes or the viewer can't edit), and
+//    once via `shouldRender` inside the button component itself.
+//
+// 4. A staff-only, debug-only console log of the serialized
 //    `npn_critique_reply` metadata on each topic view. Pure verification
 //    aid — no DOM, no UI. Gated on `npn_critique_reply_debug_enabled` AND
 //    staff role.
@@ -39,14 +53,37 @@ export default apiInitializer((api) => {
     NpnCritiqueReplyInvitationPanel
   );
 
-  // "Edit critique" post-menu button registration was deferred —
-  // earlier attempt with `api.addPostMenuButton` +
-  // `api.attachWidgetAction` broke the app boot on current Discourse
-  // (the post is being migrated from widget-based to Glimmer, and
-  // the widget action API doesn't behave consistently anymore). The
-  // server-side endpoint + modal edit mode are in place, so a
-  // follow-up commit can re-add the entry point via a Glimmer-
-  // friendly hook without disturbing the rest of the modal.
+  // Edit Visual Critique post-menu button.
+  //
+  // Transformer shape (verified against current Discourse core,
+  // `frontend/discourse/app/components/post/menu.gjs`):
+  //   ({ value: dag, context: { post, buttonKeys, … } }) => …
+  // — `value` is the DAG of menu buttons keyed by
+  // `buttonKeys.{REPLY,EDIT,SHOW_MORE,…}`; `context.post` is the
+  // post model for the post whose menu is being built.
+  //
+  // `dag.add(key, Component, { after: [buttonKeys.EDIT] })` slots
+  // our entry immediately after the standard Edit button so the two
+  // edit affordances sit next to each other. The button only joins
+  // the DAG when the post has visual notes AND the viewer can edit
+  // — anonymous viewers, posts without visual notes, and viewers
+  // without edit permission all skip the `dag.add` call entirely.
+  // The component's `shouldRender` repeats the check so per-render
+  // state changes (e.g. `can_edit` flipping) hide the button cleanly.
+  api.registerValueTransformer(
+    "post-menu-buttons",
+    ({ value: dag, context: { post, buttonKeys } }) => {
+      if (!post?.npn_visual_notes) {
+        return;
+      }
+      if (!post?.can_edit) {
+        return;
+      }
+      dag.add("npn-edit-visual-critique", NpnEditVisualCritiqueButton, {
+        after: [buttonKeys.EDIT],
+      });
+    }
+  );
 
   const siteSettings = api.container.lookup("service:site-settings");
   const currentUser = api.container.lookup("service:current-user");
