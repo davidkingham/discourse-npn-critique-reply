@@ -103,21 +103,71 @@ export const MAX_ANNOTATION_COUNT = 100;
 // roughly the threshold below which the rect looks like a misclick.
 export const MIN_CROP_DIMENSION_PCT = 3;
 
-// Eye-path caps. Only one path per critique. 10 points is a generous
-// ceiling — past ~6 it becomes hard to read on the export at standard
-// sizes, but a hard floor keeps the UX simple. The "minimum useful"
-// path is 2 points (so there's a direction), but the schema accepts
-// 1-point paths so an in-progress save round-trips without dropping
-// the user's first click. The modal renders a hint to add a second.
+// Eye-path caps. Up to 4 paths per critique — the eye path is the
+// most visually heavy annotation kind (curves crossing the image),
+// so the cap is tighter than the 8 used for attention pulls and
+// strong areas. 10 points per path is a generous ceiling — past ~6
+// it becomes hard to read on the export at standard sizes, but a
+// hard floor keeps the UX simple. The "minimum useful" path is 2
+// points (so there's a direction); the schema accepts 1-point paths
+// so an in-progress save round-trips without dropping the user's
+// first click. The modal renders a hint to add a second.
 export const MAX_EYE_PATH_POINTS = 10;
-export const MAX_EYE_PATH_COUNT = 1;
+export const MAX_EYE_PATH_COUNT = 4;
 export const MIN_EYE_PATH_POINTS_FOR_EXPORT = 2;
 
-// Eye-path label pattern. There's only ever one path per critique
-// so "E1" is the only label in practice — kept future-proof for if
-// we ever lift MAX_EYE_PATH_COUNT.
+// Eye-path label pattern + default. Each path gets a stable "E<N>"
+// label that the popover writes into the textarea (e.g. "[E1]
+// description"). Labels are generated max-suffix+1 so deleting one
+// path doesn't shift the numbers of the others — same convention
+// as attention pulls and strong areas.
 export const EYE_PATH_LABEL_PATTERN = /^E\d+$/;
 export const DEFAULT_EYE_PATH_LABEL = "E1";
+
+export function nextEyePathLabel(existingLabels) {
+  let max = 0;
+  if (Array.isArray(existingLabels)) {
+    for (const lbl of existingLabels) {
+      if (typeof lbl !== "string") {
+        continue;
+      }
+      const m = EYE_PATH_LABEL_PATTERN.exec(lbl);
+      if (m) {
+        const n = parseInt(lbl.slice(1), 10);
+        if (Number.isFinite(n) && n > max) {
+          max = n;
+        }
+      }
+    }
+  }
+  return `E${max + 1}`;
+}
+
+// Eye-path id generator, mirroring the label generator above. The
+// "eye_path_<N>" pattern is the in-payload form (snake_case); each
+// new path gets max-suffix+1 so ids stay unique even after deletes
+// (and stable when one is removed). The modal uses these when
+// starting a new path session.
+export const EYE_PATH_ID_PATTERN = /^eye_path_(\d+)$/;
+
+export function nextEyePathId(existingIds) {
+  let max = 0;
+  if (Array.isArray(existingIds)) {
+    for (const id of existingIds) {
+      if (typeof id !== "string") {
+        continue;
+      }
+      const m = EYE_PATH_ID_PATTERN.exec(id);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > max) {
+          max = n;
+        }
+      }
+    }
+  }
+  return `eye_path_${max + 1}`;
+}
 
 // Attention-pull caps. Up to 8 markers per critique — past that the
 // image gets crowded and the observational tone is lost. The 3% min
@@ -344,12 +394,16 @@ export function normalizeEyePathAnnotation(raw) {
     x_pct: p.x_pct,
     y_pct: p.y_pct,
   }));
-  const id = isNonEmptyString(raw.id) ? raw.id : "eye_path_1";
+  // id/label may be null on output — the annotations-array normalizer
+  // assigns position-based defaults + dedupes against any earlier
+  // entries in the same payload. This keeps multiple eye-paths in a
+  // single payload from all defaulting to "eye_path_1" / "E1".
+  const id = isNonEmptyString(raw.id) ? raw.id : null;
   const rawLabel = raw.label;
   const label =
     typeof rawLabel === "string" && EYE_PATH_LABEL_PATTERN.test(rawLabel)
       ? rawLabel
-      : DEFAULT_EYE_PATH_LABEL;
+      : null;
   return {
     id,
     kind: ANNOTATION_KINDS.EYE_PATH,
@@ -366,9 +420,12 @@ export function eyePathToAnnotation(eyePath) {
   if (!eyePath || !Array.isArray(eyePath.points)) {
     return null;
   }
+  // id/label preserved as-supplied (typically the modal generates
+  // unique values per path); normalizeAnnotationsArray dedupes if
+  // anything slips through without a unique id/label.
   return normalizeEyePathAnnotation({
-    id: eyePath.id ?? "eye_path_1",
-    label: eyePath.label,
+    id: eyePath.id ?? null,
+    label: eyePath.label ?? null,
     kind: ANNOTATION_KINDS.EYE_PATH,
     points: eyePath.points.map((p) => ({
       number: p.number,
@@ -376,6 +433,23 @@ export function eyePathToAnnotation(eyePath) {
       y_pct: p.yPct,
     })),
   });
+}
+
+// Convert an array of modal-shape eye paths to schema annotation
+// entries. Mirrors `attentionPullsToAnnotations`. Filters out paths
+// that normalize to null (e.g. all points invalid).
+export function eyePathsToAnnotations(eyePaths) {
+  if (!Array.isArray(eyePaths)) {
+    return [];
+  }
+  const out = [];
+  for (const path of eyePaths) {
+    const annotation = eyePathToAnnotation(path);
+    if (annotation) {
+      out.push(annotation);
+    }
+  }
+  return out;
 }
 
 export function annotationToEyePath(annotation) {
@@ -808,7 +882,7 @@ export function buildVisualAnnotationPayload({
   visualUpload,
   pins,
   crop,
-  eyePath,
+  eyePaths,
   attentionPulls,
   strongAreas,
 } = {}) {
@@ -819,9 +893,8 @@ export function buildVisualAnnotationPayload({
       annotations.push(cropAnnotation);
     }
   }
-  if (eyePath) {
-    const eyePathAnnotation = eyePathToAnnotation(eyePath);
-    if (eyePathAnnotation) {
+  if (Array.isArray(eyePaths) && eyePaths.length > 0) {
+    for (const eyePathAnnotation of eyePathsToAnnotations(eyePaths)) {
       annotations.push(eyePathAnnotation);
     }
   }
@@ -852,6 +925,8 @@ function normalizeAnnotationsArray(raw) {
   const seenIds = new Set();
   let cropCount = 0;
   let eyePathCount = 0;
+  let eyePathIdCounter = 1;
+  const usedEyePathLabels = new Set();
   let attentionPullCount = 0;
   let attentionPullIdCounter = 1;
   const usedAttentionPullLabels = new Set();
@@ -887,14 +962,26 @@ function normalizeAnnotationsArray(raw) {
         }
         break;
       case ANNOTATION_KINDS.EYE_PATH:
-        // Single eye_path per payload — first valid wins for the
-        // same reason as crop. Extras are silently dropped.
+        // Up to MAX_EYE_PATH_COUNT paths per payload. Each gets a
+        // unique id + label; after-cap entries are silently dropped
+        // (matches the cap-enforcing behavior on the modal side).
+        // Same pattern as attention_pull / strong_area below.
         if (eyePathCount >= MAX_EYE_PATH_COUNT) {
           continue;
         }
         normalized = normalizeEyePathAnnotation(entry);
         if (normalized) {
+          if (!normalized.id) {
+            normalized.id = `eye_path_${eyePathIdCounter}`;
+          }
+          if (!normalized.label || usedEyePathLabels.has(normalized.label)) {
+            normalized.label = nextEyePathLabel(
+              Array.from(usedEyePathLabels)
+            );
+          }
+          usedEyePathLabels.add(normalized.label);
           eyePathCount += 1;
+          eyePathIdCounter += 1;
         }
         break;
       case ANNOTATION_KINDS.ATTENTION_PULL:
@@ -1265,19 +1352,22 @@ export function runSelfCheck() {
 
   // 14. Eye-path round-trip through builder + normalizer.
   t("eyePathToAnnotation: round-trip through build/normalize", () => {
-    const eyePath = {
-      id: "eye_path_1",
-      points: [
-        { number: 1, xPct: 10, yPct: 20 },
-        { number: 2, xPct: 30, yPct: 40 },
-        { number: 3, xPct: 50, yPct: 60 },
-      ],
-    };
+    const eyePaths = [
+      {
+        id: "eye_path_1",
+        label: "E1",
+        points: [
+          { number: 1, xPct: 10, yPct: 20 },
+          { number: 2, xPct: 30, yPct: 40 },
+          { number: 3, xPct: 50, yPct: 60 },
+        ],
+      },
+    ];
     const payload = buildVisualAnnotationPayload({
       topic: { id: 1 },
       selectedVersion: { key: "original" },
       pins: [],
-      eyePath,
+      eyePaths,
     });
     const annotation = payload.annotations[0];
     return (
@@ -1329,24 +1419,30 @@ export function runSelfCheck() {
     );
   });
 
-  // 18. Only first eye_path kept (MAX_EYE_PATH_COUNT).
+  // 18. After-cap eye_paths dropped (MAX_EYE_PATH_COUNT).
   t("normalizeVisualAnnotationPayload: enforces MAX_EYE_PATH_COUNT", () => {
+    const tooMany = Array.from({ length: MAX_EYE_PATH_COUNT + 3 }, (_, i) => ({
+      id: `eye_path_${i + 1}`,
+      kind: "eye_path",
+      points: [{ x_pct: 10 + i, y_pct: 10 + i }],
+    }));
+    const payload = normalizeVisualAnnotationPayload({ annotations: tooMany });
+    const paths = payload.annotations.filter((a) => a.kind === "eye_path");
+    return paths.length === MAX_EYE_PATH_COUNT;
+  });
+
+  // 18b. Multiple eye_paths under the cap all survive with unique ids/labels.
+  t("normalizeVisualAnnotationPayload: keeps multiple paths under cap", () => {
     const payload = normalizeVisualAnnotationPayload({
       annotations: [
-        {
-          id: "eye_path_a",
-          kind: "eye_path",
-          points: [{ x_pct: 10, y_pct: 10 }],
-        },
-        {
-          id: "eye_path_b",
-          kind: "eye_path",
-          points: [{ x_pct: 90, y_pct: 90 }],
-        },
+        { kind: "eye_path", points: [{ x_pct: 10, y_pct: 10 }] },
+        { kind: "eye_path", points: [{ x_pct: 50, y_pct: 50 }] },
       ],
     });
     const paths = payload.annotations.filter((a) => a.kind === "eye_path");
-    return paths.length === 1 && paths[0].id === "eye_path_a";
+    const ids = new Set(paths.map((p) => p.id));
+    const labels = new Set(paths.map((p) => p.label));
+    return paths.length === 2 && ids.size === 2 && labels.size === 2;
   });
 
   // 19. Pin + crop + eye_path all coexist in one payload.
@@ -1356,13 +1452,16 @@ export function runSelfCheck() {
       selectedVersion: { key: "original" },
       pins: [{ number: 1, xPct: 10, yPct: 20 }],
       crop: { xPct: 5, yPct: 5, widthPct: 80, heightPct: 60, aspectRatio: "free" },
-      eyePath: {
-        id: "eye_path_1",
-        points: [
-          { number: 1, xPct: 30, yPct: 30 },
-          { number: 2, xPct: 60, yPct: 60 },
-        ],
-      },
+      eyePaths: [
+        {
+          id: "eye_path_1",
+          label: "E1",
+          points: [
+            { number: 1, xPct: 30, yPct: 30 },
+            { number: 2, xPct: 60, yPct: 60 },
+          ],
+        },
+      ],
     });
     const kinds = payload.annotations.map((a) => a.kind).sort();
     return (
@@ -1371,10 +1470,44 @@ export function runSelfCheck() {
     );
   });
 
+  // 19b. buildVisualAnnotationPayload accepts multiple eye paths.
+  t("buildVisualAnnotationPayload: multiple eye paths", () => {
+    const payload = buildVisualAnnotationPayload({
+      topic: { id: 1 },
+      selectedVersion: { key: "original" },
+      pins: [],
+      eyePaths: [
+        {
+          id: "eye_path_1",
+          label: "E1",
+          points: [
+            { number: 1, xPct: 10, yPct: 10 },
+            { number: 2, xPct: 20, yPct: 20 },
+          ],
+        },
+        {
+          id: "eye_path_2",
+          label: "E2",
+          points: [
+            { number: 1, xPct: 60, yPct: 60 },
+            { number: 2, xPct: 80, yPct: 80 },
+          ],
+        },
+      ],
+    });
+    const paths = payload.annotations.filter((a) => a.kind === "eye_path");
+    return (
+      paths.length === 2 &&
+      paths[0].id === "eye_path_1" &&
+      paths[1].id === "eye_path_2"
+    );
+  });
+
   // 20. annotationToEyePath reverses eyePathToAnnotation.
   t("annotationToEyePath: round-trip", () => {
     const eyePath = {
       id: "eye_path_1",
+      label: "E1",
       points: [
         { number: 1, xPct: 10, yPct: 20 },
         { number: 2, xPct: 30, yPct: 40 },
@@ -1470,13 +1603,16 @@ export function runSelfCheck() {
       selectedVersion: { key: "original" },
       pins: [{ number: 1, xPct: 10, yPct: 20 }],
       crop: { xPct: 5, yPct: 5, widthPct: 80, heightPct: 60, aspectRatio: "free" },
-      eyePath: {
-        id: "eye_path_1",
-        points: [
-          { number: 1, xPct: 30, yPct: 30 },
-          { number: 2, xPct: 60, yPct: 60 },
-        ],
-      },
+      eyePaths: [
+        {
+          id: "eye_path_1",
+          label: "E1",
+          points: [
+            { number: 1, xPct: 30, yPct: 30 },
+            { number: 2, xPct: 60, yPct: 60 },
+          ],
+        },
+      ],
       attentionPulls: [
         { xPct: 40, yPct: 50, widthPct: 15, heightPct: 12 },
       ],
@@ -1666,13 +1802,16 @@ export function runSelfCheck() {
         heightPct: 60,
         aspectRatio: "free",
       },
-      eyePath: {
-        id: "eye_path_1",
-        points: [
-          { number: 1, xPct: 30, yPct: 30 },
-          { number: 2, xPct: 60, yPct: 60 },
-        ],
-      },
+      eyePaths: [
+        {
+          id: "eye_path_1",
+          label: "E1",
+          points: [
+            { number: 1, xPct: 30, yPct: 30 },
+            { number: 2, xPct: 60, yPct: 60 },
+          ],
+        },
+      ],
       attentionPulls: [
         { xPct: 40, yPct: 50, widthPct: 15, heightPct: 12 },
       ],

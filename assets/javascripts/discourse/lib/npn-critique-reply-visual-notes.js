@@ -67,7 +67,7 @@ export function buildVisualNotesCanvas({
   image,
   pins,
   crop,
-  eyePath,
+  eyePaths,
   attentionPulls,
   strongAreas,
   maxDimension = MAX_DIMENSION,
@@ -109,7 +109,17 @@ export function buildVisualNotesCanvas({
     targetHeight
   );
   drawStrongAreasOnCanvas(ctx, strongAreas, targetWidth, targetHeight);
-  drawEyePathOnCanvas(ctx, eyePath, targetWidth, targetHeight);
+  // Multi-path: each path is rendered with the same single-path
+  // drawing function (line + start dot + arrows + label badge),
+  // looped over the array. Paths render in array order so later
+  // paths sit visually on top of earlier ones — the modal's
+  // selection-mutex ensures only one is "in progress" at a time so
+  // overlap is unusual but not impossible.
+  if (Array.isArray(eyePaths)) {
+    for (const eyePath of eyePaths) {
+      drawEyePathOnCanvas(ctx, eyePath, targetWidth, targetHeight);
+    }
+  }
   drawPinsOnCanvas(ctx, pins, targetWidth, targetHeight);
 
   return canvas;

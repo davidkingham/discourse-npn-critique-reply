@@ -19,7 +19,7 @@ module DiscourseNpnCritiqueReply
     MAX_ANNOTATION_COUNT = 100
     MAX_PIN_COUNT = 50
     MAX_CROP_COUNT = 1
-    MAX_EYE_PATH_COUNT = 1
+    MAX_EYE_PATH_COUNT = 4
     MAX_EYE_PATH_POINTS = 10
     MAX_ATTENTION_PULL_COUNT = 8
     MAX_STRONG_AREA_COUNT = 8
@@ -181,7 +181,12 @@ module DiscourseNpnCritiqueReply
       end
       return nil if points.length < 2
 
-      id = normalize_string(entry["id"] || entry[:id]) || "eye_path_1"
+      # Position-aware fallback id when the client didn't supply one.
+      # MAX_EYE_PATH_COUNT lets multiple paths coexist in a single
+      # payload, so a static default like "eye_path_1" would collide
+      # via the seen_ids dedup. Random suffix mirrors the pattern
+      # used by normalize_rect for crop / attention_pull / strong_area.
+      id = normalize_string(entry["id"] || entry[:id]) || "eye_path_#{rand(1_000_000)}"
       out = { "id" => id, "kind" => "eye_path", "points" => points }
       label = normalize_string(entry["label"] || entry[:label])
       out["label"] = label if label

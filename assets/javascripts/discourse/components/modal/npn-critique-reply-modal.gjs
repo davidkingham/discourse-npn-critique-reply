@@ -32,6 +32,7 @@ import {
 } from "../../lib/npn-critique-reply-visual-notes";
 import {
   MAX_ATTENTION_PULL_COUNT,
+  MAX_EYE_PATH_COUNT,
   MAX_EYE_PATH_POINTS,
   MAX_STRONG_AREA_COUNT,
   annotationsToAttentionPulls,
@@ -40,9 +41,12 @@ import {
   annotationToCrop,
   annotationToEyePath,
   attentionPullsToAnnotations,
+  nextEyePathId,
+  nextEyePathLabel,
   buildVisualAnnotationPayload,
   cropToAnnotation,
   eyePathToAnnotation,
+  eyePathsToAnnotations,
   nextAttentionPullLabel,
   nextStrongAreaLabel,
   pinsToAnnotations,
@@ -194,15 +198,20 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked cropAspectRatio = "free";
   _cropStarterInserted = false;
 
-  // Eye-path / Visual Flow tool state. `eyePath` is null when no path
-  // exists, otherwise `{ id, points: [{ number, xPct, yPct }] }`.
-  // `eyePathSelected` mirrors the pin/crop selection pattern — when
-  // true, the toolbar shows path-specific Remove/Clear actions and
-  // the stage renders the path's points with a brighter fill.
-  @tracked eyePath = null;
-  @tracked eyePathSelected = false;
-  // Track that the second-point textarea starter has already been
-  // inserted. Avoids re-inserting on every subsequent click.
+  // Eye-path / Visual Flow tool state. `eyePaths` is an array of
+  // `{ id, label, points: [{ number, xPct, yPct }], noteText? }`.
+  // `selectedEyePathId` is null or the id of the currently-selected
+  // path (mirrors the attention-pull / strong-area selection pattern
+  // since there are multiple paths now). `_activeEyePathId` tracks
+  // the path being constructed in the current eye_path mode session
+  // — set on the first click that starts a new path, cleared when
+  // leaving eye_path mode so a re-entry begins a new session.
+  @tracked eyePaths = [];
+  @tracked selectedEyePathId = null;
+  _activeEyePathId = null;
+  // Track that the second-point popover has already opened for the
+  // current path session. Reset on each entry into eye_path mode so
+  // each new path triggers exactly one description prompt.
   _eyePathStarterInserted = false;
 
   // Attention Pull state. `attentionPulls` is an array of
@@ -547,7 +556,7 @@ export default class NpnCritiqueReplyModal extends Component {
     return (
       this.notes.length +
       (this.crop ? 1 : 0) +
-      (this.hasEyePath ? 1 : 0) +
+      this.eyePathCount +
       this.attentionPulls.length +
       this.strongAreas.length
     );
@@ -581,16 +590,56 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.strongAreas.length >= MAX_STRONG_AREA_COUNT;
   }
 
-  // True only when the eye_path has at least one valid point. The
-  // tracked property may be null OR an empty-points object during the
-  // brief window between user-initiated clear and the next render —
-  // treat both as "no path" everywhere.
+  // True when at least one eye path with at least one valid point
+  // exists. With multi-path support there may be several; the bool
+  // here is just "any?". `eyePathCount` is the number of paths;
+  // `eyePathPointCount` is the point count of the path that's
+  // currently the focus (selected or actively being constructed)
+  // — used by the toolbar's per-path UI.
   get hasEyePath() {
-    return !!this.eyePath && (this.eyePath.points?.length ?? 0) > 0;
+    return this.eyePaths.some((p) => (p.points?.length ?? 0) > 0);
+  }
+
+  get eyePathCount() {
+    return this.eyePaths.filter((p) => (p.points?.length ?? 0) > 0).length;
+  }
+
+  // Path currently receiving new points during this eye_path mode
+  // session (set on first click that creates a new path; cleared
+  // when the user leaves eye_path mode).
+  get activeEyePath() {
+    if (!this._activeEyePathId) {
+      return null;
+    }
+    return this.eyePaths.find((p) => p.id === this._activeEyePathId) ?? null;
+  }
+
+  get selectedEyePath() {
+    if (!this.selectedEyePathId) {
+      return null;
+    }
+    return (
+      this.eyePaths.find((p) => p.id === this.selectedEyePathId) ?? null
+    );
+  }
+
+  // The path the toolbar/popover should reference: prefer the
+  // actively-constructed path during a session, else fall back to
+  // the selected path. Null if neither.
+  get focusedEyePath() {
+    return this.activeEyePath ?? this.selectedEyePath;
   }
 
   get eyePathPointCount() {
-    return this.eyePath?.points?.length ?? 0;
+    return this.focusedEyePath?.points?.length ?? 0;
+  }
+
+  get eyePathsAtMax() {
+    return this.eyePathCount >= MAX_EYE_PATH_COUNT;
+  }
+
+  get hasMultipleEyePaths() {
+    return this.eyePathCount > 1;
   }
 
   // Pin moves are suppressed while the note popover is open — the
@@ -719,7 +768,7 @@ export default class NpnCritiqueReplyModal extends Component {
         image,
         pins: this.notes,
         crop: this.crop,
-        eyePath: this.eyePath,
+        eyePaths: this.eyePaths,
         attentionPulls: this.attentionPulls,
         strongAreas: this.strongAreas,
       });
@@ -835,12 +884,14 @@ export default class NpnCritiqueReplyModal extends Component {
     // alone per spec.
     this.notes = [];
     this.crop = null;
-    this.eyePath = null;
+    this.eyePaths = [];
+    this._activeEyePathId = null;
+    this._eyePathStarterInserted = false;
     this.attentionPulls = [];
     this.strongAreas = [];
     this.selectedPinNumber = null;
     this.cropSelected = false;
-    this.eyePathSelected = false;
+    this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
     this.selectedStrongAreaId = null;
     this.visualMode = null;
@@ -945,15 +996,30 @@ export default class NpnCritiqueReplyModal extends Component {
       this.pendingEyePathPopover = null;
       this.pendingEyePathPopoverText = "";
     }
+    const previousMode = this.visualMode;
     this.visualMode = mode;
     // Switching modes drops any active selection so toolbar context
     // stays in sync with the chosen tool. Existing annotations of all
     // kinds are preserved — only the selection state resets.
     this.selectedPinNumber = null;
     this.cropSelected = false;
-    this.eyePathSelected = false;
+    this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
     this.selectedStrongAreaId = null;
+    // Eye-path session tracking. Each entry into eye_path mode is
+    // one path session: the first click creates a new path (up to
+    // the per-critique cap) and subsequent clicks extend it. Leaving
+    // the mode finalises the path. Re-entering eye_path mode starts
+    // a fresh session by clearing the active-path pointer so the
+    // next click creates another path instead of appending to the
+    // previous one. `_eyePathStarterInserted` resets too so each
+    // session can trigger its own description popover at point 2.
+    if (mode === "eye_path" && previousMode !== "eye_path") {
+      this._activeEyePathId = null;
+      this._eyePathStarterInserted = false;
+    } else if (previousMode === "eye_path" && mode !== "eye_path") {
+      this._activeEyePathId = null;
+    }
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] set-visual-mode", {
@@ -1008,7 +1074,7 @@ export default class NpnCritiqueReplyModal extends Component {
     // keep the model in sync across pin / crop / eye path / attention
     // pull / strong area.
     this.cropSelected = false;
-    this.eyePathSelected = false;
+    this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
     this.selectedStrongAreaId = null;
     if (this.selectedPinNumber === pin.number) {
@@ -1079,7 +1145,7 @@ export default class NpnCritiqueReplyModal extends Component {
     // selection — we re-set ours below.
     this._setVisualMode("crop_suggestion");
     this.selectedPinNumber = null;
-    this.eyePathSelected = false;
+    this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
     this.selectedStrongAreaId = null;
     this.cropSelected = !this.cropSelected;
@@ -1174,38 +1240,64 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // ---- Eye path / Visual Flow ----------------------------------------
 
-  // Fired by the Konva stage on a click while in eye_path mode. Appends
-  // a numbered point to the path (creating the path on the first
-  // click). On the second point we insert a textarea starter once per
-  // session so the critic has scaffolding to describe their visual
-  // flow.
+  // Fired by the Konva stage on a click while in eye_path mode. The
+  // first click of a mode-entry session creates a NEW path (subject
+  // to the per-critique cap); subsequent clicks within the same
+  // session append points to that path. Re-entering eye_path mode
+  // resets the session so the next click creates another new path
+  // rather than extending the previous one.
   @action
   addEyePathPoint(xPct, yPct) {
     if (this.visualMode !== "eye_path") {
       return;
     }
-    const currentPoints = this.eyePath?.points ?? [];
+
+    let activePath = this.activeEyePath;
+
+    // No active path yet in this mode-entry session — start one. Cap
+    // enforced here as well as in the normalizer so the user can't
+    // build past the limit on the client even if some bug let the
+    // tool stay enabled.
+    if (!activePath) {
+      if (this.eyePathsAtMax) {
+        if (this.siteSettings.npn_critique_reply_debug_enabled) {
+          // eslint-disable-next-line no-console
+          console.info("[npn-critique-reply] add-eye-path-point at cap", {
+            topicId: this.topic?.id,
+            existing: this.eyePathCount,
+            cap: MAX_EYE_PATH_COUNT,
+          });
+        }
+        return;
+      }
+      const newId = nextEyePathId(this.eyePaths.map((p) => p.id));
+      const newLabel = nextEyePathLabel(this.eyePaths.map((p) => p.label));
+      activePath = {
+        id: newId,
+        label: newLabel,
+        points: [],
+      };
+      this.eyePaths = [...this.eyePaths, activePath];
+      this._activeEyePathId = newId;
+      this.selectedEyePathId = newId;
+    }
+
+    const currentPoints = activePath.points ?? [];
     if (currentPoints.length >= MAX_EYE_PATH_POINTS) {
       return;
     }
     const nextNumber = currentPoints.length + 1;
-    const newPoints = [
-      ...currentPoints,
-      { number: nextNumber, xPct, yPct },
-    ];
-    const label = this.eyePath?.label ?? "E1";
-    this.eyePath = {
-      id: this.eyePath?.id ?? "eye_path_1",
-      label,
-      points: newPoints,
-    };
-    // Path becomes "meaningful" at the second point — open the inline
-    // note popover anchored to the latest point. No filler starter
-    // inserted into the textarea; the popover's Add note writes
-    // "[E1] <user text>", and Skip leaves the textarea alone.
-    // The `_eyePathStarterInserted` flag keeps the popover from
-    // re-opening on every subsequent point — one description prompt
-    // per path session.
+    const newPoints = [...currentPoints, { number: nextNumber, xPct, yPct }];
+
+    this.eyePaths = this.eyePaths.map((p) =>
+      p.id === this._activeEyePathId ? { ...p, points: newPoints } : p
+    );
+
+    // Open the description popover once per session, anchored at the
+    // second point (the moment the path becomes "meaningful" — it
+    // has a direction). _eyePathStarterInserted is reset whenever
+    // the user enters eye_path mode, so each session gets exactly
+    // one prompt.
     if (newPoints.length === 2 && !this._eyePathStarterInserted) {
       this._eyePathStarterInserted = true;
       this.pendingEyePathPopover = {
@@ -1218,6 +1310,7 @@ export default class NpnCritiqueReplyModal extends Component {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] add-eye-path-point", {
         topicId: this.topic?.id,
+        pathId: this._activeEyePathId,
         number: nextNumber,
         xPct,
         yPct,
@@ -1228,24 +1321,29 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // Fired by the Konva stage on per-point dragend. Updates the
   // matching point's coords without changing its number. The stage
-  // updates its own closure-cached eye_path BEFORE invoking this
+  // updates its own closure-cached path BEFORE invoking this
   // callback, so the next sync sees identical values and skips a
   // redundant re-render.
   @action
-  moveEyePathPoint(number, xPct, yPct) {
-    if (number == null || !this.eyePath?.points) {
+  moveEyePathPoint(pathId, number, xPct, yPct) {
+    if (!pathId || number == null) {
       return;
     }
-    this.eyePath = {
-      ...this.eyePath,
-      points: this.eyePath.points.map((p) =>
-        p.number === number ? { ...p, xPct, yPct } : p
-      ),
-    };
+    this.eyePaths = this.eyePaths.map((p) =>
+      p.id === pathId
+        ? {
+            ...p,
+            points: (p.points ?? []).map((pt) =>
+              pt.number === number ? { ...pt, xPct, yPct } : pt
+            ),
+          }
+        : p
+    );
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] move-eye-path-point", {
         topicId: this.topic?.id,
+        pathId,
         number,
         xPct,
         yPct,
@@ -1253,72 +1351,159 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
+  // Toolbar "Remove last point" — operates on the path the user is
+  // focused on (the active session path during construction, or the
+  // selected path otherwise). If removing the last point would empty
+  // the path, drop it from the eyePaths array entirely.
   @action
   removeLastEyePathPoint() {
-    const current = this.eyePath?.points ?? [];
+    const targetPath = this.focusedEyePath;
+    if (!targetPath) {
+      return;
+    }
+    const targetId = targetPath.id;
+    const current = targetPath.points ?? [];
     if (current.length === 0) {
       return;
     }
     const next = current.slice(0, -1);
     if (next.length === 0) {
-      // Last point removed → drop the path entirely so downstream
-      // checks (hasEyePath, export) see a clean null.
-      this.eyePath = null;
-      this.eyePathSelected = false;
+      this.eyePaths = this.eyePaths.filter((p) => p.id !== targetId);
+      if (this.selectedEyePathId === targetId) {
+        this.selectedEyePathId = null;
+      }
+      if (this._activeEyePathId === targetId) {
+        this._activeEyePathId = null;
+      }
+      // Popover only ever anchored to the path currently being built;
+      // if we just removed THAT path, clear the popover too.
       this.pendingEyePathPopover = null;
       this.pendingEyePathPopoverText = "";
     } else {
-      this.eyePath = {
-        ...this.eyePath,
-        points: next,
-      };
+      this.eyePaths = this.eyePaths.map((p) =>
+        p.id === targetId ? { ...p, points: next } : p
+      );
     }
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] remove-last-eye-path-point", {
         topicId: this.topic?.id,
+        pathId: targetId,
         remaining: next.length,
       });
     }
   }
 
+  // Drop the path with the given id. Used by the a11y list's per-row
+  // Remove button (one row per path with multi-path support).
   @action
-  selectEyePath() {
-    if (!this.hasEyePath) {
+  removeEyePathById(pathId) {
+    if (!pathId) {
       return;
     }
-    // Clicking a shape activates the corresponding tool mode (see
-    // selectPin for rationale).
-    this._setVisualMode("eye_path");
-    // Mirror the pin/crop mutex — only one annotation reads as the
-    // toolbar's active selection at a time.
-    this.selectedPinNumber = null;
-    this.cropSelected = false;
-    this.selectedAttentionPullId = null;
-    this.selectedStrongAreaId = null;
-    this.eyePathSelected = !this.eyePathSelected;
+    if (!this.eyePaths.some((p) => p.id === pathId)) {
+      return;
+    }
+    this.eyePaths = this.eyePaths.filter((p) => p.id !== pathId);
+    if (this.selectedEyePathId === pathId) {
+      this.selectedEyePathId = null;
+    }
+    if (this._activeEyePathId === pathId) {
+      this._activeEyePathId = null;
+      this._eyePathStarterInserted = false;
+    }
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
-      console.info("[npn-critique-reply] select-eye-path", {
+      console.info("[npn-critique-reply] remove-eye-path-by-id", {
         topicId: this.topic?.id,
-        selected: this.eyePathSelected,
+        pathId,
       });
     }
   }
 
+  // Toolbar "Remove selected path" — drops the selected path entirely.
+  // Mirrors the per-pin / per-attention-pull remove pattern. Returns
+  // the modal to "no eye-path selected" state without leaving
+  // eye_path mode (so the user can start another path immediately).
+  @action
+  removeSelectedEyePath() {
+    const targetId = this.selectedEyePathId ?? this._activeEyePathId;
+    if (!targetId) {
+      return;
+    }
+    this.eyePaths = this.eyePaths.filter((p) => p.id !== targetId);
+    if (this.selectedEyePathId === targetId) {
+      this.selectedEyePathId = null;
+    }
+    if (this._activeEyePathId === targetId) {
+      this._activeEyePathId = null;
+      this._eyePathStarterInserted = false;
+    }
+    this.pendingEyePathPopover = null;
+    this.pendingEyePathPopoverText = "";
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] remove-eye-path", {
+        topicId: this.topic?.id,
+        pathId: targetId,
+      });
+    }
+  }
+
+  // Click on a path (curve hit-zone or waypoint dot). Toggles
+  // selection: clicking the currently-selected path deselects it,
+  // clicking a different path swaps selection to it. Also switches
+  // tool mode to eye_path so the toolbar shows path-specific
+  // controls (matches the pattern other annotation selects use).
+  @action
+  selectEyePath(pathId) {
+    if (!pathId) {
+      return;
+    }
+    if (!this.eyePaths.some((p) => p.id === pathId)) {
+      return;
+    }
+    this._setVisualMode("eye_path");
+    // Mirror the cross-kind selection mutex.
+    this.selectedPinNumber = null;
+    this.cropSelected = false;
+    this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
+    // Selecting an EXISTING path takes over from the active session
+    // — the next click on empty stage should still start a new path
+    // (active session = null), which preserves the user's expectation
+    // that selection ≠ extension.
+    this._activeEyePathId = null;
+    this.selectedEyePathId =
+      this.selectedEyePathId === pathId ? null : pathId;
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] select-eye-path", {
+        topicId: this.topic?.id,
+        pathId,
+        selected: this.selectedEyePathId,
+      });
+    }
+  }
+
+  // Toolbar "Clear all paths" — wipes every eye path. Distinct from
+  // removeSelectedEyePath which only drops the focused one.
   @action
   clearEyePath() {
-    if (!this.eyePath) {
+    if (this.eyePaths.length === 0) {
       return;
     }
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] clear-eye-path", {
         topicId: this.topic?.id,
+        cleared: this.eyePaths.length,
       });
     }
-    this.eyePath = null;
-    this.eyePathSelected = false;
+    this.eyePaths = [];
+    this.selectedEyePathId = null;
+    this._activeEyePathId = null;
+    this._eyePathStarterInserted = false;
     this.pendingEyePathPopover = null;
     this.pendingEyePathPopoverText = "";
     // Textarea text stays; the critic decides if they want to edit
@@ -1360,7 +1545,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedAttentionPullId = id;
     this.selectedPinNumber = null;
     this.cropSelected = false;
-    this.eyePathSelected = false;
+    this.selectedEyePathId = null;
 
     // No textarea write on marker creation — only on Add note (the
     // popover writes "[A_N] <user text>"). Skip leaves the textarea
@@ -1407,7 +1592,7 @@ export default class NpnCritiqueReplyModal extends Component {
     // Mirror the pin/crop/eye-path/strong-area mutex.
     this.selectedPinNumber = null;
     this.cropSelected = false;
-    this.eyePathSelected = false;
+    this.selectedEyePathId = null;
     this.selectedStrongAreaId = null;
     if (this.selectedAttentionPullId === id) {
       // Clicking the already-selected marker deselects (parallel
@@ -1571,7 +1756,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedStrongAreaId = id;
     this.selectedPinNumber = null;
     this.cropSelected = false;
-    this.eyePathSelected = false;
+    this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
 
     // No textarea write on marker creation — twin of attention pull.
@@ -1599,7 +1784,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this._setVisualMode("strong_area");
     this.selectedPinNumber = null;
     this.cropSelected = false;
-    this.eyePathSelected = false;
+    this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
     if (this.selectedStrongAreaId === id) {
       this.selectedStrongAreaId = null;
@@ -1736,7 +1921,12 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     const text = this.pendingEyePathPopoverText.trim();
-    const label = this.eyePath?.label ?? "E1";
+    // Popover always anchors to the actively-constructed path —
+    // that's the one whose second point triggered it. Fall back to
+    // the selected path if for some reason there's no active session
+    // (e.g. the user dismissed and re-opened via a future action).
+    const path = this.activeEyePath ?? this.selectedEyePath;
+    const label = path?.label ?? "E1";
     if (text) {
       // Append only the user's text, prefixed with the [label]
       // reference. No filler scaffolding.
@@ -1745,10 +1935,13 @@ export default class NpnCritiqueReplyModal extends Component {
         { label, text }
       );
       this._appendToTextarea(line);
-      // Stash on the eye path so a future a11y list snippet can show
-      // a description summary.
-      if (this.eyePath) {
-        this.eyePath = { ...this.eyePath, noteText: text };
+      // Stash on the path so a future a11y list snippet can show a
+      // description summary. With multiple paths each carries its
+      // own noteText.
+      if (path) {
+        this.eyePaths = this.eyePaths.map((p) =>
+          p.id === path.id ? { ...p, noteText: text } : p
+        );
       }
     }
     this.pendingEyePathPopover = null;
@@ -2019,7 +2212,7 @@ export default class NpnCritiqueReplyModal extends Component {
               visualUpload: upload,
               pins: this.notes,
               crop: this.crop,
-              eyePath: this.eyePath,
+              eyePaths: this.eyePaths,
               attentionPulls: this.attentionPulls,
               strongAreas: this.strongAreas,
             })
@@ -2357,11 +2550,17 @@ export default class NpnCritiqueReplyModal extends Component {
       this.crop
         ? `${this.crop.xPct}:${this.crop.yPct}:${this.crop.widthPct}:${this.crop.heightPct}:${this.crop.aspectRatio}`
         : "",
-      this.eyePath
-        ? `ep:${this.eyePath.points
-            ?.map((p) => `${p.number}:${p.xPct}:${p.yPct}`)
-            .join(",")}`
-        : "",
+      this.eyePaths.length,
+      // Inner separators: `,` for points within a path, `;` between
+      // paths. Avoids the outer `|` separator used by this signature.
+      this.eyePaths
+        .map(
+          (path) =>
+            `${path.id}:${(path.points ?? [])
+              .map((p) => `${p.number}:${p.xPct}:${p.yPct}`)
+              .join(",")}`
+        )
+        .join(";"),
       this.attentionPulls.length,
       this.attentionPulls
         .map((a) => `${a.id}:${a.xPct}:${a.yPct}:${a.widthPct}:${a.heightPct}`)
@@ -2487,11 +2686,8 @@ export default class NpnCritiqueReplyModal extends Component {
         annotations.push(cropAnnotation);
       }
     }
-    if (this.eyePath) {
-      const eyePathAnnotation = eyePathToAnnotation(this.eyePath);
-      if (eyePathAnnotation) {
-        annotations.push(eyePathAnnotation);
-      }
+    for (const eyePathAnnotation of eyePathsToAnnotations(this.eyePaths ?? [])) {
+      annotations.push(eyePathAnnotation);
     }
     for (const pull of attentionPullsToAnnotations(this.attentionPulls ?? [])) {
       annotations.push(pull);
@@ -2643,24 +2839,28 @@ export default class NpnCritiqueReplyModal extends Component {
       note: p.note ?? null,
     }));
 
-    // The crop/eye_path converters take a SINGLE annotation, not a
-    // payload, so pluck the first matching entry from the list.
+    // The crop converter takes a SINGLE annotation; pluck the first
+    // matching entry. Eye paths support multiple — convert ALL
+    // matching entries and keep them as an array.
     const cropEntry = list.find((a) => a?.kind === "crop");
-    const eyePathEntry = list.find((a) => a?.kind === "eye_path");
     this.crop = cropEntry ? annotationToCrop(cropEntry) : null;
     if (this.crop?.aspectRatio) {
       this.cropAspectRatio = this.crop.aspectRatio;
     }
     // Match the auto-select-on-placement behaviour of addCrop so the
     // restored crop is immediately interactive (Transformer mounts,
-    // drag works in one motion). Eye path handles are always draggable
-    // so no selection flag is needed there. Multi-instance shapes
-    // (pins, attention pulls, strong areas) intentionally do not
-    // auto-select on restore — picking one would be arbitrary, and the
-    // konva stage's canDrag gate already allows single-motion drag for
-    // any marker in the right tool mode.
+    // drag works in one motion). Multi-instance shapes (pins,
+    // attention pulls, strong areas, eye paths) intentionally do not
+    // auto-select on restore — picking one would be arbitrary, and
+    // the konva stage's canDrag gate already allows single-motion
+    // drag for any marker in the right tool mode.
     this.cropSelected = !!this.crop;
-    this.eyePath = eyePathEntry ? annotationToEyePath(eyePathEntry) : null;
+    const eyePathEntries = list.filter((a) => a?.kind === "eye_path");
+    this.eyePaths = eyePathEntries
+      .map((entry) => annotationToEyePath(entry))
+      .filter((p) => p && (p.points?.length ?? 0) > 0);
+    this.selectedEyePathId = null;
+    this._activeEyePathId = null;
 
     this.attentionPulls = annotationsToAttentionPulls(synthPayload);
     this.strongAreas = annotationsToStrongAreas(synthPayload);
@@ -2721,11 +2921,13 @@ export default class NpnCritiqueReplyModal extends Component {
     this.critiqueText = "";
     this.notes = [];
     this.crop = null;
-    this.eyePath = null;
+    this.eyePaths = [];
+    this._activeEyePathId = null;
+    this._eyePathStarterInserted = false;
     this.attentionPulls = [];
     this.strongAreas = [];
     this.cropSelected = false;
-    this.eyePathSelected = false;
+    this.selectedEyePathId = null;
     this.selectedPinNumber = null;
     this.selectedAttentionPullId = null;
     this.selectedStrongAreaId = null;
@@ -3026,24 +3228,37 @@ export default class NpnCritiqueReplyModal extends Component {
                       {{/each}}
                     {{/if}}
 
-                    {{! Eye-path mode actions. "Clear eye path" was a
-                        duplicate of "Remove eye path" — same action,
-                        kept only the trash-can version. }}
+                    {{! Eye-path mode actions. With multi-path support:
+                        "Remove path" (trash) drops the currently
+                        focused path (selected, or the one being
+                        constructed in this session). "Remove last
+                        point" trims a point from that same focused
+                        path. "Clear all" wipes every eye path —
+                        only shown when 2+ paths exist so it doesn't
+                        duplicate the single-path remove. }}
                     {{#if this.eyePathMode}}
-                      {{#if this.eyePathSelected}}
+                      {{#if this.focusedEyePath}}
                         <DButton
                           class="btn-default npn-critique-reply-modal__remove-pin"
                           @icon="trash-can"
-                          @action={{this.clearEyePath}}
+                          @action={{this.removeSelectedEyePath}}
                           @label="npn_critique_reply.visual_notes.eye_path_remove"
                           @disabled={{this.isPosting}}
                         />
                       {{/if}}
-                      {{#if this.hasEyePath}}
+                      {{#if this.focusedEyePath}}
                         <DButton
                           class="btn-flat npn-critique-reply-modal__clear-notes"
                           @action={{this.removeLastEyePathPoint}}
                           @label="npn_critique_reply.visual_notes.eye_path_remove_last"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                      {{#if this.hasMultipleEyePaths}}
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__clear-notes"
+                          @action={{this.clearEyePath}}
+                          @label="npn_critique_reply.visual_notes.eye_path_clear_all"
                           @disabled={{this.isPosting}}
                         />
                       {{/if}}
@@ -3108,8 +3323,8 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onAddCrop={{this.addCrop}}
                 @onSelectCrop={{this.selectCrop}}
                 @onUpdateCrop={{this.updateCrop}}
-                @eyePath={{this.eyePath}}
-                @eyePathSelected={{this.eyePathSelected}}
+                @eyePaths={{this.eyePaths}}
+                @selectedEyePathId={{this.selectedEyePathId}}
                 @onAddEyePathPoint={{this.addEyePathPoint}}
                 @onSelectEyePath={{this.selectEyePath}}
                 @onMoveEyePathPoint={{this.moveEyePathPoint}}
@@ -3224,45 +3439,38 @@ export default class NpnCritiqueReplyModal extends Component {
                           }}</button>
                       </li>
                     {{/if}}
-                    {{#if this.hasEyePath}}
+                    {{#each this.eyePaths as |eyePath|}}
                       <li>
                         <span
                           class="npn-critique-reply-modal__a11y-list-label"
                         >{{i18n
-                            "npn_critique_reply.visual_notes.eye_path_a11y_label"
-                            count=this.eyePathPointCount
+                            "npn_critique_reply.visual_notes.eye_path_a11y_label_n"
+                            label=eyePath.label
+                            count=eyePath.points.length
                           }}</span>
                         <button
                           type="button"
                           class="btn-small btn-default"
                           aria-pressed={{if
-                            this.eyePathSelected
+                            (eq eyePath.id this.selectedEyePathId)
                             "true"
                             "false"
                           }}
                           disabled={{this.isPosting}}
-                          {{on "click" this.selectEyePath}}
+                          {{on "click" (fn this.selectEyePath eyePath.id)}}
                         >{{i18n
                             "npn_critique_reply.visual_notes.a11y_select"
                           }}</button>
                         <button
                           type="button"
-                          class="btn-small btn-default"
-                          disabled={{this.isPosting}}
-                          {{on "click" this.removeLastEyePathPoint}}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.eye_path_remove_last"
-                          }}</button>
-                        <button
-                          type="button"
                           class="btn-small btn-flat"
                           disabled={{this.isPosting}}
-                          {{on "click" this.clearEyePath}}
+                          {{on "click" (fn this.removeEyePathById eyePath.id)}}
                         >{{i18n
                             "npn_critique_reply.visual_notes.a11y_remove"
                           }}</button>
                       </li>
-                    {{/if}}
+                    {{/each}}
                     {{#each this.attentionPulls as |pull|}}
                       <li>
                         <span

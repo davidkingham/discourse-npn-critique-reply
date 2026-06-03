@@ -115,6 +115,9 @@ function sameEyePath(a, b) {
   if (!a || !b) {
     return false;
   }
+  if ((a.id ?? null) !== (b.id ?? null)) {
+    return false;
+  }
   if ((a.label ?? null) !== (b.label ?? null)) {
     return false;
   }
@@ -125,6 +128,40 @@ function sameEyePath(a, b) {
   }
   for (let i = 0; i < ap.length; i++) {
     if (ap[i].xPct !== bp[i].xPct || ap[i].yPct !== bp[i].yPct) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Multi-path equivalents. Clone produces a fresh array of cloned
+// paths; same compares two arrays slot-by-slot (order matters,
+// matching the modal's authoritative ordering).
+function cloneEyePaths(eyePaths) {
+  if (!Array.isArray(eyePaths)) {
+    return [];
+  }
+  const out = [];
+  for (const p of eyePaths) {
+    const cloned = cloneEyePath(p);
+    if (cloned) {
+      out.push(cloned);
+    }
+  }
+  return out;
+}
+
+function sameEyePaths(a, b) {
+  if (a === b) {
+    return true;
+  }
+  const al = Array.isArray(a) ? a : [];
+  const bl = Array.isArray(b) ? b : [];
+  if (al.length !== bl.length) {
+    return false;
+  }
+  for (let i = 0; i < al.length; i++) {
+    if (!sameEyePath(al[i], bl[i])) {
       return false;
     }
   }
@@ -373,12 +410,12 @@ export async function createAnnotationStage({
   imageElement,
   pins = [],
   crop = null,
-  eyePath = null,
+  eyePaths = [],
   attentionPulls = [],
   strongAreas = [],
   selectedPinNumber = null,
   cropSelected = false,
-  eyePathSelected = false,
+  selectedEyePathId = null,
   selectedAttentionPullId = null,
   selectedStrongAreaId = null,
   visualMode = null,
@@ -460,12 +497,12 @@ export async function createAnnotationStage({
   const state = {
     pins: [...pins],
     crop: crop ? { ...crop } : null,
-    eyePath: cloneEyePath(eyePath),
+    eyePaths: cloneEyePaths(eyePaths),
     attentionPulls: cloneAttentionPulls(attentionPulls),
     strongAreas: cloneStrongAreas(strongAreas),
     selectedPinNumber,
     cropSelected,
-    eyePathSelected,
+    selectedEyePathId,
     selectedAttentionPullId,
     selectedStrongAreaId,
     visualMode,
@@ -1258,22 +1295,19 @@ export async function createAnnotationStage({
     annotationsLayer.batchDraw();
   }
 
-  // Eye-path renderer. The path reads as direction-from-start-to-end:
+  // Eye-paths renderer. Iterates over state.eyePaths and renders
+  // each path's decoration + hit-zone + handles. Each path reads as
+  // direction-from-start-to-end:
   //   • small dot at the first point — "begin here"
   //   • halo polyline + tertiary line (slightly translucent)
-  //   • small arrowheads spaced along each segment for in-flight
-  //     directional cues
+  //   • interior waypoint dots when selected (the selected-state cue)
   //   • slightly emphatic terminal arrowhead at the last point —
   //     "ends here, attention lands"
-  //
-  // No per-point waypoint markers or numerals — the line carries the
-  // path, and the start/end cues anchor its direction. Points still
-  // exist in state.eyePath for interaction (Remove last / Clear).
-  function renderEyePath() {
+  function renderEyePaths() {
     eyePathLayer.destroyChildren();
 
-    const path = state.eyePath;
-    if (!path || !Array.isArray(path.points) || path.points.length === 0) {
+    const paths = Array.isArray(state.eyePaths) ? state.eyePaths : [];
+    if (paths.length === 0) {
       annotationsLayer.batchDraw();
       return;
     }
@@ -1290,6 +1324,21 @@ export async function createAnnotationStage({
     const secondary = ANNOTATION_HALO;
     const tertiaryHover = ANNOTATION_BLUE;
     const shortEdge = Math.min(sw, sh);
+
+    for (const path of paths) {
+      if (!path || !Array.isArray(path.points) || path.points.length === 0) {
+        continue;
+      }
+      renderOneEyePath(path);
+    }
+    annotationsLayer.batchDraw();
+
+    // Per-path render function — closure over sw/sh/colors above. All
+    // the geometry, decoration, hit-zone, and handle logic lives here
+    // so each path gets its own independent sub-tree (decorations
+    // group, hit group, handles) parented to eyePathLayer.
+    function renderOneEyePath(path) {
+      const isSelected = state.selectedEyePathId === path.id;
 
     // Convert percentage points → stage pixel coords. Mutable so
     // dragend can update one entry without re-running the whole
@@ -1513,7 +1562,7 @@ export async function createAnnotationStage({
         // add a new point in eye_path creation mode).
         hitLine.on("click tap", (e) => {
           e.cancelBubble = true;
-          onSelectEyePath?.();
+          onSelectEyePath?.(path.id);
         });
         hitGroup.add(hitLine);
 
@@ -1537,7 +1586,7 @@ export async function createAnnotationStage({
         decorationsGroup.add(
           new Konva.Line({
             points: flat,
-            stroke: state.eyePathSelected ? tertiaryHover : tertiary,
+            stroke: isSelected ? tertiaryHover : tertiary,
             strokeWidth: lineWidth,
             lineCap: "round",
             lineJoin: "round",
@@ -1573,7 +1622,7 @@ export async function createAnnotationStage({
       // eye path's stroke colour and tension don't lend themselves
       // to a comparable swap). Curve-hit-zone selection still works
       // — users see the line, click it, the dots appear.
-      if (pts.length >= 3 && state.eyePathSelected) {
+      if (pts.length >= 3 && isSelected) {
         // Floor bumped (3 → 4) so the dots are easier to mouse-target
         // on smaller stages. Still smaller than the start dot's
         // radius (~5+ px) so the start still reads as the path origin.
@@ -1597,7 +1646,7 @@ export async function createAnnotationStage({
               x: wp.x,
               y: wp.y,
               radius: waypointR,
-              fill: state.eyePathSelected ? tertiaryHover : tertiary,
+              fill: isSelected ? tertiaryHover : tertiary,
               listening: false,
             })
           );
@@ -1629,7 +1678,7 @@ export async function createAnnotationStage({
             x: start.x,
             y: start.y,
             radius: startR,
-            fill: state.eyePathSelected ? tertiaryHover : tertiary,
+            fill: isSelected ? tertiaryHover : tertiary,
             listening: false,
           })
         );
@@ -1668,11 +1717,11 @@ export async function createAnnotationStage({
           });
           labelNode.add(
             new Konva.Tag({
-              fill: state.eyePathSelected ? tertiaryHover : tertiary,
+              fill: isSelected ? tertiaryHover : tertiary,
               cornerRadius: 3,
               stroke: secondary,
               strokeWidth: 1.5,
-              opacity: state.eyePathSelected ? 1 : 0.95,
+              opacity: isSelected ? 1 : 0.95,
             })
           );
           labelNode.add(
@@ -1731,7 +1780,7 @@ export async function createAnnotationStage({
                 baseCy - perpY * baseHalf,
               ],
               closed: true,
-              fill: state.eyePathSelected ? tertiaryHover : tertiary,
+              fill: isSelected ? tertiaryHover : tertiary,
               stroke: secondary,
               strokeWidth: 1.5,
               listening: false,
@@ -1801,38 +1850,43 @@ export async function createAnnotationStage({
         const newYPct = Math.max(0, Math.min(100, (handle.y() / curH) * 100));
         // Keep livePts in sync so subsequent drags of OTHER handles
         // compute against the new geometry without rebuilding from
-        // state.eyePath.
+        // the closure state.
         livePts[pointIndex] = { x: handle.x(), y: handle.y() };
         // Update closure state BEFORE the callback so the next sync
-        // (driven by the modal updating its tracked eyePath) sees
-        // identical coords and skips a redundant re-render.
-        state.eyePath = {
-          ...state.eyePath,
-          points: state.eyePath.points.map((pt, idx) =>
-            idx === pointIndex
-              ? { ...pt, xPct: newXPct, yPct: newYPct }
-              : pt
-          ),
-        };
+        // (driven by the modal updating its tracked eyePaths) sees
+        // identical coords and skips a redundant re-render. We
+        // mutate ONLY the entry whose id matches this path so the
+        // other paths' points aren't disturbed.
+        state.eyePaths = state.eyePaths.map((p) =>
+          p.id === path.id
+            ? {
+                ...p,
+                points: (p.points ?? []).map((pt, idx) =>
+                  idx === pointIndex
+                    ? { ...pt, xPct: newXPct, yPct: newYPct }
+                    : pt
+                ),
+              }
+            : p
+        );
         // Final decoration redraw so everything lands at the exact
         // dragend coords (defensive — dragmove already ran on the
         // same coords, but this guards against any rounding drift).
         buildDecorations(livePts);
         annotationsLayer.batchDraw();
-        onMoveEyePathPoint?.(pointNumber, newXPct, newYPct);
+        onMoveEyePathPoint?.(path.id, pointNumber, newXPct, newYPct);
       });
 
       // Plain click without movement → select the path.
       handle.on("click tap", (e) => {
         e.cancelBubble = true;
-        onSelectEyePath?.();
+        onSelectEyePath?.(path.id);
       });
 
       eyePathLayer.add(handle);
     }
-
-    annotationsLayer.batchDraw();
-  }
+    } // end renderOneEyePath
+  } // end renderEyePaths
 
   // Crop layer = 4 dim rects + bordered rect (+ Konva.Transformer
   // when the crop is selected in crop_suggestion mode). The bordered
@@ -2599,7 +2653,7 @@ export async function createAnnotationStage({
       renderCrop();
       renderAttentionPulls();
       renderStrongAreas();
-      renderEyePath();
+      renderEyePaths();
       renderPins();
     }
   });
@@ -2631,12 +2685,12 @@ export async function createAnnotationStage({
     update({
       pins,
       crop,
-      eyePath,
+      eyePaths,
       attentionPulls,
       strongAreas,
       selectedPinNumber,
       cropSelected,
-      eyePathSelected,
+      selectedEyePathId,
       selectedAttentionPullId,
       selectedStrongAreaId,
       visualMode,
@@ -2682,15 +2736,15 @@ export async function createAnnotationStage({
         state.cropSelected = cropSelected;
         cropChanged = true;
       }
-      if (eyePath !== undefined && !sameEyePath(eyePath, state.eyePath)) {
-        state.eyePath = cloneEyePath(eyePath);
+      if (eyePaths !== undefined && !sameEyePaths(eyePaths, state.eyePaths)) {
+        state.eyePaths = cloneEyePaths(eyePaths);
         eyePathChanged = true;
       }
       if (
-        eyePathSelected !== undefined &&
-        eyePathSelected !== state.eyePathSelected
+        selectedEyePathId !== undefined &&
+        selectedEyePathId !== state.selectedEyePathId
       ) {
-        state.eyePathSelected = eyePathSelected;
+        state.selectedEyePathId = selectedEyePathId;
         eyePathChanged = true;
       }
       if (
@@ -2888,7 +2942,7 @@ export async function createAnnotationStage({
         renderStrongAreas();
       }
       if (eyePathChanged) {
-        renderEyePath();
+        renderEyePaths();
       }
       if (pinsChanged) {
         renderPins();

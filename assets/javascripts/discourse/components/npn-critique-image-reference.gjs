@@ -90,7 +90,7 @@ export default class NpnCritiqueImageReference extends Component {
       this.args.visualMode ||
       this.pins.length > 0 ||
       this.args.crop ||
-      (this.args.eyePath?.points?.length ?? 0) > 0 ||
+      (this.args.eyePaths?.length ?? 0) > 0 ||
       (this.args.attentionPulls?.length ?? 0) > 0 ||
       (this.args.strongAreas?.length ?? 0) > 0
     ) {
@@ -153,10 +153,10 @@ export default class NpnCritiqueImageReference extends Component {
         imageElement: this._imageElement,
         pins: this.pins,
         crop: this.args.crop,
-        eyePath: this.args.eyePath,
+        eyePaths: this.args.eyePaths,
         selectedPinNumber: this.args.selectedNumber,
         cropSelected: this.args.cropSelected,
-        eyePathSelected: this.args.eyePathSelected,
+        selectedEyePathId: this.args.selectedEyePathId,
         visualMode: this.args.visualMode,
         aspectRatio: this.args.cropAspectRatio,
         pinMoveEnabled: this.args.pinMoveEnabled,
@@ -171,9 +171,9 @@ export default class NpnCritiqueImageReference extends Component {
           this.args.onUpdateCrop?.(xPct, yPct, widthPct, heightPct),
         onAddEyePathPoint: (xPct, yPct) =>
           this.args.onAddEyePathPoint?.(xPct, yPct),
-        onSelectEyePath: () => this.args.onSelectEyePath?.(),
-        onMoveEyePathPoint: (number, xPct, yPct) =>
-          this.args.onMoveEyePathPoint?.(number, xPct, yPct),
+        onSelectEyePath: (pathId) => this.args.onSelectEyePath?.(pathId),
+        onMoveEyePathPoint: (pathId, number, xPct, yPct) =>
+          this.args.onMoveEyePathPoint?.(pathId, number, xPct, yPct),
         attentionPulls: this.args.attentionPulls,
         selectedAttentionPullId: this.args.selectedAttentionPullId,
         attentionPullEditEnabled: this.args.attentionPullEditEnabled,
@@ -240,12 +240,12 @@ export default class NpnCritiqueImageReference extends Component {
     this._konvaStage.update({
       pins: this.pins,
       crop: this.args.crop,
-      eyePath: this.args.eyePath,
+      eyePaths: this.args.eyePaths,
       attentionPulls: this.args.attentionPulls,
       strongAreas: this.args.strongAreas,
       selectedPinNumber: this.args.selectedNumber,
       cropSelected: this.args.cropSelected,
-      eyePathSelected: this.args.eyePathSelected,
+      selectedEyePathId: this.args.selectedEyePathId,
       selectedAttentionPullId: this.args.selectedAttentionPullId,
       selectedStrongAreaId: this.args.selectedStrongAreaId,
       visualMode: this.args.visualMode,
@@ -448,7 +448,7 @@ export default class NpnCritiqueImageReference extends Component {
           @visualMode
           this.pins.length
           @crop
-          @eyePath
+          @eyePaths
           @attentionPulls
           @strongAreas
         }}
@@ -479,8 +479,8 @@ export default class NpnCritiqueImageReference extends Component {
                 @cropSelected
                 @cropAspectRatio
                 @pinMoveEnabled
-                @eyePath
-                @eyePathSelected
+                @eyePaths
+                @selectedEyePathId
                 @attentionPulls
                 @selectedAttentionPullId
                 @attentionPullEditEnabled
@@ -757,16 +757,17 @@ export default class NpnCritiqueImageReference extends Component {
               )
             }}</p>
         {{else if (eq @visualMode "eye_path")}}
-          {{! Show the live point count once any points exist — this
-              is the only on-canvas feedback now that waypoint
-              markers and numerals are gone. Before the first click,
-              fall back to the placement hint. }}
+          {{! Show the live path count once any paths exist — multi-
+              path support means each entry into eye-path mode starts
+              a new path, so the "N path(s)" framing reads better
+              than a single point count would. Before the first
+              click, fall back to the placement hint. }}
           <p
             class="npn-critique-image-reference__hint"
             aria-live="polite"
-          >{{#if @eyePath.points.length}}{{i18n
-                "npn_critique_reply.visual_notes.eye_path_status"
-                count=@eyePath.points.length
+          >{{#if @eyePaths.length}}{{i18n
+                "npn_critique_reply.visual_notes.eye_path_status_n"
+                count=@eyePaths.length
               }}{{else}}{{i18n
                 "npn_critique_reply.visual_notes.eye_path_hint"
               }}{{/if}}</p>

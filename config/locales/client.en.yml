@@ -199,17 +199,28 @@ en:
         eye_path_done: "Done with eye path"
         eye_path_hint: "Click the image in the order your eye moves through it."
         eye_path_clear: "Clear eye path"
+        eye_path_clear_all: "Clear all eye paths"
         eye_path_remove: "Remove eye path"
         eye_path_remove_last: "Remove last point"
         eye_path_a11y_label:
           one: "Eye path with %{count} point"
           other: "Eye path with %{count} points"
+        # Variant used by the a11y list when multi-path support is in
+        # play — each path has its own row prefixed by its label (E1,
+        # E2, ...) so the entries stay distinguishable.
+        eye_path_a11y_label_n:
+          one: "Eye path %{label} with %{count} point"
+          other: "Eye path %{label} with %{count} points"
         # Status replaces the placement hint once at least one point
         # exists — visible feedback that clicks registered now that
         # there are no on-image waypoint markers.
         eye_path_status:
           one: "Eye path: %{count} point"
           other: "Eye path: %{count} points"
+        # Multi-path status — count is the number of eye paths created.
+        eye_path_status_n:
+          one: "%{count} eye path"
+          other: "%{count} eye paths"
         # Per-path textarea line — appended only when the critic types
         # in the popover and clicks Add note. No filler on creation
         # or on Skip; the [label] prefix anchors the textarea
