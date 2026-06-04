@@ -2673,7 +2673,7 @@ export async function createAnnotationStage({
   renderCrop();
   renderAttentionPulls();
   renderStrongAreas();
-  renderEyePath();
+  renderEyePaths();
   renderPins();
 
   return {
