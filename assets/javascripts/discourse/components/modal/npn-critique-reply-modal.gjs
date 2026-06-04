@@ -1486,6 +1486,40 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
+  // Toolbar "New eye path" — explicit "I'm done with the current
+  // path, start another one without toggling the tool off and on."
+  // Resets only the session pointers; existing paths stay drawn and
+  // selectable. The next click on empty stage will create a new
+  // path (same path as the first-click-of-a-fresh-mode-entry flow).
+  //
+  // Also dismisses any open description popover as Skip-equivalent
+  // — the popover anchors to the path the user is about to leave
+  // behind, so it would otherwise read as "describe this path"
+  // when the user has already moved on.
+  @action
+  startNewEyePath() {
+    if (this.visualMode !== "eye_path") {
+      return;
+    }
+    if (this.eyePathsAtMax) {
+      return;
+    }
+    this._activeEyePathId = null;
+    this._eyePathStarterInserted = false;
+    this.selectedEyePathId = null;
+    if (this.pendingEyePathPopover) {
+      this.pendingEyePathPopover = null;
+      this.pendingEyePathPopoverText = "";
+    }
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] start-new-eye-path", {
+        topicId: this.topic?.id,
+        existing: this.eyePathCount,
+      });
+    }
+  }
+
   // Toolbar "Clear all paths" — wipes every eye path. Distinct from
   // removeSelectedEyePath which only drops the focused one.
   @action
@@ -3229,6 +3263,8 @@ export default class NpnCritiqueReplyModal extends Component {
                     {{/if}}
 
                     {{! Eye-path mode actions. With multi-path support:
+                        "New eye path" lets the user start another
+                        path without toggling the tool off and on.
                         "Remove path" (trash) drops the currently
                         focused path (selected, or the one being
                         constructed in this session). "Remove last
@@ -3237,6 +3273,18 @@ export default class NpnCritiqueReplyModal extends Component {
                         only shown when 2+ paths exist so it doesn't
                         duplicate the single-path remove. }}
                     {{#if this.eyePathMode}}
+                      {{#if this.focusedEyePath}}
+                        {{#unless this.eyePathsAtMax}}
+                          <DButton
+                            class="btn-default npn-critique-reply-modal__new-eye-path"
+                            @icon="plus"
+                            @action={{this.startNewEyePath}}
+                            @label="npn_critique_reply.visual_notes.eye_path_new"
+                            @title="npn_critique_reply.visual_notes.eye_path_new_title"
+                            @disabled={{this.isPosting}}
+                          />
+                        {{/unless}}
+                      {{/if}}
                       {{#if this.focusedEyePath}}
                         <DButton
                           class="btn-default npn-critique-reply-modal__remove-pin"

@@ -202,6 +202,8 @@ en:
         eye_path_clear_all: "Clear all eye paths"
         eye_path_remove: "Remove eye path"
         eye_path_remove_last: "Remove last point"
+        eye_path_new: "New eye path"
+        eye_path_new_title: "Start another eye path without leaving the tool"
         eye_path_a11y_label:
           one: "Eye path with %{count} point"
           other: "Eye path with %{count} points"
