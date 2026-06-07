@@ -360,7 +360,7 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
   describe "PUT /npn-critique-reply/posts/:post_id/critique (edit)" do
     fab!(:author) { Fabricate(:user, trust_level: TrustLevel[2]) }
     fab!(:other_user) { Fabricate(:user, trust_level: TrustLevel[2]) }
-    fab!(:critique_topic) { Fabricate(:topic) }
+    fab!(:critique_topic, :topic)
     fab!(:critique_op) { Fabricate(:post, topic: critique_topic) }
 
     let(:existing_visual_notes) do
@@ -587,7 +587,7 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
     end
 
     context "when signed in as staff (not the author)" do
-      fab!(:admin) { Fabricate(:admin) }
+      fab!(:admin)
       before { sign_in(admin) }
 
       it "is allowed to edit anyone's critique" do

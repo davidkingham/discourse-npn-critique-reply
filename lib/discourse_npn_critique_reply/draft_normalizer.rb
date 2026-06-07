@@ -66,7 +66,7 @@ module DiscourseNpnCritiqueReply
       out = {}
       return out unless value.is_a?(Hash)
       value.each do |k, v|
-        next unless UI_ALLOWED_KEYS.include?(k.to_s)
+        next if UI_ALLOWED_KEYS.exclude?(k.to_s)
         out[k.to_s] = !!v
       end
       out
@@ -87,7 +87,7 @@ module DiscourseNpnCritiqueReply
         break if out.length >= MAX_ANNOTATION_COUNT
         next unless entry.is_a?(Hash)
         kind = entry["kind"] || entry[:kind]
-        next unless ACTIVE_KINDS.include?(kind.to_s)
+        next if ACTIVE_KINDS.exclude?(kind.to_s)
 
         normalized =
           case kind.to_s

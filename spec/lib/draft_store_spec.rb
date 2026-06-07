@@ -23,11 +23,11 @@ describe DiscourseNpnCritiqueReply::DraftStore do
     end
   end
 
-  describe ".save / .load round-trip" do
+  describe ".save / .fetch round-trip" do
     it "stores and reads back a normalized draft" do
       payload = normalized_payload("critique_text" => "round trip")
       store.save(user_id: user.id, topic_id: topic.id, payload: payload)
-      loaded = store.load(user_id: user.id, topic_id: topic.id)
+      loaded = store.fetch(user_id: user.id, topic_id: topic.id)
       expect(loaded["critique_text"]).to eq("round trip")
       expect(loaded["topic_id"]).to eq(topic.id)
       expect(loaded["user_id"]).to eq(user.id)
@@ -44,7 +44,7 @@ describe DiscourseNpnCritiqueReply::DraftStore do
         topic_id: topic.id,
         payload: normalized_payload("critique_text" => "second"),
       )
-      loaded = store.load(user_id: user.id, topic_id: topic.id)
+      loaded = store.fetch(user_id: user.id, topic_id: topic.id)
       expect(loaded["critique_text"]).to eq("second")
     end
 
@@ -55,7 +55,7 @@ describe DiscourseNpnCritiqueReply::DraftStore do
         topic_id: topic.id,
         payload: normalized_payload("critique_text" => "user a"),
       )
-      expect(store.load(user_id: other_user.id, topic_id: topic.id)).to be_nil
+      expect(store.fetch(user_id: other_user.id, topic_id: topic.id)).to be_nil
     end
   end
 
@@ -63,7 +63,7 @@ describe DiscourseNpnCritiqueReply::DraftStore do
     it "removes the stored draft" do
       store.save(user_id: user.id, topic_id: topic.id, payload: normalized_payload)
       store.delete(user_id: user.id, topic_id: topic.id)
-      expect(store.load(user_id: user.id, topic_id: topic.id)).to be_nil
+      expect(store.fetch(user_id: user.id, topic_id: topic.id)).to be_nil
     end
 
     it "is idempotent when no draft exists" do
@@ -102,10 +102,10 @@ describe DiscourseNpnCritiqueReply::DraftStore do
       stale = normalized_payload
       stale["updated_at"] = (Time.now.utc - (31 * 24 * 60 * 60)).iso8601
       store.save(user_id: user.id, topic_id: topic.id, payload: stale)
-      expect(store.load(user_id: user.id, topic_id: topic.id)).to be_nil
+      expect(store.fetch(user_id: user.id, topic_id: topic.id)).to be_nil
       # Confirm prune side-effect: re-saving + reloading inside TTL works.
       store.save(user_id: user.id, topic_id: topic.id, payload: normalized_payload)
-      expect(store.load(user_id: user.id, topic_id: topic.id)).not_to be_nil
+      expect(store.fetch(user_id: user.id, topic_id: topic.id)).not_to be_nil
     end
 
     it "keeps drafts within the TTL window" do
@@ -113,7 +113,7 @@ describe DiscourseNpnCritiqueReply::DraftStore do
       fresh = normalized_payload
       fresh["updated_at"] = (Time.now.utc - (5 * 24 * 60 * 60)).iso8601
       store.save(user_id: user.id, topic_id: topic.id, payload: fresh)
-      expect(store.load(user_id: user.id, topic_id: topic.id)).not_to be_nil
+      expect(store.fetch(user_id: user.id, topic_id: topic.id)).not_to be_nil
     end
 
     it "disables expiry when TTL is 0" do
@@ -121,7 +121,7 @@ describe DiscourseNpnCritiqueReply::DraftStore do
       ancient = normalized_payload
       ancient["updated_at"] = (Time.now.utc - (365 * 24 * 60 * 60)).iso8601
       store.save(user_id: user.id, topic_id: topic.id, payload: ancient)
-      expect(store.load(user_id: user.id, topic_id: topic.id)).not_to be_nil
+      expect(store.fetch(user_id: user.id, topic_id: topic.id)).not_to be_nil
     end
 
     it "is inactivity-based — a new save resets the expiry window" do
@@ -141,7 +141,7 @@ describe DiscourseNpnCritiqueReply::DraftStore do
       # be 50 days old, but because the second save bumped updated_at,
       # the effective age is only 25 days — still within TTL.
       freeze_time((Time.now.utc + (25 * 24 * 60 * 60))) do
-        loaded = store.load(user_id: user.id, topic_id: topic.id)
+        loaded = store.fetch(user_id: user.id, topic_id: topic.id)
         expect(loaded).not_to be_nil
         expect(loaded["critique_text"]).to eq("second")
       end

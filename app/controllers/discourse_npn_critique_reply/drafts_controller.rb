@@ -23,7 +23,7 @@ module DiscourseNpnCritiqueReply
 
     # GET /npn-critique-reply/topics/:topic_id/draft
     def show
-      draft = DraftStore.load(user_id: current_user.id, topic_id: @topic.id)
+      draft = DraftStore.fetch(user_id: current_user.id, topic_id: @topic.id)
       if draft
         render json: { draft: draft }
       else

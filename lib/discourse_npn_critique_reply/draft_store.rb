@@ -3,7 +3,7 @@
 module DiscourseNpnCritiqueReply
   # PluginStore wrapper for the per-user/per-topic critique workspace
   # draft. One active draft per (user_id, topic_id); save overwrites,
-  # delete removes, and load returns nil for missing or expired drafts.
+  # delete removes, and fetch returns nil for missing or expired drafts.
   #
   # We deliberately use PluginStore rather than a new table — drafts are
   # small (≤ a few KB), short-lived, low-volume, and we want zero
@@ -21,8 +21,11 @@ module DiscourseNpnCritiqueReply
 
     # Returns the stored draft hash, or nil when no draft exists or the
     # draft is older than the configured TTL (in which case it is also
-    # deleted as a side-effect).
-    def load(user_id:, topic_id:)
+    # deleted as a side-effect). Named `fetch` rather than `load` to
+    # avoid colliding with Ruby's `Kernel#load` — the latter trips
+    # Discourse's UseRequireRelative cop when callers write
+    # `DraftStore.load(...)`.
+    def fetch(user_id:, topic_id:)
       key = key_for(user_id: user_id, topic_id: topic_id)
       raw = PluginStore.get(PLUGIN_NAME, key)
       return nil unless raw.is_a?(Hash)
@@ -50,12 +53,12 @@ module DiscourseNpnCritiqueReply
       true
     end
 
-    # Lighter-weight than .load when callers only want to know whether a
-    # draft is there (e.g. the topic-view serializer deciding whether
+    # Lighter-weight than .fetch when callers only want to know whether
+    # a draft is there (e.g. the topic-view serializer deciding whether
     # to surface "Resume Draft" on the Start button). Behaviour matches
-    # .load: expired drafts are pruned and reported as missing.
+    # .fetch: expired drafts are pruned and reported as missing.
     def exists?(user_id:, topic_id:)
-      !load(user_id: user_id, topic_id: topic_id).nil?
+      !fetch(user_id: user_id, topic_id: topic_id).nil?
     end
 
     def expired?(payload)
