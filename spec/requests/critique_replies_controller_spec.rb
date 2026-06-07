@@ -300,11 +300,18 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
       end
 
       it "treats metadata save failure as non-fatal — reply still created" do
-        # Force the custom_fields save to raise via stub. The reply
-        # itself must still be created and a 200 returned.
-        allow_any_instance_of(Post).to receive(:save_custom_fields).and_raise(
-          StandardError.new("boom"),
-        )
+        # Force the visual-notes pipeline to raise from inside
+        # attach_visual_notes. The rescue block in the controller
+        # should catch it so the reply (already saved by PostCreator)
+        # survives. Stubbing VisualNotesNormalizer is targeted —
+        # PostCreator doesn't touch it, so the stub only fires inside
+        # the plugin's own code path. (An earlier version of this
+        # test stubbed Post#save_custom_fields, but PostCreator now
+        # calls that internally during post creation, so the broad
+        # stub aborted creation before attach_visual_notes ran.)
+        allow(DiscourseNpnCritiqueReply::VisualNotesNormalizer).to receive(
+          :normalize,
+        ).and_raise(StandardError.new("boom"))
         expect { post_with_visual_notes(visual_notes: valid_visual_notes) }.to(
           change { topic.reload.posts.count }.by(1),
         )
