@@ -8,6 +8,7 @@ import { service } from "@ember/service";
 import { tracked } from "@glimmer/tracking";
 import DButton from "discourse/ui-kit/d-button";
 import DModal from "discourse/ui-kit/d-modal";
+import { ajax } from "discourse/lib/ajax";
 import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { getURLWithCDN } from "discourse/lib/get-url";
 import Composer from "discourse/models/composer";
@@ -3216,8 +3217,22 @@ export default class NpnCritiqueReplyModal extends Component {
   // the same low-level annotation restore (`_restoreAnnotations`)
   // handles both flows. Read state from the post's serializer
   // attribute + parsed raw rather than from the drafts endpoint.
-  // No async — the post JSON was loaded by the caller before
-  // showing the modal.
+  //
+  // Mostly synchronous: the post's `npn_visual_notes` serializer
+  // attribute and id are already present on the model that the
+  // post-menu button hands us. The post's `raw` field is NOT
+  // always populated though — Discourse only serializes `cooked`
+  // (HTML) into the topic post stream by default, and `raw` is
+  // typically loaded lazily for editing flows. So:
+  //
+  //   • If `post.raw` is already populated (immediately after
+  //     creating the post in the same session, or after the user
+  //     hits the standard composer Edit), we use it directly.
+  //   • Otherwise we kick off an async fetch of /posts/:id.json
+  //     and patch `this.critiqueText` once the response arrives.
+  //     This is the page-refresh case — without the fetch, the
+  //     textarea would open empty even though the post body is
+  //     intact server-side.
   _initializeFromPost() {
     const post = this.editingPost;
     if (!post) {
@@ -3230,7 +3245,17 @@ export default class NpnCritiqueReplyModal extends Component {
     // by `_composeVisualNotesRaw`. Split on the image-markdown
     // line and take everything after it. Falls back to the whole
     // raw if the format doesn't match (e.g. a hand-edited post).
-    this.critiqueText = this._parseCritiqueTextFromRaw(post.raw);
+    if (post.raw) {
+      this.critiqueText = this._parseCritiqueTextFromRaw(post.raw);
+    } else {
+      // Fire-and-forget. Modal renders with an empty textarea for
+      // the brief window between open and the fetch resolving;
+      // typical RTT < 200ms so the user just sees the text
+      // populate. If the fetch fails we leave the textarea empty
+      // (the user can retype or close); we don't want to throw a
+      // modal-level error for a request that may succeed on retry.
+      this._loadPostRawForEdit(post);
+    }
 
     if (payload) {
       const versionKey = payload?.source?.image_version_key ?? null;
@@ -3239,6 +3264,44 @@ export default class NpnCritiqueReplyModal extends Component {
         this._selectedVersionInitialized = true;
       }
       this._restoreAnnotations(payload.annotations, versionKey);
+    }
+  }
+
+  // Async helper: fetch the post's raw markdown over the network
+  // when it wasn't present on the post model (the page-refresh
+  // edit case). On success, patch both the post model and the
+  // tracked critiqueText so the textarea fills in. Guards against
+  // modal teardown mid-flight via `_destroyed`.
+  async _loadPostRawForEdit(post) {
+    try {
+      const json = await ajax(`/posts/${post.id}.json`);
+      if (this._destroyed) {
+        return;
+      }
+      // Patch the in-memory post model so subsequent reads (and the
+      // hand-edited-body fallback path in _parseCritiqueTextFromRaw)
+      // see the freshly-loaded raw.
+      if (json?.raw) {
+        post.raw = json.raw;
+      }
+      const text = this._parseCritiqueTextFromRaw(json?.raw ?? "");
+      // Only adopt the fetched text if the user hasn't started
+      // typing while the request was in flight. Typing during the
+      // 100-200ms RTT is unlikely but real on slow connections.
+      if (!this.critiqueText) {
+        this.critiqueText = text;
+      }
+    } catch (e) {
+      // Soft failure — leave the textarea empty. Surface via the
+      // debug log so QA can spot it; we deliberately don't throw a
+      // modal banner because the user can still type new content.
+      if (this.siteSettings.npn_critique_reply_debug_enabled) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[npn-critique-reply] failed to load post raw for edit",
+          { postId: post.id, error: e }
+        );
+      }
     }
   }
 
