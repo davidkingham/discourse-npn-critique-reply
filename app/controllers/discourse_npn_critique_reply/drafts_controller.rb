@@ -29,6 +29,12 @@ module DiscourseNpnCritiqueReply
       else
         render json: { draft: nil }
       end
+    rescue => e
+      Rails.logger.error(
+        "[npn-critique-reply] drafts#show raised " \
+          "#{e.class}: #{e.message}\n#{e.backtrace.first(20).join("\n")}",
+      )
+      raise
     end
 
     # PUT /npn-critique-reply/topics/:topic_id/draft
@@ -39,6 +45,18 @@ module DiscourseNpnCritiqueReply
         DraftNormalizer.normalize(payload, topic_id: @topic.id, user_id: current_user.id)
       saved = DraftStore.save(user_id: current_user.id, topic_id: @topic.id, payload: normalized)
       render json: { draft: saved }
+    rescue => e
+      # Discourse's default error wrapper turns this into a generic 500
+      # without a backtrace in development.log. Log the full class +
+      # message + first 20 frames here so a recurrence shows up in
+      # the log instead of "Completed 500 Internal Server Error" with
+      # no other clue. Re-raise so the framework still returns 500 —
+      # this is purely a diagnostic shim.
+      Rails.logger.error(
+        "[npn-critique-reply] drafts#update raised " \
+          "#{e.class}: #{e.message}\n#{e.backtrace.first(20).join("\n")}",
+      )
+      raise
     end
 
     # DELETE /npn-critique-reply/topics/:topic_id/draft
