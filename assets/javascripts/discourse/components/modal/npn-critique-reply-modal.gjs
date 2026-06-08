@@ -192,9 +192,6 @@ export default class NpnCritiqueReplyModal extends Component {
   //                         for toolbar purposes (mutex with pin select)
   //   visualMode         — null | "numbered_notes" | "crop_suggestion"
   //                         Exactly one tool active at a time per spec.
-  //   _cropStarterInserted — true after we've appended the textarea
-  //                         starter line once; prevents re-inserting
-  //                         it on Replace crop.
   @tracked notes = [];
   @tracked selectedPinNumber = null;
   @tracked crop = null;
@@ -205,7 +202,6 @@ export default class NpnCritiqueReplyModal extends Component {
   // constraint. The Konva stage owns the geometry snapping; the modal
   // just tracks the user's intent and propagates it.
   @tracked cropAspectRatio = "free";
-  _cropStarterInserted = false;
 
   // Eye-path / Visual Flow tool state. `eyePaths` is an array of
   // `{ id, label, points: [{ number, xPct, yPct }], noteText? }`.
@@ -281,6 +277,10 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked pendingDirectionArrowPopoverText = "";
   @tracked pendingRelationshipArrowPopover = null;
   @tracked pendingRelationshipArrowPopoverText = "";
+  // Crop popover — anchors at the centre of the crop rectangle so the
+  // textbox doesn't visually compete with the dimmed area outside it.
+  @tracked pendingCropPopover = null;
+  @tracked pendingCropPopoverText = "";
 
   // When set, a pin was just placed and the inline note popover is
   // open near it. Holds { number, xPct, yPct } — the same shape the
@@ -979,6 +979,8 @@ export default class NpnCritiqueReplyModal extends Component {
     this.pendingDirectionArrowPopoverText = "";
     this.pendingRelationshipArrowPopover = null;
     this.pendingRelationshipArrowPopoverText = "";
+    this.pendingCropPopover = null;
+    this.pendingCropPopoverText = "";
   }
 
   // -- Visual Notes ------------------------------------------------------
@@ -1091,6 +1093,10 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.pendingEyePathPopover && mode !== "eye_path") {
       this.pendingEyePathPopover = null;
       this.pendingEyePathPopoverText = "";
+    }
+    if (this.pendingCropPopover && mode !== "crop_suggestion") {
+      this.pendingCropPopover = null;
+      this.pendingCropPopoverText = "";
     }
     if (
       this.pendingDirectionArrowPopover &&
@@ -1231,20 +1237,30 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cropSelected = true;
     this.selectedPinNumber = null;
 
-    // Insert the starter text once per modal session. Replacing crop
-    // (clear + redraw) does NOT re-insert.
-    if (!this._cropStarterInserted) {
-      const starter = i18n("npn_critique_reply.visual_notes.crop_starter");
-      this._appendToTextarea(starter);
-      this._cropStarterInserted = true;
+    // Open the description popover anchored at the centre of the new
+    // crop. Mirrors the attention-pull / strong-area / arrow flow:
+    // user types optional text → confirm → `[CROP] {text}` appended.
+    // Skip closes without writing anything (the styled [CROP] pill
+    // in the cooked post acts as the marker by itself if the user
+    // doesn't type a description).
+    //
+    // If a stale popover from a previous crop is still open, treat
+    // this new add as implicit Skip on it.
+    if (this.pendingCropPopover) {
+      this.pendingCropPopover = null;
+      this.pendingCropPopoverText = "";
     }
+    this.pendingCropPopover = {
+      anchorXPct: xPct + widthPct / 2,
+      anchorYPct: yPct + heightPct / 2,
+    };
+    this.pendingCropPopoverText = "";
 
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] add-crop", {
         topicId: this.topic?.id,
         crop: this.crop,
-        starterInsertedThisSession: this._cropStarterInserted,
       });
     }
   }
@@ -2428,6 +2444,48 @@ export default class NpnCritiqueReplyModal extends Component {
   skipPendingEyePathPopover() {
     this.pendingEyePathPopover = null;
     this.pendingEyePathPopoverText = "";
+  }
+
+  // ---- Crop popover -------------------------------------------------
+  //
+  // Fires once each time the user creates a crop. Confirms append
+  // `[CROP] {text}` to the textarea; Skip closes without appending.
+  // No-text Confirm appends bare `[CROP]` so the styled pill still
+  // anchors the prose. Mirrors the other tools' popover pattern so
+  // the workflow stays consistent across all annotation kinds.
+  @action
+  updatePendingCropPopoverText(event) {
+    this.pendingCropPopoverText = event?.target?.value ?? "";
+  }
+
+  @action
+  confirmPendingCropPopover() {
+    if (!this.pendingCropPopover) {
+      return;
+    }
+    const text = this.pendingCropPopoverText.trim();
+    if (text) {
+      const line = i18n(
+        "npn_critique_reply.visual_notes.crop_line_template",
+        { text }
+      );
+      this._appendToTextarea(line);
+    } else {
+      // No description typed → still drop the bare token so the
+      // cooked post gets the styled [CROP] pill. The user can fill
+      // in the surrounding prose later.
+      this._appendToTextarea(
+        i18n("npn_critique_reply.visual_notes.crop_starter")
+      );
+    }
+    this.pendingCropPopover = null;
+    this.pendingCropPopoverText = "";
+  }
+
+  @action
+  skipPendingCropPopover() {
+    this.pendingCropPopover = null;
+    this.pendingCropPopoverText = "";
   }
 
   get selectedPin() {
@@ -4031,6 +4089,11 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onAddCrop={{this.addCrop}}
                 @onSelectCrop={{this.selectCrop}}
                 @onUpdateCrop={{this.updateCrop}}
+                @pendingCropPopover={{this.pendingCropPopover}}
+                @pendingCropPopoverText={{this.pendingCropPopoverText}}
+                @onPendingCropPopoverInput={{this.updatePendingCropPopoverText}}
+                @onConfirmPendingCropPopover={{this.confirmPendingCropPopover}}
+                @onSkipPendingCropPopover={{this.skipPendingCropPopover}}
                 @eyePaths={{this.eyePaths}}
                 @selectedEyePathId={{this.selectedEyePathId}}
                 @onAddEyePathPoint={{this.addEyePathPoint}}

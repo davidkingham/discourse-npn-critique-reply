@@ -435,6 +435,17 @@ export default class NpnCritiqueImageReference extends Component {
   }
 
   @action
+  handleCropPopoverKeydown(event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      this.args.onConfirmPendingCropPopover?.();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      this.args.onSkipPendingCropPopover?.();
+    }
+  }
+
+  @action
   handleDirectionArrowPopoverKeydown(event) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -796,6 +807,62 @@ export default class NpnCritiqueImageReference extends Component {
                   class="btn btn-flat btn-small
                     npn-critique-image-reference__note-popover-skip"
                   {{on "click" @onSkipPendingEyePathPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.note_popover_skip"
+                  }}</button>
+              </div>
+            </div>
+          {{/if}}
+
+          {{#if @pendingCropPopover}}
+            <div
+              class="npn-critique-image-reference__note-popover"
+              role="dialog"
+              aria-label={{i18n
+                "npn_critique_reply.visual_notes.crop_popover_dialog_label"
+              }}
+              {{didInsert
+                this.positionNotePopover
+                @pendingCropPopover
+              }}
+              {{didUpdate
+                this.positionNotePopover
+                @pendingCropPopover
+              }}
+            >
+              <div
+                class="npn-critique-image-reference__note-popover-title"
+              >{{i18n
+                  "npn_critique_reply.visual_notes.crop_popover_title"
+                }}</div>
+              <input
+                type="text"
+                class="npn-critique-image-reference__note-popover-input"
+                placeholder={{i18n
+                  "npn_critique_reply.visual_notes.crop_popover_placeholder"
+                }}
+                value={{@pendingCropPopoverText}}
+                autocomplete="off"
+                {{on "input" @onPendingCropPopoverInput}}
+                {{on "keydown" this.handleCropPopoverKeydown}}
+                {{didInsert this.focusNoteInput}}
+              />
+              <div
+                class="npn-critique-image-reference__note-popover-actions"
+              >
+                <button
+                  type="button"
+                  class="btn btn-primary btn-small
+                    npn-critique-image-reference__note-popover-add"
+                  {{on "click" @onConfirmPendingCropPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.note_popover_add"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-flat btn-small
+                    npn-critique-image-reference__note-popover-skip"
+                  {{on "click" @onSkipPendingCropPopover}}
                 >{{i18n
                     "npn_critique_reply.visual_notes.note_popover_skip"
                   }}</button>

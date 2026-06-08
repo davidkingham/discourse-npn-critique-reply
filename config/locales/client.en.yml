@@ -196,14 +196,21 @@ en:
         crop_remove: "Remove crop"
         crop_replace: "Replace crop"
         crop_a11y_label: "Crop suggestion"
-        # Inserted into the textarea once per modal session when the
-        # user creates a crop. Just the [CROP] token — the cooked-
-        # post decorator styles it as a dark-grey pill so the prose
-        # connects visually to the on-image crop. No scaffolding
-        # sentence (the previous "One crop possibility..." starter
-        # was unnecessarily prescriptive about how the critic should
-        # phrase the thought).
+        # Inserted into the textarea when the user creates a crop and
+        # either typed nothing in the popover before confirming or
+        # took no action. Just the [CROP] token — the cooked-post
+        # decorator styles it as a dark-grey pill so the prose
+        # connects visually to the on-image crop.
         crop_starter: "[CROP]"
+        # Textarea line appended when the user types a description in
+        # the crop popover and clicks Add note: "[CROP] {text}".
+        # Parallel to attention_pull_line_template etc.
+        crop_line_template: "[CROP] %{text}"
+        # Popover that opens after the user drags a crop rectangle
+        # (mirrors the Attention Pull / Strong Area / Arrow flow).
+        crop_popover_title: "Crop suggestion"
+        crop_popover_dialog_label: "Add a note for this crop suggestion"
+        crop_popover_placeholder: "Why this crop?"
         crop_ratio_label: "Aspect ratio"
         crop_ratio_free: "Free"
         # Eye path / Visual Flow tool
