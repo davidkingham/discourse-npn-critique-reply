@@ -41,11 +41,18 @@ en:
         image_reworks: "Image reworks"
         welcome: "Welcome"
         not_requested: "Not requested"
-        no_request_found: "No specific critique request was found for this topic. The prompts below offer a general starting point."
-        suggested_prompts: "Suggested prompts"
+        no_request_found: "No specific critique request was found for this topic. The questions below are a general starting point."
+        # Questions-to-consider section. Prompts are reference material
+        # only — nothing here ever inserts text into the critic's
+        # textarea. The default trio adapts to the photographer's
+        # requested critique style and feedback focus; "More ideas"
+        # opens a grouped bank of additional questions to think with.
+        questions_to_consider: "Questions to consider"
+        more_ideas_show: "More ideas"
+        more_ideas_hide: "Hide more ideas"
         recommended: "Recommended"
         your_critique: "Your critique"
-        textarea_placeholder: "Write your critique here, or use the prompts above as a starting point."
+        textarea_placeholder: "Write your critique here in your own voice."
         reference_image: "Image & Visual Notes"
         image_alt: "Image being critiqued"
         image_alt_with_title: "Image being critiqued: %{title}"
@@ -54,14 +61,6 @@ en:
         version_selector_label: "Choose image version"
         showing_version: "Showing %{label}"
         revision_note: "Revision note: %{note}"
-        start_with_prompts: "Start with these prompts"
-        use_all_prompts: "Use all prompts"
-        hide_prompts: "Hide prompts"
-        show_prompts: "Show prompts"
-        show_all_prompts: "Show all prompts"
-        show_fewer_prompts: "Show fewer prompts"
-        insert_prompt_title: "Insert this prompt's starter into your critique"
-        insert_prompt_aria: "Insert prompt: %{question}"
         post_critique: "Post Critique"
         posting: "Posting…"
         # Edit-existing-critique flow. Same modal, primary action

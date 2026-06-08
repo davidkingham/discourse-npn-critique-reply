@@ -20,7 +20,7 @@ import {
   critiqueStyleLabel,
   feedbackFocusLabel,
 } from "../../lib/npn-critique-reply-labels";
-import { buildPrompts } from "../../lib/npn-critique-reply-prompts";
+import { getQuestionsToConsider } from "../../lib/npn-critique-reply-prompts";
 import {
   postCritique as postCritiqueRequest,
   updateCritique as updateCritiqueRequest,
@@ -69,10 +69,6 @@ import {
   loadDraft as loadServerDraft,
 } from "../../lib/npn-critique-reply-drafts";
 
-// How many prompts the compact view shows. Tuned so a typical critic
-// sees their textarea above the fold on a 13" laptop modal.
-const COMPACT_PROMPT_COUNT = 3;
-
 // Pipe-separated id lists from Discourse `group_list` settings. Mirrors
 // the helper in the start-button component; kept inline so the two
 // gating layers stay independent.
@@ -87,10 +83,12 @@ function parseIdList(value) {
     .filter((n) => Number.isInteger(n) && n > 0);
 }
 
-// localStorage keys for the two prompt-visibility dimensions. Stable
-// strings — used by the constructor (read) and the toggle actions (write).
-const STORAGE_KEY_HIDDEN = "npn-critique-reply.prompts-hidden";
-const STORAGE_KEY_EXPANDED = "npn-critique-reply.prompts-expanded";
+// localStorage key for the "More ideas" expanded state. The legacy
+// `prompts-hidden` / `prompts-expanded` keys are gone — the section
+// no longer collapses entirely (it's quiet enough to leave open),
+// and the expanded view is now "show More ideas groups" instead of
+// "show all 6 prompts vs first 3."
+const STORAGE_KEY_MORE_IDEAS = "npn-critique-reply.more-ideas-expanded";
 
 // Pull the numeric suffix off an id like "attention_pull_3" → 3. Used
 // only during draft restore so newly-created markers don't collide
@@ -170,15 +168,14 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked _selectedVersionKey = null;
   _selectedVersionInitialized = false;
 
-  // Prompt panel visibility. Two independent dimensions:
-  //   - `promptsHidden`   — entire Suggested Prompts section collapsed.
-  //   - `promptsExpanded` — show all prompts vs the compact first 3.
-  // Both are persisted to localStorage under stable keys so the modal
-  // remembers the critic's preference across opens / page reloads. We
-  // pull `localStorage` reads inside try/catch because some browsing
-  // contexts (Safari private mode, third-party iframes) throw on access.
-  @tracked promptsHidden = false;
-  @tracked promptsExpanded = false;
+  // "More ideas" expansion state for the Questions-to-consider panel.
+  // Single dimension now: false (default) → show only the 3 default
+  // questions; true → also show the grouped "More ideas" bank below.
+  // Persisted to localStorage so the modal remembers the critic's
+  // preference across opens. localStorage reads sit inside a try/catch
+  // because some browsing contexts (Safari private mode, third-party
+  // iframes) throw on access.
+  @tracked moreIdeasExpanded = false;
 
   // Visual Notes / Crop Suggestion state. Modal-local only — never
   // persisted, never sent to the server, never written into the post
@@ -337,8 +334,7 @@ export default class NpnCritiqueReplyModal extends Component {
   constructor() {
     super(...arguments);
     // Restore prompt visibility preferences from a previous session.
-    this.promptsHidden = readBool(STORAGE_KEY_HIDDEN, false);
-    this.promptsExpanded = readBool(STORAGE_KEY_EXPANDED, false);
+    this.moreIdeasExpanded = readBool(STORAGE_KEY_MORE_IDEAS, false);
 
     if (this.isEditing) {
       // Edit flow: restore directly from the post's saved metadata
@@ -526,32 +522,31 @@ export default class NpnCritiqueReplyModal extends Component {
     );
   }
 
-  // ---- Guided prompts --------------------------------------------------
+  // ---- Questions to consider ------------------------------------------
+  //
+  // Thinking aids only. Nothing here ever inserts text into the
+  // textarea — the critic's prose stays entirely in their own voice.
+  // The default trio adapts to the topic's critique style and feedback
+  // focus; the "More ideas" groups are the same expandable bank
+  // across every critique, with two conditional groups (visual notes
+  // when the visual-tools panel is showing, project sequence for
+  // project critiques).
 
-  get prompts() {
-    return buildPrompts(this.metadata);
+  get _questionsToConsider() {
+    return getQuestionsToConsider({
+      critiqueStyle: this.metadata?.critique_style,
+      feedbackFocus: this.metadata?.feedback_focus,
+      submissionType: this.metadata?.submission_type,
+      visualToolsEnabled: this.visualNotesAvailable,
+    });
   }
 
-  // The compact view shows only the first N prompts so the textarea
-  // remains visible above the desktop fold. `promptsExpanded` reveals
-  // the rest. "Use all prompts" always operates on the full list
-  // regardless of what's currently visible.
-  get visiblePrompts() {
-    if (this.promptsExpanded || this.prompts.length <= COMPACT_PROMPT_COUNT) {
-      return this.prompts;
-    }
-    return this.prompts.slice(0, COMPACT_PROMPT_COUNT);
+  get defaultQuestions() {
+    return this._questionsToConsider.defaultQuestions;
   }
 
-  get hasMorePrompts() {
-    return this.prompts.length > COMPACT_PROMPT_COUNT;
-  }
-
-  // All starters joined with paragraph breaks — used by "Use all prompts".
-  // The trailing newline gives the cursor a place to land below the last
-  // starter so the critic can start typing immediately.
-  get formattedAllStarters() {
-    return this.prompts.map((p) => p.starter).join("\n\n") + "\n";
+  get moreIdeasGroups() {
+    return this._questionsToConsider.groups;
   }
 
   // ---- Reply text preparation -----------------------------------------
@@ -2636,43 +2631,14 @@ export default class NpnCritiqueReplyModal extends Component {
     this.errorMessage = null;
   }
 
+  // Questions-to-consider expand/collapse. The compact view shows
+  // the 3 default questions; this toggles the "More ideas" group
+  // bank below. No prompt content is ever inserted into the
+  // textarea — the panel is reference material only.
   @action
-  insertPrompt(prompt) {
-    if (this.siteSettings.npn_critique_reply_debug_enabled) {
-      // eslint-disable-next-line no-console
-      console.info("[npn-critique-reply] insert-prompt", {
-        topicId: this.topic?.id,
-        question: prompt?.question,
-      });
-    }
-    if (!prompt?.starter) {
-      return;
-    }
-    this._appendToTextarea(prompt.starter);
-  }
-
-  @action
-  useAllPrompts() {
-    if (this.siteSettings.npn_critique_reply_debug_enabled) {
-      // eslint-disable-next-line no-console
-      console.info("[npn-critique-reply] use-all-prompts", {
-        topicId: this.topic?.id,
-        promptCount: this.prompts.length,
-      });
-    }
-    this._appendToTextarea(this.formattedAllStarters);
-  }
-
-  @action
-  togglePrompts() {
-    this.promptsHidden = !this.promptsHidden;
-    writeBool(STORAGE_KEY_HIDDEN, this.promptsHidden);
-  }
-
-  @action
-  toggleExpand() {
-    this.promptsExpanded = !this.promptsExpanded;
-    writeBool(STORAGE_KEY_EXPANDED, this.promptsExpanded);
+  toggleMoreIdeas() {
+    this.moreIdeasExpanded = !this.moreIdeasExpanded;
+    writeBool(STORAGE_KEY_MORE_IDEAS, this.moreIdeasExpanded);
   }
 
   @action
@@ -3113,8 +3079,7 @@ export default class NpnCritiqueReplyModal extends Component {
       this.relationshipArrows
         .map((a) => `${a.id}:${a.x1Pct}:${a.y1Pct}:${a.x2Pct}:${a.y2Pct}`)
         .join(","),
-      this.promptsHidden ? 1 : 0,
-      this.promptsExpanded ? 1 : 0,
+      this.moreIdeasExpanded ? 1 : 0,
     ].join("|");
   }
 
@@ -3254,9 +3219,15 @@ export default class NpnCritiqueReplyModal extends Component {
       selected_image_version_key: this.selectedVersionKey ?? null,
       critique_text: this.critiqueText ?? "",
       annotations,
+      // `prompts_expanded` is reused on the wire as the "More ideas
+      // expanded" boolean — same field name (so the Ruby DraftNormalizer
+      // UI_ALLOWED_KEYS whitelist doesn't need to change) but the new
+      // UI binding. `prompts_hidden` is hard-coded false: the panel no
+      // longer collapses entirely, and old in-flight drafts that have
+      // `prompts_hidden: true` simply ignore that field on restore.
       ui: {
-        prompts_hidden: !!this.promptsHidden,
-        prompts_expanded: !!this.promptsExpanded,
+        prompts_hidden: false,
+        prompts_expanded: !!this.moreIdeasExpanded,
       },
     };
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
@@ -3424,11 +3395,12 @@ export default class NpnCritiqueReplyModal extends Component {
       }
 
       if (draft.ui && typeof draft.ui === "object") {
-        if (typeof draft.ui.prompts_hidden === "boolean") {
-          this.promptsHidden = draft.ui.prompts_hidden;
-        }
+        // `prompts_expanded` carries the More-ideas-expanded boolean
+        // on the wire (see `_buildDraftPayload`). `prompts_hidden`
+        // is legacy and intentionally ignored — the section no
+        // longer collapses entirely.
         if (typeof draft.ui.prompts_expanded === "boolean") {
-          this.promptsExpanded = draft.ui.prompts_expanded;
+          this.moreIdeasExpanded = draft.ui.prompts_expanded;
         }
       }
     } finally {
@@ -4483,94 +4455,75 @@ export default class NpnCritiqueReplyModal extends Component {
             {{/if}}
 
             <section
-              class="npn-critique-reply-modal__prompts"
-              aria-labelledby="npn-critique-reply-prompts-heading"
+              class="npn-critique-reply-modal__questions"
+              aria-labelledby="npn-critique-reply-questions-heading"
             >
-              <div class="npn-critique-reply-modal__prompts-header">
-                <h3
-                  id="npn-critique-reply-prompts-heading"
-                  class="npn-critique-reply-modal__prompts-heading"
+              <h3
+                id="npn-critique-reply-questions-heading"
+                class="npn-critique-reply-modal__questions-heading"
+              >
+                {{i18n "npn_critique_reply.modal.questions_to_consider"}}
+              </h3>
+
+              {{! Default trio — adapts to critique style + feedback
+                  focus. Reads as quiet guidance: no buttons, no
+                  insert affordances, just three short questions. }}
+              <ul class="npn-critique-reply-modal__questions-list">
+                {{#each this.defaultQuestions as |question|}}
+                  <li
+                    class="npn-critique-reply-modal__question-item"
+                  >{{question}}</li>
+                {{/each}}
+              </ul>
+
+              {{! Expandable More-ideas panel — same grouped bank
+                  across every topic, with two conditional groups
+                  (visual notes / project sequence). Persists open/
+                  closed via localStorage + draft.ui. Still no
+                  insert affordances; the panel is reference only. }}
+              <button
+                type="button"
+                class="npn-critique-reply-modal__more-ideas-toggle"
+                aria-expanded={{if this.moreIdeasExpanded "true" "false"}}
+                aria-controls="npn-critique-reply-more-ideas"
+                {{on "click" this.toggleMoreIdeas}}
+              >
+                {{#if this.moreIdeasExpanded}}
+                  {{dIcon "chevron-up"}}
+                  <span>{{i18n
+                      "npn_critique_reply.modal.more_ideas_hide"
+                    }}</span>
+                {{else}}
+                  {{dIcon "chevron-down"}}
+                  <span>{{i18n
+                      "npn_critique_reply.modal.more_ideas_show"
+                    }}</span>
+                {{/if}}
+              </button>
+
+              {{#if this.moreIdeasExpanded}}
+                <div
+                  id="npn-critique-reply-more-ideas"
+                  class="npn-critique-reply-modal__more-ideas"
                 >
-                  {{i18n "npn_critique_reply.modal.suggested_prompts"}}
-                </h3>
-                <button
-                  type="button"
-                  class="npn-critique-reply-modal__prompts-toggle"
-                  aria-expanded={{if this.promptsHidden "false" "true"}}
-                  aria-controls="npn-critique-reply-prompts-body"
-                  {{on "click" this.togglePrompts}}
-                >
-                  {{#if this.promptsHidden}}
-                    {{dIcon "eye"}}
-                    <span>{{i18n
-                        "npn_critique_reply.modal.show_prompts"
-                      }}</span>
-                  {{else}}
-                    {{dIcon "eye-slash"}}
-                    <span>{{i18n
-                        "npn_critique_reply.modal.hide_prompts"
-                      }}</span>
-                  {{/if}}
-                </button>
-              </div>
-
-              {{#unless this.promptsHidden}}
-                <div id="npn-critique-reply-prompts-body">
-                  <ul class="npn-critique-reply-modal__prompts-list">
-                    {{#each this.visiblePrompts as |prompt|}}
-                      <li class="npn-critique-reply-modal__prompt-item">
-                        <span
-                          class="npn-critique-reply-modal__prompt-question"
-                        >{{prompt.question}}</span>
-                        <button
-                          type="button"
-                          class="npn-critique-reply-modal__prompt-insert"
-                          aria-label={{i18n
-                            "npn_critique_reply.modal.insert_prompt_aria"
-                            question=prompt.question
-                          }}
-                          title={{i18n
-                            "npn_critique_reply.modal.insert_prompt_title"
-                          }}
-                          disabled={{this.isPosting}}
-                          {{on "click" (fn this.insertPrompt prompt)}}
-                        >
-                          {{dIcon "plus"}}
-                        </button>
-                      </li>
-                    {{/each}}
-                  </ul>
-
-                  {{#if this.hasMorePrompts}}
-                    <button
-                      type="button"
-                      class="npn-critique-reply-modal__prompts-expand"
-                      aria-expanded={{if this.promptsExpanded "true" "false"}}
-                      {{on "click" this.toggleExpand}}
-                    >
-                      {{#if this.promptsExpanded}}
-                        {{dIcon "chevron-up"}}
-                        <span>{{i18n
-                            "npn_critique_reply.modal.show_fewer_prompts"
-                          }}</span>
-                      {{else}}
-                        {{dIcon "chevron-down"}}
-                        <span>{{i18n
-                            "npn_critique_reply.modal.show_all_prompts"
-                          }}</span>
-                      {{/if}}
-                    </button>
-                  {{/if}}
-
-                  <DButton
-                    class="btn-small btn-default npn-critique-reply-modal__use-prompts"
-                    @action={{this.useAllPrompts}}
-                    @icon="far-pen-to-square"
-                    @label="npn_critique_reply.modal.use_all_prompts"
-                    @disabled={{this.isPosting}}
-                  />
+                  {{#each this.moreIdeasGroups as |group|}}
+                    <div class="npn-critique-reply-modal__prompt-group">
+                      <h4
+                        class="npn-critique-reply-modal__prompt-group-title"
+                      >{{group.title}}</h4>
+                      <ul
+                        class="npn-critique-reply-modal__prompt-group-list"
+                      >
+                        {{#each group.prompts as |prompt|}}
+                          <li
+                            class="npn-critique-reply-modal__prompt-group-item"
+                          >{{prompt}}</li>
+                        {{/each}}
+                      </ul>
+                    </div>
+                  {{/each}}
                 </div>
-              {{/unless}}
+              {{/if}}
             </section>
 
             <section class="npn-critique-reply-modal__textarea-section">

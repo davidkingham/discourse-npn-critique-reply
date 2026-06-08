@@ -269,110 +269,45 @@
   // group sits inside a quiet tinted card so it reads as "reference
   // material," not "tasks to complete."
 
-  // The prompts section is a flex column so the inline "Use these prompts"
-  // button below the list can self-align (and shrink to its label width)
-  // without participating in the wider write-column gap.
-  &__prompts {
+  // Questions-to-consider section. Quiet, scannable, no action
+  // affordances — the panel reads as reference material. The
+  // default trio is rendered as a tight bullet list. "More ideas"
+  // sits below as a small disclosure button; when opened, the
+  // grouped prompt bank expands underneath.
+  &__questions {
     margin: 0;
     display: flex;
     flex-direction: column;
+    gap: 0.4em;
   }
 
-  &__prompts-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.5em;
-    margin-bottom: 0.5em;
-  }
-
-  &__prompts-heading {
+  &__questions-heading {
     @extend %npn-critique-section-heading;
-    margin: 0;
+    margin: 0 0 0.1em;
   }
 
-  // Hide/Show prompts toggle — quiet text button beside the heading.
-  // Doesn't look like a CTA, doesn't pull focus.
-  &__prompts-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3em;
-    padding: 0.2em 0.5em;
-    background: transparent;
-    color: var(--primary-medium);
-    border: 1px solid transparent;
-    border-radius: var(--d-border-radius, 4px);
-    font: inherit;
-    font-size: var(--font-down-1);
-    cursor: pointer;
-    transition:
-      background-color 0.12s ease,
-      color 0.12s ease,
-      border-color 0.12s ease;
-
-    .d-icon {
-      font-size: 0.85em;
-      color: currentColor;
-    }
-
-    &:hover,
-    &:focus {
-      color: var(--tertiary);
-      background: var(--tertiary-low);
-    }
-    &:focus-visible {
-      outline: 2px solid var(--tertiary);
-      outline-offset: 2px;
-    }
-  }
-
-  &__prompts-list {
+  &__questions-list {
     margin: 0;
-    padding: 0.5em 0.6em;
-    list-style: none;
-    background: var(--primary-very-low);
-    border: 1px solid var(--primary-low);
-    border-radius: var(--d-border-radius, 4px);
+    padding: 0 0 0 1.1em;
+    list-style: disc;
     color: var(--primary-high);
     font-size: var(--font-down-1);
-    line-height: 1.45;
-  }
+    line-height: 1.5;
 
-  // Each prompt: question on the left, compact + button on the right.
-  // Hover lifts the row slightly so the actionable nature is obvious.
-  &__prompt-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5em;
-    margin: 0;
-    padding: 0.35em 0.5em 0.35em 0.7em;
-    border-left: 2px solid var(--primary-low-mid);
-    border-radius: 2px;
-    transition: background-color 0.12s ease;
-
-    &:hover {
-      background: var(--secondary);
-    }
-
-    + .npn-critique-reply-modal__prompt-item {
-      margin-top: 0.25em;
+    li {
+      margin: 0.15em 0;
     }
   }
 
-  &__prompt-question {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  // Show all / Show fewer expand toggle — quiet text button between the
-  // compact prompt list and the "Use all prompts" action. Same family as
-  // the hide/show toggle in the section header so the two collapse
-  // affordances look related.
-  &__prompts-expand {
+  // Quiet text-button — same family as a Discourse "btn-flat" but
+  // smaller and without a hover background so it reads as a quiet
+  // disclosure rather than a CTA.
+  &__more-ideas-toggle {
+    align-self: flex-start;
     display: inline-flex;
     align-items: center;
     gap: 0.3em;
-    margin-top: 0.5em;
+    margin-top: 0.2em;
     padding: 0.25em 0.55em;
     background: transparent;
     color: var(--primary-medium);
@@ -382,8 +317,8 @@
     font-size: var(--font-down-1);
     cursor: pointer;
     transition:
-      background-color 0.12s ease,
       color 0.12s ease,
+      background-color 0.12s ease,
       border-color 0.12s ease;
 
     .d-icon {
@@ -402,62 +337,40 @@
     }
   }
 
-  // "Use all prompts" — now visually secondary so the per-prompt plus
-  // buttons read as the primary insertion path. Sits with the standard
-  // Discourse btn-default chrome (text on neutral background) and gets
-  // a little top breathing room.
-  &__use-prompts.npn-critique-reply-modal__use-prompts {
-    margin-top: 0.6em;
-    align-self: flex-start;
+  &__more-ideas {
+    margin: 0.4em 0 0;
+    padding: 0.6em 0.75em;
+    background: var(--primary-very-low);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+    color: var(--primary-high);
+    font-size: var(--font-down-1);
+    line-height: 1.45;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7em;
   }
 
-  // Compact plus-button. Tonal-tertiary on hover/focus so it picks up
-  // the same accent family as the rest of the modal helpers.
-  &__prompt-insert {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.85em;
-    height: 1.85em;
-    padding: 0;
-    background: var(--secondary);
-    color: var(--primary-medium);
-    border: 1px solid var(--primary-low-mid);
-    border-radius: 999px;
-    cursor: pointer;
-    transition:
-      background-color 0.12s ease,
-      color 0.12s ease,
-      border-color 0.12s ease;
+  &__prompt-group {
+    margin: 0;
+  }
 
-    .d-icon {
-      font-size: 0.8em;
-      color: currentColor;
-    }
+  &__prompt-group-title {
+    margin: 0 0 0.25em;
+    font-size: var(--font-down-1);
+    font-weight: 600;
+    color: var(--primary-high);
+    letter-spacing: 0.02em;
+  }
 
-    &:hover,
-    &:focus {
-      background: var(--tertiary-low);
-      color: var(--tertiary);
-      border-color: var(--tertiary);
-    }
-    &:focus-visible {
-      outline: 2px solid var(--tertiary);
-      outline-offset: 2px;
-    }
-    &:active {
-      background: var(--tertiary);
-      color: var(--secondary);
-      border-color: var(--tertiary);
-    }
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
+  &__prompt-group-list {
+    margin: 0;
+    padding: 0 0 0 1.1em;
+    list-style: disc;
+    color: var(--primary);
 
-    @media (forced-colors: active) {
-      border-color: ButtonText;
+    li {
+      margin: 0.1em 0;
     }
   }
 
@@ -580,51 +493,9 @@
     }
   }
 
-  // Local action under the prompts list — scoped to the prompts →
-  // textarea handoff, not a peer of the footer actions. Compact tonal
-  // tertiary so it visually belongs to the prompts card above it while
-  // still being recognisably actionable.
-  &__use-prompts.npn-critique-reply-modal__use-prompts {
-    // Sit slightly off the prompts card so the button reads as a follow-on
-    // to that block rather than a header for the textarea below.
-    margin-top: 0.6em;
-    align-self: flex-start; // don't stretch in the flex column
-
-    background: var(--tertiary-low);
-    color: var(--tertiary);
-    border: 1px solid var(--tertiary-low);
-    font-weight: 600;
-    transition:
-      background-color 0.15s ease,
-      border-color 0.15s ease,
-      color 0.15s ease;
-
-    .d-icon {
-      color: currentColor;
-      margin-right: 0.4em;
-    }
-
-    &:hover,
-    &:focus {
-      background: var(--tertiary);
-      color: var(--secondary);
-      border-color: var(--tertiary);
-    }
-    &:focus-visible {
-      outline: 2px solid var(--tertiary);
-      outline-offset: 2px;
-    }
-    &:active {
-      background: var(--tertiary-hover, var(--tertiary));
-      border-color: var(--tertiary-hover, var(--tertiary));
-      color: var(--secondary);
-    }
-  }
-
-  // Secondary accent: same tonal-tertiary treatment as the "Use these
-  // prompts" inline button, sized like a regular footer button. Signals
-  // "intentional helper action" without competing with the primary blue
-  // Post Critique CTA next to it.
+  // Secondary accent: tonal-tertiary, sized like a regular footer
+  // button. Signals "intentional helper action" without competing with
+  // the primary blue Post Critique CTA next to it.
   &__edit-composer.npn-critique-reply-modal__edit-composer {
     background: var(--tertiary-low);
     color: var(--tertiary);
@@ -748,7 +619,8 @@
       gap: 0.15em;
     }
 
-    &__prompts-list {
+    &__questions-list,
+    &__more-ideas {
       font-size: inherit;
     }
 
@@ -767,7 +639,7 @@
     &__request {
       border-left-color: ButtonText;
     }
-    &__prompts-list,
+    &__more-ideas,
     &__textarea {
       border-color: ButtonText;
     }
