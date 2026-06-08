@@ -2991,21 +2991,6 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
-  // ---- Reply Normally --------------------------------------------------
-
-  @action
-  replyNormally() {
-    if (this.hasUnsavedText) {
-      this.dialog.confirm({
-        message: i18n("npn_critique_reply.modal.confirm_reply_normally"),
-        confirmButtonLabel: "npn_critique_reply.modal.reply_normally",
-        didConfirm: () => this._launchComposer({ replyText: null }),
-      });
-      return;
-    }
-    this._launchComposer({ replyText: null });
-  }
-
   // Clear validation as soon as the user types — it's stale once they
   // start editing. Server errors stay visible so the user can read what
   // went wrong while fixing.
@@ -4607,22 +4592,15 @@ export default class NpnCritiqueReplyModal extends Component {
           @disabled={{this.isPosting}}
           @isLoading={{this.isPosting}}
         />
-        {{! Secondary actions only apply to the new-critique flow.
+        {{! Secondary action only applies to the new-critique flow.
             Edit mode posts straight back to the same reply, so the
-            "transfer to composer" / "open a clean reply" escape
-            hatches don't have a sensible analogue. }}
+            "transfer to composer" escape hatch has no analogue. }}
         {{#unless this.isEditing}}
           <DButton
             class="npn-critique-reply-modal__edit-composer"
             @action={{this.editInComposer}}
             @icon="far-pen-to-square"
             @label="npn_critique_reply.modal.edit_in_composer"
-            @disabled={{this.isPosting}}
-          />
-          <DButton
-            class="btn-default npn-critique-reply-modal__reply-normally"
-            @action={{this.replyNormally}}
-            @label="npn_critique_reply.modal.reply_normally"
             @disabled={{this.isPosting}}
           />
         {{/unless}}

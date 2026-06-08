@@ -72,7 +72,6 @@ en:
         updating: "Updating…"
         critique_updated: "Critique updated."
         edit_in_composer: "Edit in Composer"
-        reply_normally: "Reply Normally"
         cancel: "Cancel"
         critique_posted: "Critique posted."
         critique_posted_with_notes: "Critique posted with visual notes."
@@ -100,11 +99,6 @@ en:
         edit_existing_message: "The composer already has text. How would you like to combine it with your critique?"
         edit_append: "Append critique"
         edit_replace: "Replace with critique"
-        # Reply Normally: shown when the user clicks the escape hatch
-        # while the workspace textarea still has unsaved text. The
-        # server-side draft is intentionally NOT cleared by this
-        # flow, so the user can resume from where they left off.
-        confirm_reply_normally: "Open a normal reply? Your critique workspace draft will stay saved for next time."
 
         # Server-side critique workspace drafts. Drafts are stored per
         # user/topic in PluginStore and restore automatically on open.
