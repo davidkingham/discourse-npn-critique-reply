@@ -13,10 +13,26 @@
 // vary `--tertiary`, `--bookmark`, `--success` widely, and we want
 // critiques to read the same regardless of the host theme.
 
-// Pins, eye path, and crop all share the cyan-blue family. Pins are
-// the most prominent of the three (solid filled badge); eye path is
-// "elegant and directional"; crop is the quietest large annotation.
+// Pins and eye path share the cyan-blue family. Pins are the most
+// prominent (solid filled badge); eye path is "elegant and
+// directional". Crop has its own pair (see CROP_EDITOR_* and
+// CROP_EXPORT_* below) — it switches between an active blue-gray
+// in the editor and a quieter neutral gray in the finished JPEG.
 export const ANNOTATION_BLUE = "#3e7ea3";
+
+// Crop — editor styling. Muted blue-gray so the perimeter still
+// reads as an active editable tool inside the modal, but pulled a
+// touch away from the eye-path cyan-blue so the two don't trade
+// identity. Avoids the brighter cyan that read as "highlight" /
+// "selection" rather than "crop frame."
+export const CROP_EDITOR_BLUE_GRAY = "#4a8fa6";
+
+// Crop — exported JPEG styling. Neutral medium gray so the crop
+// boundary reads as a finished framing suggestion, not as an
+// active editing tool. Distinct from EVERY other annotation
+// colour so the crop fades back into the photograph while the
+// notes / arrows / areas remain the focal annotations.
+export const CROP_EXPORT_GRAY = "#9a9a9a";
 
 // Attention Pull — muted ochre. Distinct from the pin/eye/crop blue
 // and not as alarm-bell-bright as a saturated orange.

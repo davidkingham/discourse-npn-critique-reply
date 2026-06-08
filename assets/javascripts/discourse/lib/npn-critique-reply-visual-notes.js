@@ -1,12 +1,13 @@
 import { ajax } from "discourse/lib/ajax";
 import {
   ANNOTATION_BLUE,
-  DIRECTION_ARROW_INDIGO,
-  RELATIONSHIP_TAUPE,
   ANNOTATION_HALO,
   AREA_FILL_OPACITY_UNSELECTED,
   ATTENTION_PULL_OCHRE,
   CROP_DIM_FILL,
+  CROP_EXPORT_GRAY,
+  DIRECTION_ARROW_INDIGO,
+  RELATIONSHIP_TAUPE,
   STRONG_AREA_SAGE,
 } from "./npn-critique-reply-colors";
 
@@ -154,11 +155,14 @@ export function buildVisualNotesCanvas({
   return canvas;
 }
 
-// Draws the crop-suggestion overlay: a semi-transparent dim covering
-// the area OUTSIDE the crop rectangle, plus a visible border around
-// the rectangle itself. The full image stays visible — the dim is a
-// visual cue, not a destructive crop. Pins are drawn on top of this
-// by the caller.
+// Draws the crop-suggestion overlay for the EXPORTED JPEG. The
+// posted image isn't actually cropped — this is a polished framing
+// hint with a quiet neutral-gray boundary plus a soft dim outside
+// the rectangle. Distinct from the editor styling: the modal uses
+// CROP_EDITOR_BLUE_GRAY plus corner brackets + Transformer anchors
+// (active-editing affordances); the export uses CROP_EXPORT_GRAY
+// with NO handles, NO brackets, NO Transformer controls — just the
+// finished framing.
 function drawCropOnCanvas(ctx, crop, width, height) {
   if (!crop) {
     return;
@@ -171,12 +175,15 @@ function drawCropOnCanvas(ctx, crop, width, height) {
     return;
   }
 
-  // Muted blue matches the editor's crop perimeter — see
-  // npn-critique-reply-colors.js.
-  const borderColor = ANNOTATION_BLUE;
+  // Neutral medium gray reads as a "finished framing suggestion"
+  // rather than an active UI element. Reduced stroke (vs. the
+  // editor's 2px perimeter line) keeps the crop visible while it
+  // sits beneath the louder pin / area / arrow annotations in the
+  // visual hierarchy.
+  const borderColor = CROP_EXPORT_GRAY;
   const borderWidth = Math.max(
     2,
-    Math.round(Math.min(width, height) * 0.0035)
+    Math.round(Math.min(width, height) * 0.003)
   );
 
   ctx.save();
@@ -202,7 +209,25 @@ function drawCropOnCanvas(ctx, crop, width, height) {
     ctx.fillRect(cx + cw, cy, width - cx - cw, ch);
   }
 
-  // Border around the crop rectangle.
+  // Optional contrast halo. A 1px white outline behind the gray
+  // boundary so the line stays readable against both very bright
+  // sky-edge crops and very dark ground-edge crops. Drawn first
+  // (under) so the neutral gray stays the visible colour on
+  // typical mid-tone backgrounds.
+  const haloWidth = borderWidth + 1.5;
+  const haloInset = haloWidth / 2;
+  ctx.strokeStyle = ANNOTATION_HALO;
+  ctx.lineWidth = haloWidth;
+  ctx.globalAlpha = 0.45;
+  ctx.strokeRect(
+    cx + haloInset,
+    cy + haloInset,
+    cw - haloWidth,
+    ch - haloWidth
+  );
+  ctx.globalAlpha = 1;
+
+  // Boundary around the crop rectangle.
   ctx.strokeStyle = borderColor;
   ctx.lineWidth = borderWidth;
   // Inset by half the line width so the stroke sits inside the rect

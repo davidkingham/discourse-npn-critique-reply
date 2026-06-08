@@ -7,6 +7,7 @@ import {
   AREA_FILL_OPACITY_UNSELECTED,
   ATTENTION_PULL_OCHRE,
   CROP_DIM_FILL,
+  CROP_EDITOR_BLUE_GRAY,
   DIRECTION_ARROW_INDIGO,
   RELATIONSHIP_TAUPE,
   STRONG_AREA_SAGE,
@@ -2461,10 +2462,15 @@ export async function createAnnotationStage({
       listening: false,
     });
 
-    // Crop shares the muted blue family with pins and eye path, but
-    // it's the quietest large annotation (thinner stroke / lower
-    // dim opacity) so it doesn't overpower the photograph.
-    const tertiary = ANNOTATION_BLUE;
+    // Crop has its own blue-gray tone (CROP_EDITOR_BLUE_GRAY) that
+    // sits between the eye-path cyan-blue and a neutral gray —
+    // distinct enough from eye-path that the two don't trade
+    // identity, blue enough that the crop still reads as an active
+    // editable tool inside the workspace. The exported JPEG uses a
+    // different (neutral gray) tone — see drawCropOnCanvas in
+    // npn-critique-reply-visual-notes.js. Same dim opacity, lower
+    // stroke prominence than pins.
+    const tertiary = CROP_EDITOR_BLUE_GRAY;
     const secondary = ANNOTATION_HALO;
     const canEdit =
       state.visualMode === "crop_suggestion" && state.cropSelected;
@@ -2781,12 +2787,13 @@ export async function createAnnotationStage({
       cropDecorationsRef.destroy();
       cropDecorationsRef = null;
     }
-    // Crop decoration uses the same muted blue as the perimeter
-    // (see npn-critique-reply-colors.js). Bracket / bar thickness at
-    // 8px so the corner / edge handles read as solidly editable
+    // Crop decoration uses the same editor blue-gray as the
+    // perimeter (CROP_EDITOR_BLUE_GRAY) so the brackets/edge bars
+    // read as part of the same active tool. Bracket / bar thickness
+    // at 8px so the corner / edge handles read as solidly editable
     // affordances; arm length extended to 30px so the L's actually
     // reach far enough to read as brackets instead of thick stubs.
-    const stageColor = ANNOTATION_BLUE;
+    const stageColor = CROP_EDITOR_BLUE_GRAY;
     const bracketArm = 30;
     const bracketThick = 8;
     const edgeBarLen = 28;
