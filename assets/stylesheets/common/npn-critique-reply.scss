@@ -896,14 +896,36 @@
   @media (max-width: 720px) {
     // On mobile the image column is no longer height-constrained
     // (it's stacked above the write column and the body scrolls).
-    // Revert to a viewport-based cap so the photo doesn't grow taller
-    // than ~half the screen.
+    // The desktop flex chain that sized the frame against the column
+    // height doesn't apply — the column itself shrinks to its content.
+    // Drop the figure's viewport min-height and let the IMG drive the
+    // frame's height in flow, capped to ~half the viewport so the
+    // photo doesn't dominate the stacked layout.
     flex: 0 0 auto;
+    min-height: 0;
+
     &__frame {
       flex: 0 0 auto;
+      // Without a flow-positioned child to provide height, the frame
+      // would collapse to 0 and the absolutely-positioned IMG would
+      // disappear. Switching to a content-driven layout fixes that.
+      display: block;
     }
     &__img {
+      // Un-absolute the IMG on mobile so it contributes its own
+      // intrinsic height to the frame. `inset: auto` clears the
+      // desktop `inset: 0` letterbox centering.
+      position: static;
+      inset: auto;
+      margin: 0 auto;
+      width: 100%;
+      height: auto;
       max-height: 55vh;
+    }
+    // Overlays stay absolute on top of the (now flow-positioned) IMG.
+    &__overlay,
+    &__konva-container {
+      position: absolute;
     }
   }
 
