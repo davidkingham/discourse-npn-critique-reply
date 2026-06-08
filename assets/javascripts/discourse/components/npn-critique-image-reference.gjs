@@ -916,12 +916,13 @@ export default class NpnCritiqueImageReference extends Component {
           {{/if}}
         </div>
 
-        {{#if (eq @visualMode "numbered_notes")}}
-          <p
-            class="npn-critique-image-reference__hint"
-            aria-live="polite"
-          >{{i18n "npn_critique_reply.visual_notes.hint"}}</p>
-        {{else if (eq @visualMode "crop_suggestion")}}
+        {{! Per-tool hints have moved into the modal's secondary
+            toolbar (right next to where the tool was activated). The
+            crop hint stays here because it changes based on whether
+            a crop exists yet, and it's positioned alongside the
+            aspect-ratio chooser, so the inline-below-image placement
+            still reads naturally. }}
+        {{#if (eq @visualMode "crop_suggestion")}}
           <p
             class="npn-critique-image-reference__hint"
             aria-live="polite"
@@ -931,49 +932,6 @@ export default class NpnCritiqueImageReference extends Component {
                 "npn_critique_reply.visual_notes.crop_present_hint"
                 "npn_critique_reply.visual_notes.crop_hint"
               )
-            }}</p>
-        {{else if (eq @visualMode "eye_path")}}
-          {{! Show the live path count once any paths exist — multi-
-              path support means each entry into eye-path mode starts
-              a new path, so the "N path(s)" framing reads better
-              than a single point count would. Before the first
-              click, fall back to the placement hint. }}
-          <p
-            class="npn-critique-image-reference__hint"
-            aria-live="polite"
-          >{{#if @eyePaths.length}}{{i18n
-                "npn_critique_reply.visual_notes.eye_path_status_n"
-                count=@eyePaths.length
-              }}{{else}}{{i18n
-                "npn_critique_reply.visual_notes.eye_path_hint"
-              }}{{/if}}</p>
-        {{else if (eq @visualMode "attention_pull")}}
-          <p
-            class="npn-critique-image-reference__hint"
-            aria-live="polite"
-          >{{i18n
-              "npn_critique_reply.visual_notes.attention_pull_hint"
-            }}</p>
-        {{else if (eq @visualMode "strong_area")}}
-          <p
-            class="npn-critique-image-reference__hint"
-            aria-live="polite"
-          >{{i18n
-              "npn_critique_reply.visual_notes.strong_area_hint"
-            }}</p>
-        {{else if (eq @visualMode "direction_arrow")}}
-          <p
-            class="npn-critique-image-reference__hint"
-            aria-live="polite"
-          >{{i18n
-              "npn_critique_reply.visual_notes.direction_arrow_hint"
-            }}</p>
-        {{else if (eq @visualMode "relationship_arrow")}}
-          <p
-            class="npn-critique-image-reference__hint"
-            aria-live="polite"
-          >{{i18n
-              "npn_critique_reply.visual_notes.relationship_arrow_hint"
             }}</p>
         {{/if}}
       </figure>

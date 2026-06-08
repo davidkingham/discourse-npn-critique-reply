@@ -1132,6 +1132,20 @@
   min-height: 2.4em;
 }
 
+// Empty-state hint shown in the secondary toolbar before the user
+// creates the first annotation of the active tool. Reads as a
+// quiet caption (muted, italic) so it doesn't compete with the
+// action buttons that replace it once any annotation exists.
+.npn-critique-reply-modal__tool-hint {
+  color: var(--primary-medium);
+  font-style: italic;
+  margin: 0;
+  // Slight vertical padding so the height matches the surrounding
+  // button row and the secondary toolbar's reserved min-height
+  // isn't visibly taller than the hint text.
+  padding: 0.25em 0;
+}
+
 .npn-critique-reply-modal__crop-ratio-label {
   color: var(--primary-medium);
   margin-right: 0.2em;

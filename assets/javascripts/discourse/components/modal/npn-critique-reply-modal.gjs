@@ -3701,27 +3701,34 @@ export default class NpnCritiqueReplyModal extends Component {
                     "npn_critique_reply.visual_notes.toolbar_label"
                   }}
                 >
-                    {{! Pin mode actions. }}
+                    {{! Pin mode. Empty state → "click to add..."
+                        hint; once any pin exists → Remove (when
+                        selected) + Clear. }}
                     {{#if this.noteMode}}
-                      {{#if this.selectedPin}}
-                        <DButton
-                          class="btn-default npn-critique-reply-modal__remove-pin"
-                          @icon="trash-can"
-                          @action={{this.removeSelectedPin}}
-                          @translatedLabel={{i18n
-                            "npn_critique_reply.visual_notes.remove_note"
-                            number=this.selectedPin.number
-                          }}
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
                       {{#if this.notes.length}}
+                        {{#if this.selectedPin}}
+                          <DButton
+                            class="btn-default npn-critique-reply-modal__remove-pin"
+                            @icon="trash-can"
+                            @action={{this.removeSelectedPin}}
+                            @translatedLabel={{i18n
+                              "npn_critique_reply.visual_notes.remove_note"
+                              number=this.selectedPin.number
+                            }}
+                            @disabled={{this.isPosting}}
+                          />
+                        {{/if}}
                         <DButton
                           class="btn-flat npn-critique-reply-modal__clear-notes"
                           @action={{this.clearNotes}}
                           @label="npn_critique_reply.visual_notes.clear"
                           @disabled={{this.isPosting}}
                         />
+                      {{else}}
+                        <p
+                          class="npn-critique-reply-modal__tool-hint"
+                          aria-live="polite"
+                        >{{i18n "npn_critique_reply.visual_notes.hint"}}</p>
                       {{/if}}
                     {{/if}}
 
@@ -3790,126 +3797,157 @@ export default class NpnCritiqueReplyModal extends Component {
                         only shown when 2+ paths exist so it doesn't
                         duplicate the single-path remove. }}
                     {{#if this.eyePathMode}}
-                      {{#if this.focusedEyePath}}
-                        {{#unless this.eyePathsAtMax}}
+                      {{#if this.eyePaths.length}}
+                        {{#if this.focusedEyePath}}
+                          {{#unless this.eyePathsAtMax}}
+                            <DButton
+                              class="btn-default npn-critique-reply-modal__new-eye-path"
+                              @icon="plus"
+                              @action={{this.startNewEyePath}}
+                              @label="npn_critique_reply.visual_notes.eye_path_new"
+                              @title="npn_critique_reply.visual_notes.eye_path_new_title"
+                              @disabled={{this.isPosting}}
+                            />
+                          {{/unless}}
                           <DButton
-                            class="btn-default npn-critique-reply-modal__new-eye-path"
-                            @icon="plus"
-                            @action={{this.startNewEyePath}}
-                            @label="npn_critique_reply.visual_notes.eye_path_new"
-                            @title="npn_critique_reply.visual_notes.eye_path_new_title"
+                            class="btn-default npn-critique-reply-modal__remove-pin"
+                            @icon="trash-can"
+                            @action={{this.removeSelectedEyePath}}
+                            @label="npn_critique_reply.visual_notes.eye_path_remove"
                             @disabled={{this.isPosting}}
                           />
-                        {{/unless}}
-                      {{/if}}
-                      {{#if this.focusedEyePath}}
-                        <DButton
-                          class="btn-default npn-critique-reply-modal__remove-pin"
-                          @icon="trash-can"
-                          @action={{this.removeSelectedEyePath}}
-                          @label="npn_critique_reply.visual_notes.eye_path_remove"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
-                      {{#if this.focusedEyePath}}
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__clear-notes"
-                          @action={{this.removeLastEyePathPoint}}
-                          @label="npn_critique_reply.visual_notes.eye_path_remove_last"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
-                      {{#if this.hasMultipleEyePaths}}
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__clear-notes"
-                          @action={{this.clearEyePath}}
-                          @label="npn_critique_reply.visual_notes.eye_path_clear_all"
-                          @disabled={{this.isPosting}}
-                        />
+                          <DButton
+                            class="btn-flat npn-critique-reply-modal__clear-notes"
+                            @action={{this.removeLastEyePathPoint}}
+                            @label="npn_critique_reply.visual_notes.eye_path_remove_last"
+                            @disabled={{this.isPosting}}
+                          />
+                        {{/if}}
+                        {{#if this.hasMultipleEyePaths}}
+                          <DButton
+                            class="btn-flat npn-critique-reply-modal__clear-notes"
+                            @action={{this.clearEyePath}}
+                            @label="npn_critique_reply.visual_notes.eye_path_clear_all"
+                            @disabled={{this.isPosting}}
+                          />
+                        {{/if}}
+                      {{else}}
+                        <p
+                          class="npn-critique-reply-modal__tool-hint"
+                          aria-live="polite"
+                        >{{i18n "npn_critique_reply.visual_notes.eye_path_hint"}}</p>
                       {{/if}}
                     {{/if}}
 
-                    {{! Attention-pull mode actions. }}
+                    {{! Attention-pull mode. }}
                     {{#if this.attentionPullMode}}
-                      {{#if this.selectedAttentionPull}}
-                        <DButton
-                          class="btn-default npn-critique-reply-modal__remove-pin"
-                          @icon="trash-can"
-                          @action={{this.removeSelectedAttentionPull}}
-                          @label="npn_critique_reply.visual_notes.attention_pull_remove"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
                       {{#if this.attentionPulls.length}}
+                        {{#if this.selectedAttentionPull}}
+                          <DButton
+                            class="btn-default npn-critique-reply-modal__remove-pin"
+                            @icon="trash-can"
+                            @action={{this.removeSelectedAttentionPull}}
+                            @label="npn_critique_reply.visual_notes.attention_pull_remove"
+                            @disabled={{this.isPosting}}
+                          />
+                        {{/if}}
                         <DButton
                           class="btn-flat npn-critique-reply-modal__clear-notes"
                           @action={{this.clearAttentionPulls}}
                           @label="npn_critique_reply.visual_notes.attention_pull_clear"
                           @disabled={{this.isPosting}}
                         />
+                      {{else}}
+                        <p
+                          class="npn-critique-reply-modal__tool-hint"
+                          aria-live="polite"
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.attention_pull_hint"
+                          }}</p>
                       {{/if}}
                     {{/if}}
 
-                    {{! Strong-area mode actions. }}
+                    {{! Strong-area mode. }}
                     {{#if this.strongAreaMode}}
-                      {{#if this.selectedStrongArea}}
-                        <DButton
-                          class="btn-default npn-critique-reply-modal__remove-pin"
-                          @icon="trash-can"
-                          @action={{this.removeSelectedStrongArea}}
-                          @label="npn_critique_reply.visual_notes.strong_area_remove"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
                       {{#if this.strongAreas.length}}
+                        {{#if this.selectedStrongArea}}
+                          <DButton
+                            class="btn-default npn-critique-reply-modal__remove-pin"
+                            @icon="trash-can"
+                            @action={{this.removeSelectedStrongArea}}
+                            @label="npn_critique_reply.visual_notes.strong_area_remove"
+                            @disabled={{this.isPosting}}
+                          />
+                        {{/if}}
                         <DButton
                           class="btn-flat npn-critique-reply-modal__clear-notes"
                           @action={{this.clearStrongAreas}}
                           @label="npn_critique_reply.visual_notes.strong_area_clear"
                           @disabled={{this.isPosting}}
                         />
+                      {{else}}
+                        <p
+                          class="npn-critique-reply-modal__tool-hint"
+                          aria-live="polite"
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.strong_area_hint"
+                          }}</p>
                       {{/if}}
                     {{/if}}
 
-                    {{! Direction-arrow mode actions. }}
+                    {{! Direction-arrow mode. }}
                     {{#if this.directionArrowMode}}
-                      {{#if this.selectedDirectionArrow}}
-                        <DButton
-                          class="btn-default npn-critique-reply-modal__remove-pin"
-                          @icon="trash-can"
-                          @action={{this.removeSelectedDirectionArrow}}
-                          @label="npn_critique_reply.visual_notes.direction_arrow_remove"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
                       {{#if this.directionArrows.length}}
+                        {{#if this.selectedDirectionArrow}}
+                          <DButton
+                            class="btn-default npn-critique-reply-modal__remove-pin"
+                            @icon="trash-can"
+                            @action={{this.removeSelectedDirectionArrow}}
+                            @label="npn_critique_reply.visual_notes.direction_arrow_remove"
+                            @disabled={{this.isPosting}}
+                          />
+                        {{/if}}
                         <DButton
                           class="btn-flat npn-critique-reply-modal__clear-notes"
                           @action={{this.clearDirectionArrows}}
                           @label="npn_critique_reply.visual_notes.direction_arrow_clear"
                           @disabled={{this.isPosting}}
                         />
+                      {{else}}
+                        <p
+                          class="npn-critique-reply-modal__tool-hint"
+                          aria-live="polite"
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.direction_arrow_hint"
+                          }}</p>
                       {{/if}}
                     {{/if}}
 
-                    {{! Relationship-arrow mode actions. }}
+                    {{! Relationship-arrow mode. }}
                     {{#if this.relationshipArrowMode}}
-                      {{#if this.selectedRelationshipArrow}}
-                        <DButton
-                          class="btn-default npn-critique-reply-modal__remove-pin"
-                          @icon="trash-can"
-                          @action={{this.removeSelectedRelationshipArrow}}
-                          @label="npn_critique_reply.visual_notes.relationship_arrow_remove"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
                       {{#if this.relationshipArrows.length}}
+                        {{#if this.selectedRelationshipArrow}}
+                          <DButton
+                            class="btn-default npn-critique-reply-modal__remove-pin"
+                            @icon="trash-can"
+                            @action={{this.removeSelectedRelationshipArrow}}
+                            @label="npn_critique_reply.visual_notes.relationship_arrow_remove"
+                            @disabled={{this.isPosting}}
+                          />
+                        {{/if}}
                         <DButton
                           class="btn-flat npn-critique-reply-modal__clear-notes"
                           @action={{this.clearRelationshipArrows}}
                           @label="npn_critique_reply.visual_notes.relationship_arrow_clear"
                           @disabled={{this.isPosting}}
                         />
+                      {{else}}
+                        <p
+                          class="npn-critique-reply-modal__tool-hint"
+                          aria-live="polite"
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.relationship_arrow_hint"
+                          }}</p>
                       {{/if}}
                     {{/if}}
                 </div>
