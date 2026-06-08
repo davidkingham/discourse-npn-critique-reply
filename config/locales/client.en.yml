@@ -196,7 +196,14 @@ en:
         crop_remove: "Remove crop"
         crop_replace: "Replace crop"
         crop_a11y_label: "Crop suggestion"
-        crop_starter: "One crop possibility I'd consider is..."
+        # Inserted into the textarea once per modal session when the
+        # user creates a crop. Just the [CROP] token — the cooked-
+        # post decorator styles it as a dark-grey pill so the prose
+        # connects visually to the on-image crop. No scaffolding
+        # sentence (the previous "One crop possibility..." starter
+        # was unnecessarily prescriptive about how the critic should
+        # phrase the thought).
+        crop_starter: "[CROP]"
         crop_ratio_label: "Aspect ratio"
         crop_ratio_free: "Free"
         # Eye path / Visual Flow tool

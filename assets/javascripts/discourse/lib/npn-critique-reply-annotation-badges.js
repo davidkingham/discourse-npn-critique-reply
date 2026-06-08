@@ -23,6 +23,7 @@
 // and explicit so the SCSS file stays in lock-step.
 const KIND_CSS_SUFFIX = Object.freeze({
   pin: "note",
+  crop: "crop",
   eye_path: "eye-path",
   attention_pull: "attention",
   strong_area: "strong-area",
@@ -54,6 +55,12 @@ export function buildAnnotationLabelMap(annotations) {
       }
       continue;
     }
+    if (annotation.kind === "crop") {
+      // Crop has no per-instance label (one crop per critique).
+      // Fixed CROP token gives the prose a styleable handle.
+      map.set("CROP", suffix);
+      continue;
+    }
     const label = annotation.label;
     if (typeof label === "string" && label.length > 0) {
       map.set(label, suffix);
@@ -79,8 +86,8 @@ const SKIP_ANCESTOR_TAGS = new Set([
 // Single pattern covering every valid token shape — the label-map
 // gate after-the-fact filters out anything that's not in this
 // post's annotations. Numeric form for pins, alpha+number for the
-// other kinds.
-const TOKEN_PATTERN = /\[([1-9]\d{0,2}|[ASDRE]\d{1,3})\]/g;
+// other labelled kinds, fixed `CROP` for the single crop instance.
+const TOKEN_PATTERN = /\[([1-9]\d{0,2}|CROP|[ASDRE]\d{1,3})\]/g;
 
 // Walk every text node under `root` whose ancestors don't include a
 // skip-tag, and hand each one to `replaceTokensInTextNode`. We

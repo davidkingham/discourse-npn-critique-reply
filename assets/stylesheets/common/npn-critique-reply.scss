@@ -1403,12 +1403,12 @@
 
 // Notes ([1], [2], …) — the deepest tone in the family. Rendered
 // as a round filled circle so the inline badge mirrors the on-
-// image numbered pin's geometry. `border-radius: 50%` plus min-
-// width/min-height + flex centring produces a true circle for
-// single-digit numbers and a rounded-ended ellipse for two-digit
-// numbers (still reads as round). Inline-flex (overriding the
-// shared inline-block) keeps the digit vertically centred without
-// the asymmetric padding the other badges use.
+// image numbered pin's geometry. `aspect-ratio: 1` is what forces
+// a true circle: the badge grows horizontally to fit "12" / "99",
+// the aspect ratio then matches the height to the width so the
+// shape stays circular at any digit count. `min-width: 1.7em`
+// keeps single-digit "1" / "2" / etc. from collapsing to a tiny
+// puck.
 .npn-annotation-badge--note {
   background: #2d728f;
   border-radius: 50%;
@@ -1416,10 +1416,26 @@
   align-items: center;
   justify-content: center;
   min-width: 1.7em;
-  min-height: 1.7em;
-  padding: 0 0.35em;
+  aspect-ratio: 1;
+  padding: 0;
   font-weight: 700;
   line-height: 1;
+  // Slight box-sizing tweak so padding doesn't shift the
+  // aspect-ratio calculation off the visible circle.
+  box-sizing: content-box;
+}
+
+// Crop ([CROP]) — dark-grey pill. Single-instance per critique
+// (the schema caps crop at 1), so there's no numeric suffix.
+// Quieter than the other badges and shaped as a wider pill so it
+// reads as "framing context for the rest of the critique" rather
+// than as another labeled callout.
+.npn-annotation-badge--crop {
+  background: #4a4a4a;
+  border-radius: 0.4em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.2em 0.7em;
 }
 
 // Eye Path ([E1], [E2], …) — pale glacial cyan. Quieter than the
