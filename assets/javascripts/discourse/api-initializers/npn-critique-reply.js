@@ -2,6 +2,7 @@ import { apiInitializer } from "discourse/lib/api";
 import NpnCritiqueReplyInvitationPanel from "../components/npn-critique-reply-invitation-panel";
 import NpnCritiqueReplyStartButton from "../components/npn-critique-reply-start-button";
 import NpnEditVisualCritiqueButton from "../components/npn-edit-visual-critique-button";
+import { decorateCriticueReplyAnnotations } from "../lib/npn-critique-reply-annotation-badges";
 
 // Wires up three things:
 //
@@ -38,7 +39,19 @@ import NpnEditVisualCritiqueButton from "../components/npn-edit-visual-critique-
 //    the post has no visual notes or the viewer can't edit), and
 //    once via `shouldRender` inside the button component itself.
 //
-// 4. A staff-only, debug-only console log of the serialized
+// 4. Inline annotation-badge decorator for cooked critique posts.
+//    Walks the post's cooked DOM after Discourse renders the
+//    markdown, finds plain text references like [1], [A1], [S1],
+//    [D1], [R1], [E1] inside paragraphs/list items, and rewrites
+//    them as small styled <span> badges that visually match the
+//    annotations on the visual-notes image. Source of truth for
+//    which labels are valid is the post's `npn_visual_notes`
+//    payload; references not present in the payload stay as plain
+//    text. Code/pre/anchor descendants are skipped so unrelated
+//    `[1]`s in unrelated content are left alone. See
+//    npn-critique-reply-annotation-badges.js for the walker.
+//
+// 5. A staff-only, debug-only console log of the serialized
 //    `npn_critique_reply` metadata on each topic view. Pure verification
 //    aid — no DOM, no UI. Gated on `npn_critique_reply_debug_enabled` AND
 //    staff role.
@@ -52,6 +65,11 @@ export default apiInitializer((api) => {
     "post-article",
     NpnCritiqueReplyInvitationPanel
   );
+
+  api.decorateCookedElement(decorateCriticueReplyAnnotations, {
+    id: "npn-critique-reply-annotation-badges",
+    onlyStream: true,
+  });
 
   // Edit Visual Critique post-menu button.
   //

@@ -1353,3 +1353,110 @@
     border-color: ButtonText;
   }
 }
+
+// =================================================================
+// Inline annotation badges in cooked critique posts.
+// =================================================================
+//
+// Rendered by the decorator in
+// `assets/javascripts/.../npn-critique-reply-annotation-badges.js`.
+// The decorator only fires on posts that carry an `npn_visual_notes`
+// payload and only replaces tokens (`[1]`, `[A1]`, `[E1]`, …) that
+// match an annotation in the payload. Everything else is left as
+// plain text.
+//
+// Hex values mirror the canvas palette in
+// `assets/javascripts/.../npn-critique-reply-colors.js` so the
+// inline badge and the on-image marker read as the same family.
+// Re-stated here (not @imported from the JS module) because Discourse's
+// SCSS pipeline doesn't bundle JS constants — keep them in sync if you
+// change one side.
+
+.npn-annotation-badge {
+  display: inline-block;
+  font-size: 0.82em;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.18em 0.55em;
+  border-radius: 0.55em;
+  // Sit on the text baseline so prose flow stays consistent across
+  // paragraphs and list items. Slight top-bias keeps the badge
+  // visually centered against descenders.
+  vertical-align: baseline;
+  margin: 0 0.08em;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  // The badge IS the visual reference — no underline / link styling
+  // even when wrapped by accidental markdown.
+  text-decoration: none;
+  user-select: text;
+
+  // Soft contrast halo so the badge stays legible against both
+  // light and dark theme backgrounds when it sits next to plain
+  // body text.
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+
+  // Default text colour — white reads on every dark/saturated
+  // background below. The pale variants override to a darker tone.
+  color: #ffffff;
+}
+
+// Notes ([1], [2], …) — the deepest tone in the family. Slightly
+// more pill-rounded than the alpha-labelled badges so a numeric
+// badge reads as the "primary marker" sibling of the on-image pin.
+.npn-annotation-badge--note {
+  background: #2d728f;
+  border-radius: 1em;
+  font-weight: 700;
+  // Pins on the image are the loudest annotation; the inline note
+  // badge is the only badge that bumps font-weight up to match.
+  padding: 0.18em 0.6em;
+}
+
+// Eye Path ([E1], [E2], …) — pale glacial cyan. Quieter than the
+// other badges by design (matches the on-image eye-path being the
+// softest line). Slightly smaller font and a dark text colour
+// because white-on-pale would wash out.
+.npn-annotation-badge--eye-path {
+  background: #8fd3e8;
+  color: #1f3d47;
+  font-size: 0.78em;
+  font-weight: 600;
+}
+
+// Attention ([A1], [A2], …) — muted ochre. Observational tone, not
+// alert-bright; matches ATTENTION_PULL_OCHRE.
+.npn-annotation-badge--attention {
+  background: #c2a15a;
+}
+
+// Strong Area ([S1], [S2], …) — muted sage-teal. Supportive tone,
+// matches STRONG_AREA_SAGE.
+.npn-annotation-badge--strong-area {
+  background: #8fb9a7;
+}
+
+// Direction Arrow ([D1], [D2], …) — muted blue-violet / periwinkle.
+// Matches DIRECTION_ARROW_INDIGO.
+.npn-annotation-badge--direction {
+  background: #7478ad;
+}
+
+// Relationship ([R1], [R2], …) — warm stone / taupe. Lightest of
+// the non-pale-cyan badges, so a darker text colour reads better.
+.npn-annotation-badge--relationship {
+  background: #bdb49f;
+  color: #3a342a;
+}
+
+// Forced-colors (Windows High Contrast Mode) — drop the painted
+// background and let the system handle contrast. Keeps the badge
+// legible without forcing OS colours onto our palette.
+@media (forced-colors: active) {
+  .npn-annotation-badge {
+    background: ButtonFace !important;
+    color: ButtonText !important;
+    border: 1px solid ButtonText;
+    box-shadow: none;
+  }
+}
