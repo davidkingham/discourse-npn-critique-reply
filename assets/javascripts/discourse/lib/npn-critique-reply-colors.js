@@ -34,6 +34,14 @@ export const CROP_EDITOR_BLUE_GRAY = "#4a8fa6";
 // notes / arrows / areas remain the focal annotations.
 export const CROP_EXPORT_GRAY = "#9a9a9a";
 
+// Crop — exported JPEG corner markers (the L-brackets) + midpoint
+// edge bars. A lighter gray than the boundary so the corner /
+// midpoint markers read as "frame furniture" sitting on top of
+// the boundary rather than as a competing element. Mirrors the
+// editor's bracket-on-perimeter relationship: brackets are the
+// salient visual element, perimeter is the supporting connector.
+export const CROP_EXPORT_LIGHT_GRAY = "#d4d4d4";
+
 // Attention Pull — muted ochre. Distinct from the pin/eye/crop blue
 // and not as alarm-bell-bright as a saturated orange.
 export const ATTENTION_PULL_OCHRE = "#b8852f";
