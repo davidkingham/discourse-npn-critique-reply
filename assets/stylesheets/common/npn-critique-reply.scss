@@ -2,44 +2,20 @@
 // "Start a Critique" topic-footer button
 // =====================================================================
 
+// Layout only — color/contrast comes from .btn-primary so the button
+// matches the invitation panel's "Start a Critique" CTA and stays
+// visible in both light and dark themes.
 .npn-critique-reply-start.npn-critique-reply-start {
   margin-left: 1em;
   margin-right: 0.25em;
 
-  background: var(--tertiary-low);
-  color: var(--tertiary);
-  border: 1px solid var(--tertiary-low);
-  font-weight: 600;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
-
   .d-icon {
-    color: currentColor;
     margin-right: 0.4em;
-  }
-
-  &:hover,
-  &:focus {
-    background: var(--tertiary);
-    color: var(--secondary);
-    border-color: var(--tertiary);
   }
 
   &:focus-visible {
     outline: 2px solid var(--tertiary);
     outline-offset: 2px;
-  }
-
-  &:active {
-    background: var(--tertiary-hover, var(--tertiary));
-    border-color: var(--tertiary-hover, var(--tertiary));
-    color: var(--secondary);
-  }
-
-  @media (forced-colors: active) {
-    border-color: ButtonText;
   }
 }
 

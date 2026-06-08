@@ -159,7 +159,7 @@ export default class NpnCritiqueReplyStartButton extends Component {
   <template>
     {{#if this.eligible}}
       <DButton
-        class="btn-default topic-footer-button npn-critique-reply-start"
+        class="btn-primary topic-footer-button npn-critique-reply-start"
         @action={{this.start}}
         @icon="far-pen-to-square"
         @translatedLabel={{this.label}}
