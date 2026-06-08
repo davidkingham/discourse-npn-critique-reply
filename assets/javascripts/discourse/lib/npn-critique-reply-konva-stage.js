@@ -2092,6 +2092,42 @@ export async function createAnnotationStage({
         drawArrowhead(live.x1, live.y1, -ux, -uy);
       }
 
+      // Endpoint dots — only visible when this arrow is selected.
+      // Match the eye-path start dot's sizing/style so the
+      // "draggable handle here" affordance reads the same across
+      // tools. Drawn AFTER the arrowheads so the dot sits on top
+      // of the head's solid fill; halo extends slightly past the
+      // arrowhead's edges, giving the endpoint a clear "grab me"
+      // marker.
+      if (isSelected) {
+        const dotR = Math.max(4, Math.round(shortEdge * 0.0065));
+        const dotHaloR = dotR + Math.max(2, Math.round(dotR * 0.4));
+        for (const [px, py] of [
+          [live.x1, live.y1],
+          [live.x2, live.y2],
+        ]) {
+          decorationsGroup.add(
+            new Konva.Circle({
+              x: px,
+              y: py,
+              radius: dotHaloR,
+              fill: secondary,
+              opacity: 0.9,
+              listening: false,
+            })
+          );
+          decorationsGroup.add(
+            new Konva.Circle({
+              x: px,
+              y: py,
+              radius: dotR,
+              fill: tertiary,
+              listening: false,
+            })
+          );
+        }
+      }
+
       // Label badge near midpoint.
       if (arrow.label) {
         const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
