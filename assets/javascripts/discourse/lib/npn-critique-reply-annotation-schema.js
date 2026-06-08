@@ -2170,6 +2170,185 @@ export function runSelfCheck() {
     );
   });
 
+  // ----- Direction-arrow + Relationship-arrow tests ----------------
+
+  t("normalizeDirectionArrowAnnotation: clamps + drops tiny drags", () => {
+    const clamped = normalizeDirectionArrowAnnotation({
+      x1_pct: -5,
+      y1_pct: 110,
+      x2_pct: 50,
+      y2_pct: 50,
+    });
+    const tooSmall = normalizeDirectionArrowAnnotation({
+      x1_pct: 50,
+      y1_pct: 50,
+      x2_pct: 51,
+      y2_pct: 51,
+    });
+    return (
+      clamped !== null &&
+      clamped.x1_pct === 0 &&
+      clamped.y1_pct === 100 &&
+      tooSmall === null
+    );
+  });
+
+  t("directionArrowsToAnnotations: assigns sequential D-labels", () => {
+    const arrows = [
+      { x1Pct: 10, y1Pct: 10, x2Pct: 90, y2Pct: 50 },
+      { x1Pct: 5, y1Pct: 80, x2Pct: 60, y2Pct: 20 },
+      { x1Pct: 30, y1Pct: 40, x2Pct: 70, y2Pct: 70 },
+    ];
+    const out = directionArrowsToAnnotations(arrows);
+    return (
+      out.length === 3 &&
+      out.map((a) => a.label).join(",") === "D1,D2,D3" &&
+      out.every((a) => a.kind === "direction_arrow")
+    );
+  });
+
+  t("nextDirectionArrowLabel: max-suffix+1 + handles gaps", () => {
+    return (
+      nextDirectionArrowLabel(["D1", "D2", "D3"]) === "D4" &&
+      nextDirectionArrowLabel(["D1", "D7", "D3"]) === "D8" &&
+      nextDirectionArrowLabel([]) === "D1" &&
+      nextDirectionArrowLabel(["junk", "X1"]) === "D1"
+    );
+  });
+
+  t("relationshipArrowsToAnnotations: assigns sequential R-labels", () => {
+    const arrows = [
+      { x1Pct: 10, y1Pct: 10, x2Pct: 90, y2Pct: 50 },
+      { x1Pct: 20, y1Pct: 80, x2Pct: 80, y2Pct: 20 },
+    ];
+    const out = relationshipArrowsToAnnotations(arrows);
+    return (
+      out.length === 2 &&
+      out.map((a) => a.label).join(",") === "R1,R2" &&
+      out.every((a) => a.kind === "relationship_arrow")
+    );
+  });
+
+  t("nextRelationshipArrowLabel: max-suffix+1", () => {
+    return (
+      nextRelationshipArrowLabel(["R1", "R2"]) === "R3" &&
+      nextRelationshipArrowLabel(["R1", "R5"]) === "R6" &&
+      nextRelationshipArrowLabel([]) === "R1"
+    );
+  });
+
+  t("normalizeAnnotationsArray: enforces per-kind arrow caps", () => {
+    const tooMany = Array.from(
+      { length: MAX_DIRECTION_ARROW_COUNT + 3 },
+      (_, i) => ({
+        kind: "direction_arrow",
+        x1_pct: 10,
+        y1_pct: 10,
+        x2_pct: 60 + (i % 30),
+        y2_pct: 60,
+      })
+    );
+    const payload = normalizeVisualAnnotationPayload({ annotations: tooMany });
+    const directionArrows = payload.annotations.filter(
+      (a) => a.kind === "direction_arrow"
+    );
+    return directionArrows.length === MAX_DIRECTION_ARROW_COUNT;
+  });
+
+  t("normalizeAnnotationsArray: regenerates duplicate arrow labels", () => {
+    // Two direction arrows with the same label D1 — second should
+    // get regenerated to D2 (max-suffix+1 of the already-emitted set).
+    const payload = normalizeVisualAnnotationPayload({
+      annotations: [
+        {
+          id: "a",
+          kind: "direction_arrow",
+          label: "D1",
+          x1_pct: 10,
+          y1_pct: 10,
+          x2_pct: 50,
+          y2_pct: 50,
+        },
+        {
+          id: "b",
+          kind: "direction_arrow",
+          label: "D1",
+          x1_pct: 60,
+          y1_pct: 60,
+          x2_pct: 90,
+          y2_pct: 90,
+        },
+      ],
+    });
+    const arrows = payload.annotations.filter(
+      (a) => a.kind === "direction_arrow"
+    );
+    return (
+      arrows.length === 2 &&
+      arrows[0].label === "D1" &&
+      arrows[1].label === "D2"
+    );
+  });
+
+  t("buildVisualAnnotationPayload: arrows coexist with every kind", () => {
+    const payload = buildVisualAnnotationPayload({
+      topic: { id: 1 },
+      selectedVersion: { key: "original" },
+      pins: [{ number: 1, xPct: 10, yPct: 10 }],
+      crop: {
+        xPct: 5,
+        yPct: 5,
+        widthPct: 80,
+        heightPct: 60,
+        aspectRatio: "free",
+      },
+      eyePaths: [
+        {
+          id: "eye_path_1",
+          label: "E1",
+          points: [
+            { number: 1, xPct: 30, yPct: 30 },
+            { number: 2, xPct: 60, yPct: 60 },
+          ],
+        },
+      ],
+      attentionPulls: [{ xPct: 40, yPct: 50, widthPct: 15, heightPct: 12 }],
+      strongAreas: [{ xPct: 70, yPct: 30, widthPct: 12, heightPct: 14 }],
+      directionArrows: [
+        { x1Pct: 5, y1Pct: 5, x2Pct: 45, y2Pct: 45 },
+      ],
+      relationshipArrows: [
+        { x1Pct: 80, y1Pct: 20, x2Pct: 20, y2Pct: 80 },
+      ],
+    });
+    const kinds = payload.annotations.map((a) => a.kind).sort().join(",");
+    return (
+      payload.annotations.length === 7 &&
+      kinds ===
+        "attention_pull,crop,direction_arrow,eye_path,pin,relationship_arrow,strong_area"
+    );
+  });
+
+  t("annotationsToDirectionArrows: round-trips through build + normalize", () => {
+    const built = buildVisualAnnotationPayload({
+      topic: { id: 1 },
+      selectedVersion: { key: "original" },
+      pins: [],
+      directionArrows: [
+        { x1Pct: 10, y1Pct: 20, x2Pct: 70, y2Pct: 80 },
+      ],
+    });
+    const back = annotationsToDirectionArrows(built);
+    return (
+      back.length === 1 &&
+      back[0].x1Pct === 10 &&
+      back[0].y1Pct === 20 &&
+      back[0].x2Pct === 70 &&
+      back[0].y2Pct === 80 &&
+      back[0].label === "D1"
+    );
+  });
+
   const passed = results.filter((r) => r.ok).length;
   const failed = results.length - passed;
   return { passed, failed, results };

@@ -490,8 +490,10 @@ export async function createAnnotationStage({
   onUpdateStrongArea,
   onAddDirectionArrow,
   onSelectDirectionArrow,
+  onUpdateDirectionArrow,
   onAddRelationshipArrow,
   onSelectRelationshipArrow,
+  onUpdateRelationshipArrow,
 } = {}) {
   if (!container) {
     throw new Error("createAnnotationStage: container is required");
@@ -1980,181 +1982,285 @@ export async function createAnnotationStage({
     layer,
     isSelected,
     onClickSelect,
+    onUpdate,
     bothEnds,
     dashed,
   }) {
     const shortEdge = Math.min(sw, sh);
-    const x1 = (arrow.x1Pct / 100) * sw;
-    const y1 = (arrow.y1Pct / 100) * sh;
-    const x2 = (arrow.x2Pct / 100) * sw;
-    const y2 = (arrow.y2Pct / 100) * sh;
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const len = Math.hypot(dx, dy);
-    if (len <= 0) {
-      return;
-    }
-    const ux = dx / len;
-    const uy = dy / len;
-
     const tertiary = ANNOTATION_BLUE;
     const secondary = ANNOTATION_HALO;
     const lineWidth = Math.max(2, Math.round(shortEdge * 0.004));
     const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
     const arrowheadLen = Math.max(10, Math.round(shortEdge * 0.018));
     const dash = dashed
-      ? [Math.max(6, Math.round(shortEdge * 0.012)), Math.max(4, Math.round(shortEdge * 0.008))]
+      ? [
+          Math.max(6, Math.round(shortEdge * 0.012)),
+          Math.max(4, Math.round(shortEdge * 0.008)),
+        ]
       : undefined;
 
-    // The visible line is shortened slightly at each arrowhead end so
-    // the head's solid fill doesn't peek beyond the stroke. Compute
-    // the trimmed endpoints once per side.
-    const trim = arrowheadLen * 0.55;
-    const lineStartX = bothEnds ? x1 + ux * trim : x1;
-    const lineStartY = bothEnds ? y1 + uy * trim : y1;
-    const lineEndX = x2 - ux * trim;
-    const lineEndY = y2 - uy * trim;
+    // Live endpoint coords. Mutated during handle dragmove so a
+    // subsequent drag on the OTHER endpoint reads up-to-date geometry
+    // without rebuilding from `arrow`. Same pattern the eye-path
+    // renderer uses for its waypoint handles.
+    const live = {
+      x1: (arrow.x1Pct / 100) * sw,
+      y1: (arrow.y1Pct / 100) * sh,
+      x2: (arrow.x2Pct / 100) * sw,
+      y2: (arrow.y2Pct / 100) * sh,
+    };
 
-    // Halo (drawn first, sits behind the visible line for readability
-    // over busy image areas).
-    layer.add(
-      new Konva.Line({
-        points: [lineStartX, lineStartY, lineEndX, lineEndY],
-        stroke: secondary,
-        strokeWidth: haloWidth,
-        lineCap: "round",
-        lineJoin: "round",
-        opacity: 0.9,
-        listening: false,
-      })
-    );
-    // Visible stroke.
-    layer.add(
-      new Konva.Line({
-        points: [lineStartX, lineStartY, lineEndX, lineEndY],
-        stroke: tertiary,
-        strokeWidth: lineWidth,
-        lineCap: "round",
-        lineJoin: "round",
-        opacity: isSelected ? 1 : 0.9,
-        dash,
-        listening: false,
-      })
-    );
+    // Per-arrow decoration sub-group. Halo + line + arrowheads + label
+    // + hit-zone all live here so dragmove can destroyChildren on this
+    // group and rebuild without disturbing the endpoint handle nodes
+    // (which sit on the parent layer, outside the sub-group). Listening
+    // is on because the hit-zone needs to fire click events.
+    const decorationsGroup = new Konva.Group({ listening: true });
+    layer.add(decorationsGroup);
 
-    // Arrowhead helper — closed triangle at (tipX, tipY) pointing in
-    // direction (uxLocal, uyLocal). Reused for the tail head on
-    // relationship arrows by flipping the unit vector.
-    function drawArrowhead(tipX, tipY, uxLocal, uyLocal) {
-      const perpX = -uyLocal;
-      const perpY = uxLocal;
-      const baseCx = tipX - uxLocal * arrowheadLen;
-      const baseCy = tipY - uyLocal * arrowheadLen;
-      const baseHalf = arrowheadLen * 0.55;
-      layer.add(
+    function rebuildDecorations() {
+      decorationsGroup.destroyChildren();
+      const dx = live.x2 - live.x1;
+      const dy = live.y2 - live.y1;
+      const len = Math.hypot(dx, dy);
+      if (len <= 0) {
+        return;
+      }
+      const ux = dx / len;
+      const uy = dy / len;
+
+      // Trim the line near arrowheads so the head's solid fill
+      // doesn't peek beyond the line's stroke.
+      const trim = arrowheadLen * 0.55;
+      const lineStartX = bothEnds ? live.x1 + ux * trim : live.x1;
+      const lineStartY = bothEnds ? live.y1 + uy * trim : live.y1;
+      const lineEndX = live.x2 - ux * trim;
+      const lineEndY = live.y2 - uy * trim;
+
+      // Halo first (sits behind the visible line for readability).
+      decorationsGroup.add(
         new Konva.Line({
-          points: [
-            tipX,
-            tipY,
-            baseCx + perpX * baseHalf,
-            baseCy + perpY * baseHalf,
-            baseCx - perpX * baseHalf,
-            baseCy - perpY * baseHalf,
-          ],
-          closed: true,
-          fill: tertiary,
+          points: [lineStartX, lineStartY, lineEndX, lineEndY],
           stroke: secondary,
-          strokeWidth: 1.5,
-          opacity: isSelected ? 1 : 0.95,
+          strokeWidth: haloWidth,
+          lineCap: "round",
+          lineJoin: "round",
+          opacity: 0.9,
           listening: false,
         })
       );
-    }
-    drawArrowhead(x2, y2, ux, uy);
-    if (bothEnds) {
-      drawArrowhead(x1, y1, -ux, -uy);
-    }
+      decorationsGroup.add(
+        new Konva.Line({
+          points: [lineStartX, lineStartY, lineEndX, lineEndY],
+          stroke: tertiary,
+          strokeWidth: lineWidth,
+          lineCap: "round",
+          lineJoin: "round",
+          opacity: isSelected ? 1 : 0.9,
+          dash,
+          listening: false,
+        })
+      );
 
-    // Label badge — placed perpendicular to the line at its midpoint,
-    // on the side that keeps it inside the stage bounds when possible.
-    if (arrow.label) {
-      const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
-      const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
-      const badgeHeight = badgeFontSize + 2 * badgePadding;
-      const badgeOffset = Math.max(6, Math.round(shortEdge * 0.006));
-      const estimatedBadgeW =
-        badgeFontSize * 0.65 * arrow.label.length + 2 * badgePadding;
-      const midX = (x1 + x2) / 2;
-      const midY = (y1 + y2) / 2;
-      // Default perpendicular direction (rotate 90° counterclockwise
-      // from line direction). Flip to the other side if the badge
-      // would overflow the stage.
-      let perpX = -uy;
-      let perpY = ux;
-      let labelX = midX + perpX * badgeOffset;
-      let labelY = midY + perpY * badgeOffset - badgeHeight / 2;
-      if (
-        labelX < 0 ||
-        labelX + estimatedBadgeW > sw ||
-        labelY < 0 ||
-        labelY + badgeHeight > sh
-      ) {
-        perpX = uy;
-        perpY = -ux;
-        labelX = midX + perpX * badgeOffset;
-        labelY = midY + perpY * badgeOffset - badgeHeight / 2;
+      function drawArrowhead(tipX, tipY, uxLocal, uyLocal) {
+        const perpX = -uyLocal;
+        const perpY = uxLocal;
+        const baseCx = tipX - uxLocal * arrowheadLen;
+        const baseCy = tipY - uyLocal * arrowheadLen;
+        const baseHalf = arrowheadLen * 0.55;
+        decorationsGroup.add(
+          new Konva.Line({
+            points: [
+              tipX,
+              tipY,
+              baseCx + perpX * baseHalf,
+              baseCy + perpY * baseHalf,
+              baseCx - perpX * baseHalf,
+              baseCy - perpY * baseHalf,
+            ],
+            closed: true,
+            fill: tertiary,
+            stroke: secondary,
+            strokeWidth: 1.5,
+            opacity: isSelected ? 1 : 0.95,
+            listening: false,
+          })
+        );
       }
-      const labelNode = new Konva.Label({
-        x: labelX,
-        y: labelY,
-        listening: false,
+      drawArrowhead(live.x2, live.y2, ux, uy);
+      if (bothEnds) {
+        drawArrowhead(live.x1, live.y1, -ux, -uy);
+      }
+
+      // Label badge near midpoint.
+      if (arrow.label) {
+        const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+        const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+        const badgeHeight = badgeFontSize + 2 * badgePadding;
+        const badgeOffset = Math.max(6, Math.round(shortEdge * 0.006));
+        const estimatedBadgeW =
+          badgeFontSize * 0.65 * arrow.label.length + 2 * badgePadding;
+        const midX = (live.x1 + live.x2) / 2;
+        const midY = (live.y1 + live.y2) / 2;
+        let perpX = -uy;
+        let perpY = ux;
+        let labelX = midX + perpX * badgeOffset;
+        let labelY = midY + perpY * badgeOffset - badgeHeight / 2;
+        if (
+          labelX < 0 ||
+          labelX + estimatedBadgeW > sw ||
+          labelY < 0 ||
+          labelY + badgeHeight > sh
+        ) {
+          perpX = uy;
+          perpY = -ux;
+          labelX = midX + perpX * badgeOffset;
+          labelY = midY + perpY * badgeOffset - badgeHeight / 2;
+        }
+        const labelNode = new Konva.Label({
+          x: labelX,
+          y: labelY,
+          listening: false,
+        });
+        labelNode.add(
+          new Konva.Tag({
+            fill: tertiary,
+            cornerRadius: 3,
+            stroke: secondary,
+            strokeWidth: 1.5,
+            opacity: isSelected ? 1 : 0.95,
+          })
+        );
+        labelNode.add(
+          new Konva.Text({
+            text: arrow.label,
+            fontSize: badgeFontSize,
+            fontFamily: "sans-serif",
+            fontStyle: "bold",
+            fill: secondary,
+            padding: badgePadding,
+          })
+        );
+        decorationsGroup.add(labelNode);
+      }
+
+      // Invisible fat-stroke hit-zone for click-to-select.
+      const hitWidth = Math.max(18, Math.round(shortEdge * 0.025));
+      const hitLine = new Konva.Line({
+        points: [live.x1, live.y1, live.x2, live.y2],
+        stroke: "black",
+        strokeWidth: hitWidth,
+        opacity: 0,
+        lineCap: "round",
+        lineJoin: "round",
+        listening: true,
+        name: `${arrow.id}-hit`,
       });
-      labelNode.add(
-        new Konva.Tag({
-          fill: tertiary,
-          cornerRadius: 3,
-          stroke: secondary,
-          strokeWidth: 1.5,
-          opacity: isSelected ? 1 : 0.95,
-        })
-      );
-      labelNode.add(
-        new Konva.Text({
-          text: arrow.label,
-          fontSize: badgeFontSize,
-          fontFamily: "sans-serif",
-          fontStyle: "bold",
-          fill: secondary,
-          padding: badgePadding,
-        })
-      );
-      layer.add(labelNode);
+      hitLine.on("mouseenter", () => {
+        container.style.cursor = "pointer";
+      });
+      hitLine.on("mouseleave", () => {
+        applyContainerCursor();
+      });
+      hitLine.on("click tap", (e) => {
+        e.cancelBubble = true;
+        onClickSelect?.(arrow.id);
+      });
+      decorationsGroup.add(hitLine);
     }
 
-    // Invisible fat-stroke hit-zone line for selection clicks. Same
-    // pattern as the eye-path curve hit + crop perimeter hit.
-    const hitWidth = Math.max(18, Math.round(shortEdge * 0.025));
-    const hitLine = new Konva.Line({
-      points: [x1, y1, x2, y2],
-      stroke: "black",
-      strokeWidth: hitWidth,
-      opacity: 0,
-      lineCap: "round",
-      lineJoin: "round",
-      listening: true,
-      name: `${arrow.id}-hit`,
-    });
-    hitLine.on("mouseenter", () => {
-      container.style.cursor = "pointer";
-    });
-    hitLine.on("mouseleave", () => {
-      applyContainerCursor();
-    });
-    hitLine.on("click tap", (e) => {
-      e.cancelBubble = true;
-      onClickSelect?.(arrow.id);
-    });
-    layer.add(hitLine);
+    rebuildDecorations();
+
+    // Endpoint handles for resize/reshape — visible only when this
+    // arrow is the currently-selected one. Sit on the parent LAYER
+    // (not the decoration sub-group) so dragmove's destroyChildren
+    // doesn't tear them down mid-drag. Each handle:
+    //   • updates `live` on dragmove so subsequent rebuilds use the
+    //     latest geometry;
+    //   • emits onUpdate(id, ...percent coords...) on dragend so the
+    //     modal's tracked state stays canonical;
+    //   • clamps to stage bounds via dragBoundFunc.
+    if (isSelected && onUpdate) {
+      const handleR = Math.max(10, Math.round(shortEdge * 0.014));
+      function addHandle(getX, getY, setLive) {
+        const handle = new Konva.Circle({
+          x: getX(),
+          y: getY(),
+          radius: handleR,
+          fill: tertiary,
+          opacity: 0,
+          draggable: true,
+          dragBoundFunc(pos) {
+            return {
+              x: Math.max(0, Math.min(sw, pos.x)),
+              y: Math.max(0, Math.min(sh, pos.y)),
+            };
+          },
+        });
+        handle.on("mouseenter", () => {
+          container.style.cursor = "move";
+        });
+        handle.on("mouseleave", () => {
+          applyContainerCursor();
+        });
+        handle.on("dragmove", () => {
+          setLive(handle.x(), handle.y());
+          rebuildDecorations();
+          annotationsLayer.batchDraw();
+        });
+        handle.on("dragend", () => {
+          const curW = stage.width();
+          const curH = stage.height();
+          if (curW === 0 || curH === 0) {
+            return;
+          }
+          const newX1Pct = Math.max(0, Math.min(100, (live.x1 / curW) * 100));
+          const newY1Pct = Math.max(0, Math.min(100, (live.y1 / curH) * 100));
+          const newX2Pct = Math.max(0, Math.min(100, (live.x2 / curW) * 100));
+          const newY2Pct = Math.max(0, Math.min(100, (live.y2 / curH) * 100));
+          // Defensive: drop a sub-threshold drag so a barely-moved
+          // endpoint doesn't normalize the arrow off-screen on save.
+          // The modal-side onUpdate will also re-clamp, but this
+          // keeps the local closure state coherent.
+          const distance = Math.hypot(
+            newX2Pct - newX1Pct,
+            newY2Pct - newY1Pct
+          );
+          if (distance < MIN_ARROW_DRAG_PCT) {
+            // Snap back to the previous valid geometry.
+            live.x1 = (arrow.x1Pct / 100) * curW;
+            live.y1 = (arrow.y1Pct / 100) * curH;
+            live.x2 = (arrow.x2Pct / 100) * curW;
+            live.y2 = (arrow.y2Pct / 100) * curH;
+            handle.x(getX());
+            handle.y(getY());
+            rebuildDecorations();
+            annotationsLayer.batchDraw();
+            return;
+          }
+          onUpdate(arrow.id, newX1Pct, newY1Pct, newX2Pct, newY2Pct);
+        });
+        layer.add(handle);
+      }
+      // Tail handle (x1/y1).
+      addHandle(
+        () => live.x1,
+        () => live.y1,
+        (x, y) => {
+          live.x1 = x;
+          live.y1 = y;
+        }
+      );
+      // Head handle (x2/y2).
+      addHandle(
+        () => live.x2,
+        () => live.y2,
+        (x, y) => {
+          live.x2 = x;
+          live.y2 = y;
+        }
+      );
+    }
   }
 
   function renderDirectionArrows() {
@@ -2173,6 +2279,17 @@ export async function createAnnotationStage({
         layer: directionArrowLayer,
         isSelected: state.selectedDirectionArrowId === arrow.id,
         onClickSelect: (id) => onSelectDirectionArrow?.(id),
+        onUpdate: (id, x1Pct, y1Pct, x2Pct, y2Pct) => {
+          // Update closure state BEFORE notifying the modal so the
+          // next sync sees identical values and skips a redundant
+          // re-render (parallel to the eye-path handle dragend).
+          state.directionArrows = state.directionArrows.map((a) =>
+            a.id === id
+              ? { ...a, x1Pct, y1Pct, x2Pct, y2Pct }
+              : a
+          );
+          onUpdateDirectionArrow?.(id, x1Pct, y1Pct, x2Pct, y2Pct);
+        },
         bothEnds: false,
         dashed: false,
       });
@@ -2196,6 +2313,14 @@ export async function createAnnotationStage({
         layer: relationshipArrowLayer,
         isSelected: state.selectedRelationshipArrowId === arrow.id,
         onClickSelect: (id) => onSelectRelationshipArrow?.(id),
+        onUpdate: (id, x1Pct, y1Pct, x2Pct, y2Pct) => {
+          state.relationshipArrows = state.relationshipArrows.map((a) =>
+            a.id === id
+              ? { ...a, x1Pct, y1Pct, x2Pct, y2Pct }
+              : a
+          );
+          onUpdateRelationshipArrow?.(id, x1Pct, y1Pct, x2Pct, y2Pct);
+        },
         bothEnds: true,
         // Dashed stroke for relationship arrows — visually distinct
         // from direction arrows, reads as "soft connection" rather

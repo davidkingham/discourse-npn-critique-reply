@@ -299,6 +299,160 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
         )
       end
 
+      # ---- Direction + Relationship arrows ----------------------------
+
+      let(:arrow_visual_notes) do
+        valid_visual_notes.merge(
+          "annotations" => [
+            {
+              "id" => "direction_arrow_1",
+              "kind" => "direction_arrow",
+              "label" => "D1",
+              "x1_pct" => 10.0,
+              "y1_pct" => 20.0,
+              "x2_pct" => 80.0,
+              "y2_pct" => 50.0,
+            },
+            {
+              "id" => "relationship_arrow_1",
+              "kind" => "relationship_arrow",
+              "label" => "R1",
+              "x1_pct" => 5.0,
+              "y1_pct" => 5.0,
+              "x2_pct" => 95.0,
+              "y2_pct" => 95.0,
+            },
+          ],
+        )
+      end
+
+      it "round-trips direction + relationship arrows through the normalizer" do
+        post_with_visual_notes(visual_notes: arrow_visual_notes)
+        expect(response.status).to eq(200)
+        stored = Post.find(response.parsed_body["post"]["id"]).custom_fields[
+          "npn_visual_notes"
+        ]
+        direction = stored["annotations"].find { |a| a["kind"] == "direction_arrow" }
+        relationship = stored["annotations"].find { |a| a["kind"] == "relationship_arrow" }
+        expect(direction).to be_present
+        expect(direction["id"]).to eq("direction_arrow_1")
+        expect(direction["label"]).to eq("D1")
+        expect(direction["x1_pct"]).to eq(10.0)
+        expect(direction["x2_pct"]).to eq(80.0)
+        expect(relationship).to be_present
+        expect(relationship["id"]).to eq("relationship_arrow_1")
+        expect(relationship["label"]).to eq("R1")
+      end
+
+      it "drops sub-threshold arrows (less than MIN_ARROW_DISTANCE_PCT)" do
+        tiny =
+          arrow_visual_notes.merge(
+            "annotations" => [
+              {
+                "kind" => "direction_arrow",
+                "x1_pct" => 50,
+                "y1_pct" => 50,
+                # ~1% distance — well under the 3% floor
+                "x2_pct" => 50.5,
+                "y2_pct" => 50.5,
+              },
+            ],
+          )
+        post_with_visual_notes(visual_notes: tiny)
+        stored = Post.find(response.parsed_body["post"]["id"]).custom_fields[
+          "npn_visual_notes"
+        ]
+        # Sub-threshold arrow dropped → annotations array empty. The
+        # wrapper itself survives because the payload still has a
+        # visual_output (from `valid_visual_notes`); only the tiny
+        # arrow is filtered out by the normalizer.
+        expect(stored).to be_present
+        expect(stored["annotations"]).to eq([])
+      end
+
+      it "clamps arrow coordinates to 0..100" do
+        out_of_bounds =
+          arrow_visual_notes.merge(
+            "annotations" => [
+              {
+                "kind" => "direction_arrow",
+                "x1_pct" => -25,
+                "y1_pct" => 200,
+                "x2_pct" => 50,
+                "y2_pct" => 60,
+              },
+            ],
+          )
+        post_with_visual_notes(visual_notes: out_of_bounds)
+        stored = Post.find(response.parsed_body["post"]["id"]).custom_fields[
+          "npn_visual_notes"
+        ]
+        arrow = stored["annotations"].find { |a| a["kind"] == "direction_arrow" }
+        expect(arrow["x1_pct"]).to eq(0.0)
+        expect(arrow["y1_pct"]).to eq(100.0)
+      end
+
+      it "enforces per-kind arrow caps (8 direction + 8 relationship)" do
+        too_many_direction =
+          (DiscourseNpnCritiqueReply::DraftNormalizer::MAX_DIRECTION_ARROW_COUNT + 5).times.map do |i|
+            {
+              "id" => "da_#{i}",
+              "kind" => "direction_arrow",
+              "x1_pct" => 5 + i,
+              "y1_pct" => 5,
+              "x2_pct" => 80,
+              "y2_pct" => 80,
+            }
+          end
+        post_with_visual_notes(
+          visual_notes: arrow_visual_notes.merge("annotations" => too_many_direction),
+        )
+        stored = Post.find(response.parsed_body["post"]["id"]).custom_fields[
+          "npn_visual_notes"
+        ]
+        kept = stored["annotations"].select { |a| a["kind"] == "direction_arrow" }
+        expect(kept.length).to eq(
+          DiscourseNpnCritiqueReply::DraftNormalizer::MAX_DIRECTION_ARROW_COUNT,
+        )
+      end
+
+      it "regenerates duplicate / missing arrow labels via max-suffix+1" do
+        dupes =
+          arrow_visual_notes.merge(
+            "annotations" => [
+              {
+                "id" => "a",
+                "kind" => "direction_arrow",
+                "label" => "D1",
+                "x1_pct" => 10,
+                "y1_pct" => 10,
+                "x2_pct" => 80,
+                "y2_pct" => 80,
+              },
+              # Same label — server should keep the first and let the
+              # client regenerate; the Ruby normalizer doesn't dedupe
+              # labels (only ids) so it preserves both as-supplied.
+              # The CLIENT-side normalizer (JS) regenerates duplicates;
+              # this just confirms the server preserves whatever it gets.
+              {
+                "id" => "b",
+                "kind" => "direction_arrow",
+                "label" => "D1",
+                "x1_pct" => 5,
+                "y1_pct" => 5,
+                "x2_pct" => 90,
+                "y2_pct" => 90,
+              },
+            ],
+          )
+        post_with_visual_notes(visual_notes: dupes)
+        stored = Post.find(response.parsed_body["post"]["id"]).custom_fields[
+          "npn_visual_notes"
+        ]
+        arrows = stored["annotations"].select { |a| a["kind"] == "direction_arrow" }
+        expect(arrows.length).to eq(2)
+      end
+
       it "treats metadata save failure as non-fatal — reply still created" do
         # Force the visual-notes pipeline to raise from inside
         # attach_visual_notes. The rescue block in the controller

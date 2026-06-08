@@ -2149,6 +2149,20 @@ export default class NpnCritiqueReplyModal extends Component {
       this.selectedDirectionArrowId === id ? null : id;
   }
 
+  // Fired by the Konva stage on endpoint dragend. The stage updates
+  // its own closure-cached arrow BEFORE invoking this callback (same
+  // pattern as moveEyePathPoint), so the next sync sees identical
+  // values and skips a redundant re-render.
+  @action
+  updateDirectionArrow(id, x1Pct, y1Pct, x2Pct, y2Pct) {
+    if (!id) {
+      return;
+    }
+    this.directionArrows = this.directionArrows.map((a) =>
+      a.id === id ? { ...a, x1Pct, y1Pct, x2Pct, y2Pct } : a
+    );
+  }
+
   @action
   removeSelectedDirectionArrow() {
     if (!this.selectedDirectionArrowId) {
@@ -2285,6 +2299,16 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId =
       this.selectedRelationshipArrowId === id ? null : id;
+  }
+
+  @action
+  updateRelationshipArrow(id, x1Pct, y1Pct, x2Pct, y2Pct) {
+    if (!id) {
+      return;
+    }
+    this.relationshipArrows = this.relationshipArrows.map((a) =>
+      a.id === id ? { ...a, x1Pct, y1Pct, x2Pct, y2Pct } : a
+    );
   }
 
   @action
@@ -3942,6 +3966,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @selectedDirectionArrowId={{this.selectedDirectionArrowId}}
                 @onAddDirectionArrow={{this.addDirectionArrow}}
                 @onSelectDirectionArrow={{this.selectDirectionArrow}}
+                @onUpdateDirectionArrow={{this.updateDirectionArrow}}
                 @pendingDirectionArrowPopover={{this.pendingDirectionArrowPopover}}
                 @pendingDirectionArrowPopoverText={{this.pendingDirectionArrowPopoverText}}
                 @onPendingDirectionArrowPopoverInput={{this.updatePendingDirectionArrowPopoverText}}
@@ -3951,6 +3976,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @selectedRelationshipArrowId={{this.selectedRelationshipArrowId}}
                 @onAddRelationshipArrow={{this.addRelationshipArrow}}
                 @onSelectRelationshipArrow={{this.selectRelationshipArrow}}
+                @onUpdateRelationshipArrow={{this.updateRelationshipArrow}}
                 @pendingRelationshipArrowPopover={{this.pendingRelationshipArrowPopover}}
                 @pendingRelationshipArrowPopoverText={{this.pendingRelationshipArrowPopoverText}}
                 @onPendingRelationshipArrowPopoverInput={{this.updatePendingRelationshipArrowPopoverText}}

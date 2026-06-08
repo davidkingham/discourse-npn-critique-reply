@@ -211,12 +211,28 @@ export default class NpnCritiqueImageReference extends Component {
           this.args.onAddDirectionArrow?.(x1Pct, y1Pct, x2Pct, y2Pct),
         onSelectDirectionArrow: (id) =>
           this.args.onSelectDirectionArrow?.(id),
+        onUpdateDirectionArrow: (id, x1Pct, y1Pct, x2Pct, y2Pct) =>
+          this.args.onUpdateDirectionArrow?.(
+            id,
+            x1Pct,
+            y1Pct,
+            x2Pct,
+            y2Pct
+          ),
         relationshipArrows: this.args.relationshipArrows,
         selectedRelationshipArrowId: this.args.selectedRelationshipArrowId,
         onAddRelationshipArrow: (x1Pct, y1Pct, x2Pct, y2Pct) =>
           this.args.onAddRelationshipArrow?.(x1Pct, y1Pct, x2Pct, y2Pct),
         onSelectRelationshipArrow: (id) =>
           this.args.onSelectRelationshipArrow?.(id),
+        onUpdateRelationshipArrow: (id, x1Pct, y1Pct, x2Pct, y2Pct) =>
+          this.args.onUpdateRelationshipArrow?.(
+            id,
+            x1Pct,
+            y1Pct,
+            x2Pct,
+            y2Pct
+          ),
       });
 
       if (this._destroyed) {
