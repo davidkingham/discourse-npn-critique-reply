@@ -259,6 +259,49 @@ function sameStrongAreas(a, b) {
   return true;
 }
 
+// Arrow clone + equality — shared shape between direction_arrow and
+// relationship_arrow (both are two-endpoint annotations). The clone
+// keeps the kind-specific label so the renderer can distinguish them
+// without re-checking the source array.
+function cloneArrows(arrows) {
+  if (!Array.isArray(arrows)) {
+    return [];
+  }
+  return arrows.map((a) => ({
+    id: a.id,
+    label: a.label,
+    x1Pct: a.x1Pct,
+    y1Pct: a.y1Pct,
+    x2Pct: a.x2Pct,
+    y2Pct: a.y2Pct,
+    noteText: a.noteText ?? null,
+  }));
+}
+
+function sameArrows(a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.label !== y.label ||
+      x.x1Pct !== y.x1Pct ||
+      x.y1Pct !== y.y1Pct ||
+      x.x2Pct !== y.x2Pct ||
+      x.y2Pct !== y.y2Pct
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // Cheap structural equality check used to skip re-render when the pin
 // list hasn't actually changed.
 function samePins(a, b) {
@@ -293,6 +336,9 @@ const MIN_CROP_DRAG_PCT = 3;
 const MIN_ATTENTION_PULL_DRAG_PCT = 3;
 // Strong-area minimum drag — twin of attention pull.
 const MIN_STRONG_AREA_DRAG_PCT = 3;
+// Arrow minimum drag — distance (Pythagorean) between endpoints
+// rather than per-axis. Mirrors MIN_ARROW_DISTANCE_PCT in the schema.
+const MIN_ARROW_DRAG_PCT = 3;
 
 // Eye-path smoothing experiment. When true:
 //   • the polyline renders as a Catmull-Rom curve through every point
@@ -413,11 +459,15 @@ export async function createAnnotationStage({
   eyePaths = [],
   attentionPulls = [],
   strongAreas = [],
+  directionArrows = [],
+  relationshipArrows = [],
   selectedPinNumber = null,
   cropSelected = false,
   selectedEyePathId = null,
   selectedAttentionPullId = null,
   selectedStrongAreaId = null,
+  selectedDirectionArrowId = null,
+  selectedRelationshipArrowId = null,
   visualMode = null,
   aspectRatio = "free",
   pinMoveEnabled = true,
@@ -438,6 +488,10 @@ export async function createAnnotationStage({
   onAddStrongArea,
   onSelectStrongArea,
   onUpdateStrongArea,
+  onAddDirectionArrow,
+  onSelectDirectionArrow,
+  onAddRelationshipArrow,
+  onSelectRelationshipArrow,
 } = {}) {
   if (!container) {
     throw new Error("createAnnotationStage: container is required");
@@ -476,11 +530,18 @@ export async function createAnnotationStage({
   const attentionPullLayer = new Konva.Group();
   const strongAreaLayer = new Konva.Group();
   const eyePathLayer = new Konva.Group();
+  // Arrows sit ABOVE eye path so a relationship/direction arrow
+  // crossing a curve reads on top of the curve, BELOW pins so
+  // numbered notes always stay readable over an arrow.
+  const directionArrowLayer = new Konva.Group();
+  const relationshipArrowLayer = new Konva.Group();
   const pinLayer = new Konva.Group();
   annotationsLayer.add(cropLayer);
   annotationsLayer.add(attentionPullLayer);
   annotationsLayer.add(strongAreaLayer);
   annotationsLayer.add(eyePathLayer);
+  annotationsLayer.add(directionArrowLayer);
+  annotationsLayer.add(relationshipArrowLayer);
   annotationsLayer.add(pinLayer);
   stage.add(annotationsLayer);
 
@@ -500,11 +561,15 @@ export async function createAnnotationStage({
     eyePaths: cloneEyePaths(eyePaths),
     attentionPulls: cloneAttentionPulls(attentionPulls),
     strongAreas: cloneStrongAreas(strongAreas),
+    directionArrows: cloneArrows(directionArrows),
+    relationshipArrows: cloneArrows(relationshipArrows),
     selectedPinNumber,
     cropSelected,
     selectedEyePathId,
     selectedAttentionPullId,
     selectedStrongAreaId,
+    selectedDirectionArrowId,
+    selectedRelationshipArrowId,
     visualMode,
     aspectRatio,
     pinMoveEnabled,
@@ -517,6 +582,11 @@ export async function createAnnotationStage({
   let attentionDrag = null;
   // Drag-to-create strong-area state — same pattern.
   let strongDrag = null;
+  // Drag-to-create arrow state — tail at mousedown, head tracks
+  // mousemove, released on mouseup as { x1, y1, x2, y2 }. One per
+  // arrow kind so the two tools don't share their in-flight state.
+  let directionArrowDrag = null;
+  let relationshipArrowDrag = null;
 
   // Drag-to-crop in-flight state. Set when the user starts dragging
   // on empty stage in crop mode; cleared on pointerup.
@@ -546,6 +616,10 @@ export async function createAnnotationStage({
     } else if (state.visualMode === "attention_pull") {
       container.style.cursor = "crosshair";
     } else if (state.visualMode === "strong_area") {
+      container.style.cursor = "crosshair";
+    } else if (state.visualMode === "direction_arrow") {
+      container.style.cursor = "crosshair";
+    } else if (state.visualMode === "relationship_arrow") {
       container.style.cursor = "crosshair";
     } else {
       container.style.cursor = "default";
@@ -1888,6 +1962,250 @@ export async function createAnnotationStage({
     } // end renderOneEyePath
   } // end renderEyePaths
 
+  // ----- Arrow renderers (direction + relationship) -----------------
+  //
+  // Both arrow kinds share the same drawing primitives — a stroke
+  // line, a halo behind it for contrast, an arrowhead, an invisible
+  // fat-stroke hit-zone for selection clicks, and a label badge near
+  // the midpoint. The only differences:
+  //   • direction_arrow → one arrowhead (at head/x2,y2)
+  //   • relationship_arrow → two arrowheads (one at each end), and a
+  //     lighter dashed line to read as "non-directional"
+  // Pulled into a single helper so the layering / hit-zone / badge
+  // logic stays in one place; per-kind options are passed in.
+  function buildArrowGroup({
+    arrow,
+    sw,
+    sh,
+    layer,
+    isSelected,
+    onClickSelect,
+    bothEnds,
+    dashed,
+  }) {
+    const shortEdge = Math.min(sw, sh);
+    const x1 = (arrow.x1Pct / 100) * sw;
+    const y1 = (arrow.y1Pct / 100) * sh;
+    const x2 = (arrow.x2Pct / 100) * sw;
+    const y2 = (arrow.y2Pct / 100) * sh;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (len <= 0) {
+      return;
+    }
+    const ux = dx / len;
+    const uy = dy / len;
+
+    const tertiary = ANNOTATION_BLUE;
+    const secondary = ANNOTATION_HALO;
+    const lineWidth = Math.max(2, Math.round(shortEdge * 0.004));
+    const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
+    const arrowheadLen = Math.max(10, Math.round(shortEdge * 0.018));
+    const dash = dashed
+      ? [Math.max(6, Math.round(shortEdge * 0.012)), Math.max(4, Math.round(shortEdge * 0.008))]
+      : undefined;
+
+    // The visible line is shortened slightly at each arrowhead end so
+    // the head's solid fill doesn't peek beyond the stroke. Compute
+    // the trimmed endpoints once per side.
+    const trim = arrowheadLen * 0.55;
+    const lineStartX = bothEnds ? x1 + ux * trim : x1;
+    const lineStartY = bothEnds ? y1 + uy * trim : y1;
+    const lineEndX = x2 - ux * trim;
+    const lineEndY = y2 - uy * trim;
+
+    // Halo (drawn first, sits behind the visible line for readability
+    // over busy image areas).
+    layer.add(
+      new Konva.Line({
+        points: [lineStartX, lineStartY, lineEndX, lineEndY],
+        stroke: secondary,
+        strokeWidth: haloWidth,
+        lineCap: "round",
+        lineJoin: "round",
+        opacity: 0.9,
+        listening: false,
+      })
+    );
+    // Visible stroke.
+    layer.add(
+      new Konva.Line({
+        points: [lineStartX, lineStartY, lineEndX, lineEndY],
+        stroke: tertiary,
+        strokeWidth: lineWidth,
+        lineCap: "round",
+        lineJoin: "round",
+        opacity: isSelected ? 1 : 0.9,
+        dash,
+        listening: false,
+      })
+    );
+
+    // Arrowhead helper — closed triangle at (tipX, tipY) pointing in
+    // direction (uxLocal, uyLocal). Reused for the tail head on
+    // relationship arrows by flipping the unit vector.
+    function drawArrowhead(tipX, tipY, uxLocal, uyLocal) {
+      const perpX = -uyLocal;
+      const perpY = uxLocal;
+      const baseCx = tipX - uxLocal * arrowheadLen;
+      const baseCy = tipY - uyLocal * arrowheadLen;
+      const baseHalf = arrowheadLen * 0.55;
+      layer.add(
+        new Konva.Line({
+          points: [
+            tipX,
+            tipY,
+            baseCx + perpX * baseHalf,
+            baseCy + perpY * baseHalf,
+            baseCx - perpX * baseHalf,
+            baseCy - perpY * baseHalf,
+          ],
+          closed: true,
+          fill: tertiary,
+          stroke: secondary,
+          strokeWidth: 1.5,
+          opacity: isSelected ? 1 : 0.95,
+          listening: false,
+        })
+      );
+    }
+    drawArrowhead(x2, y2, ux, uy);
+    if (bothEnds) {
+      drawArrowhead(x1, y1, -ux, -uy);
+    }
+
+    // Label badge — placed perpendicular to the line at its midpoint,
+    // on the side that keeps it inside the stage bounds when possible.
+    if (arrow.label) {
+      const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+      const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+      const badgeHeight = badgeFontSize + 2 * badgePadding;
+      const badgeOffset = Math.max(6, Math.round(shortEdge * 0.006));
+      const estimatedBadgeW =
+        badgeFontSize * 0.65 * arrow.label.length + 2 * badgePadding;
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      // Default perpendicular direction (rotate 90° counterclockwise
+      // from line direction). Flip to the other side if the badge
+      // would overflow the stage.
+      let perpX = -uy;
+      let perpY = ux;
+      let labelX = midX + perpX * badgeOffset;
+      let labelY = midY + perpY * badgeOffset - badgeHeight / 2;
+      if (
+        labelX < 0 ||
+        labelX + estimatedBadgeW > sw ||
+        labelY < 0 ||
+        labelY + badgeHeight > sh
+      ) {
+        perpX = uy;
+        perpY = -ux;
+        labelX = midX + perpX * badgeOffset;
+        labelY = midY + perpY * badgeOffset - badgeHeight / 2;
+      }
+      const labelNode = new Konva.Label({
+        x: labelX,
+        y: labelY,
+        listening: false,
+      });
+      labelNode.add(
+        new Konva.Tag({
+          fill: tertiary,
+          cornerRadius: 3,
+          stroke: secondary,
+          strokeWidth: 1.5,
+          opacity: isSelected ? 1 : 0.95,
+        })
+      );
+      labelNode.add(
+        new Konva.Text({
+          text: arrow.label,
+          fontSize: badgeFontSize,
+          fontFamily: "sans-serif",
+          fontStyle: "bold",
+          fill: secondary,
+          padding: badgePadding,
+        })
+      );
+      layer.add(labelNode);
+    }
+
+    // Invisible fat-stroke hit-zone line for selection clicks. Same
+    // pattern as the eye-path curve hit + crop perimeter hit.
+    const hitWidth = Math.max(18, Math.round(shortEdge * 0.025));
+    const hitLine = new Konva.Line({
+      points: [x1, y1, x2, y2],
+      stroke: "black",
+      strokeWidth: hitWidth,
+      opacity: 0,
+      lineCap: "round",
+      lineJoin: "round",
+      listening: true,
+      name: `${arrow.id}-hit`,
+    });
+    hitLine.on("mouseenter", () => {
+      container.style.cursor = "pointer";
+    });
+    hitLine.on("mouseleave", () => {
+      applyContainerCursor();
+    });
+    hitLine.on("click tap", (e) => {
+      e.cancelBubble = true;
+      onClickSelect?.(arrow.id);
+    });
+    layer.add(hitLine);
+  }
+
+  function renderDirectionArrows() {
+    directionArrowLayer.destroyChildren();
+    const sw = stage.width();
+    const sh = stage.height();
+    if (sw === 0 || sh === 0) {
+      annotationsLayer.batchDraw();
+      return;
+    }
+    for (const arrow of state.directionArrows) {
+      buildArrowGroup({
+        arrow,
+        sw,
+        sh,
+        layer: directionArrowLayer,
+        isSelected: state.selectedDirectionArrowId === arrow.id,
+        onClickSelect: (id) => onSelectDirectionArrow?.(id),
+        bothEnds: false,
+        dashed: false,
+      });
+    }
+    annotationsLayer.batchDraw();
+  }
+
+  function renderRelationshipArrows() {
+    relationshipArrowLayer.destroyChildren();
+    const sw = stage.width();
+    const sh = stage.height();
+    if (sw === 0 || sh === 0) {
+      annotationsLayer.batchDraw();
+      return;
+    }
+    for (const arrow of state.relationshipArrows) {
+      buildArrowGroup({
+        arrow,
+        sw,
+        sh,
+        layer: relationshipArrowLayer,
+        isSelected: state.selectedRelationshipArrowId === arrow.id,
+        onClickSelect: (id) => onSelectRelationshipArrow?.(id),
+        bothEnds: true,
+        // Dashed stroke for relationship arrows — visually distinct
+        // from direction arrows, reads as "soft connection" rather
+        // than "measurement / hard pointer."
+        dashed: true,
+      });
+    }
+    annotationsLayer.batchDraw();
+  }
+
   // Crop layer = 4 dim rects + bordered rect (+ Konva.Transformer
   // when the crop is selected in crop_suggestion mode). The bordered
   // rect is draggable for move; the transformer handles resize.
@@ -1977,14 +2295,19 @@ export async function createAnnotationStage({
       // existing crop blocks placement of new annotations inside its
       // bounds. Modes that need pass-through: numbered_notes (click
       // to add pin), eye_path (click to add path point), attention_pull
-      // and strong_area (drag-to-create on empty stage). The crop rect
-      // is selectable on click only in modes that don't add anything
-      // on click — i.e. when no tool is active, or in crop mode itself.
+      // / strong_area (drag-to-create on empty stage), and
+      // direction_arrow / relationship_arrow (drag-to-create across
+      // the image, may legitimately start inside the crop). The crop
+      // rect is selectable on click only in modes that don't add
+      // anything on click — i.e. when no tool is active, or in crop
+      // mode itself.
       listening:
         state.visualMode !== "numbered_notes" &&
         state.visualMode !== "eye_path" &&
         state.visualMode !== "attention_pull" &&
-        state.visualMode !== "strong_area",
+        state.visualMode !== "strong_area" &&
+        state.visualMode !== "direction_arrow" &&
+        state.visualMode !== "relationship_arrow",
       // Draggable only when the crop is the active edit target.
       draggable: canEdit,
       // Clamp drag within image bounds. `this` inside dragBoundFunc
@@ -2067,7 +2390,9 @@ export async function createAnnotationStage({
       state.visualMode === "numbered_notes" ||
       state.visualMode === "eye_path" ||
       state.visualMode === "attention_pull" ||
-      state.visualMode === "strong_area";
+      state.visualMode === "strong_area" ||
+      state.visualMode === "direction_arrow" ||
+      state.visualMode === "relationship_arrow";
     if (inToolMode) {
       const hitStrokeWidth = Math.max(
         14,
@@ -2443,6 +2768,26 @@ export async function createAnnotationStage({
     previewLayer.batchDraw();
   }
 
+  // Arrow-shape drag preview — a dashed line with a tip mark. Used
+  // for both direction_arrow and relationship_arrow during the
+  // mousedown→mouseup drag; the rect-shaped preview above wouldn't
+  // make sense for an arrow.
+  function renderArrowPreview(x1, y1, x2, y2, { dashed = false } = {}) {
+    previewLayer.destroyChildren();
+    const tertiary = ANNOTATION_BLUE;
+    previewLayer.add(
+      new Konva.Line({
+        points: [x1, y1, x2, y2],
+        stroke: tertiary,
+        strokeWidth: 2,
+        dash: dashed ? [6, 4] : [4, 3],
+        listening: false,
+        lineCap: "round",
+      })
+    );
+    previewLayer.batchDraw();
+  }
+
   // Click / tap on empty area handler. Behavior depends on mode:
   //   • numbered_notes → add pin
   //   • crop_suggestion → no-op on click (handled by drag below)
@@ -2505,6 +2850,14 @@ export async function createAnnotationStage({
       strongDrag = { startX: pos.x, startY: pos.y };
       return;
     }
+    if (state.visualMode === "direction_arrow") {
+      directionArrowDrag = { startX: pos.x, startY: pos.y };
+      return;
+    }
+    if (state.visualMode === "relationship_arrow") {
+      relationshipArrowDrag = { startX: pos.x, startY: pos.y };
+      return;
+    }
   });
 
   stage.on("mousemove touchmove", () => {
@@ -2530,6 +2883,26 @@ export async function createAnnotationStage({
     }
     if (strongDrag) {
       renderPreview(strongDrag.startX, strongDrag.startY, pos.x, pos.y);
+      return;
+    }
+    if (directionArrowDrag) {
+      renderArrowPreview(
+        directionArrowDrag.startX,
+        directionArrowDrag.startY,
+        pos.x,
+        pos.y,
+        { dashed: false }
+      );
+      return;
+    }
+    if (relationshipArrowDrag) {
+      renderArrowPreview(
+        relationshipArrowDrag.startX,
+        relationshipArrowDrag.startY,
+        pos.x,
+        pos.y,
+        { dashed: true }
+      );
     }
   });
 
@@ -2637,6 +3010,47 @@ export async function createAnnotationStage({
         return;
       }
       onAddStrongArea?.(xPct, yPct, widthPct, heightPct);
+      return;
+    }
+
+    if (directionArrowDrag) {
+      const start = directionArrowDrag;
+      directionArrowDrag = null;
+      clearPreview();
+      if (!pos || sw === 0 || sh === 0) {
+        return;
+      }
+      // Arrows preserve direction — tail is mousedown, head is
+      // mouseup (no min/max sorting). Clamp endpoints to stage and
+      // drop the drag if the resulting length is below threshold.
+      const x1Pct = Math.max(0, Math.min(100, (start.startX / sw) * 100));
+      const y1Pct = Math.max(0, Math.min(100, (start.startY / sh) * 100));
+      const x2Pct = Math.max(0, Math.min(100, (pos.x / sw) * 100));
+      const y2Pct = Math.max(0, Math.min(100, (pos.y / sh) * 100));
+      const distance = Math.hypot(x2Pct - x1Pct, y2Pct - y1Pct);
+      if (distance < MIN_ARROW_DRAG_PCT) {
+        return;
+      }
+      onAddDirectionArrow?.(x1Pct, y1Pct, x2Pct, y2Pct);
+      return;
+    }
+
+    if (relationshipArrowDrag) {
+      const start = relationshipArrowDrag;
+      relationshipArrowDrag = null;
+      clearPreview();
+      if (!pos || sw === 0 || sh === 0) {
+        return;
+      }
+      const x1Pct = Math.max(0, Math.min(100, (start.startX / sw) * 100));
+      const y1Pct = Math.max(0, Math.min(100, (start.startY / sh) * 100));
+      const x2Pct = Math.max(0, Math.min(100, (pos.x / sw) * 100));
+      const y2Pct = Math.max(0, Math.min(100, (pos.y / sh) * 100));
+      const distance = Math.hypot(x2Pct - x1Pct, y2Pct - y1Pct);
+      if (distance < MIN_ARROW_DRAG_PCT) {
+        return;
+      }
+      onAddRelationshipArrow?.(x1Pct, y1Pct, x2Pct, y2Pct);
     }
   });
 
@@ -2654,6 +3068,8 @@ export async function createAnnotationStage({
       renderAttentionPulls();
       renderStrongAreas();
       renderEyePaths();
+      renderDirectionArrows();
+      renderRelationshipArrows();
       renderPins();
     }
   });
@@ -2674,6 +3090,8 @@ export async function createAnnotationStage({
   renderAttentionPulls();
   renderStrongAreas();
   renderEyePaths();
+  renderDirectionArrows();
+  renderRelationshipArrows();
   renderPins();
 
   return {
@@ -2688,11 +3106,15 @@ export async function createAnnotationStage({
       eyePaths,
       attentionPulls,
       strongAreas,
+      directionArrows,
+      relationshipArrows,
       selectedPinNumber,
       cropSelected,
       selectedEyePathId,
       selectedAttentionPullId,
       selectedStrongAreaId,
+      selectedDirectionArrowId,
+      selectedRelationshipArrowId,
       visualMode,
       aspectRatio,
       pinMoveEnabled,
@@ -2704,6 +3126,8 @@ export async function createAnnotationStage({
       let eyePathChanged = false;
       let attentionPullsChanged = false;
       let strongAreasChanged = false;
+      let directionArrowsChanged = false;
+      let relationshipArrowsChanged = false;
 
       if (pins !== undefined && !samePins(pins, state.pins)) {
         state.pins = [...pins];
@@ -2791,6 +3215,34 @@ export async function createAnnotationStage({
         state.strongAreaEditEnabled = strongAreaEditEnabled;
         strongAreasChanged = true;
       }
+      if (
+        directionArrows !== undefined &&
+        !sameArrows(directionArrows, state.directionArrows)
+      ) {
+        state.directionArrows = cloneArrows(directionArrows);
+        directionArrowsChanged = true;
+      }
+      if (
+        selectedDirectionArrowId !== undefined &&
+        selectedDirectionArrowId !== state.selectedDirectionArrowId
+      ) {
+        state.selectedDirectionArrowId = selectedDirectionArrowId;
+        directionArrowsChanged = true;
+      }
+      if (
+        relationshipArrows !== undefined &&
+        !sameArrows(relationshipArrows, state.relationshipArrows)
+      ) {
+        state.relationshipArrows = cloneArrows(relationshipArrows);
+        relationshipArrowsChanged = true;
+      }
+      if (
+        selectedRelationshipArrowId !== undefined &&
+        selectedRelationshipArrowId !== state.selectedRelationshipArrowId
+      ) {
+        state.selectedRelationshipArrowId = selectedRelationshipArrowId;
+        relationshipArrowsChanged = true;
+      }
       if (visualMode !== undefined && visualMode !== state.visualMode) {
         state.visualMode = visualMode;
         applyContainerCursor();
@@ -2805,6 +3257,14 @@ export async function createAnnotationStage({
         }
         if (strongDrag) {
           strongDrag = null;
+          clearPreview();
+        }
+        if (directionArrowDrag) {
+          directionArrowDrag = null;
+          clearPreview();
+        }
+        if (relationshipArrowDrag) {
+          relationshipArrowDrag = null;
           clearPreview();
         }
         // The selected attention pull's transformer is mode-gated, so
@@ -2943,6 +3403,12 @@ export async function createAnnotationStage({
       }
       if (eyePathChanged) {
         renderEyePaths();
+      }
+      if (directionArrowsChanged) {
+        renderDirectionArrows();
+      }
+      if (relationshipArrowsChanged) {
+        renderRelationshipArrows();
       }
       if (pinsChanged) {
         renderPins();

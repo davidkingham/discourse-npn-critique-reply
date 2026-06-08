@@ -176,14 +176,19 @@ en:
         # Toolbar group + numbered-notes (pins)
         toolbar_label: "Visual annotation tools"
         add: "Add visual notes"
-        numbered_notes: "Numbered notes"
+        # User-facing toolbar label shortened to "Notes" (the toolbar
+        # is growing — 7 tools — so the longer "Numbered notes" only
+        # appears in tooltips / a11y labels now). Internal schema kind
+        # stays `pin`.
+        numbered_notes: "Notes"
         done: "Done with notes"
         clear: "Clear notes"
         hint: "Click the image to add numbered visual notes."
         pin_label: "Visual note %{number}"
         remove_note: "Remove note %{number}"
-        # Crop suggestion
-        crop_suggestion: "Crop suggestion"
+        # Crop suggestion. Toolbar label shortened to "Crop"; tooltip
+        # keeps the descriptive form.
+        crop_suggestion: "Crop"
         crop_done: "Done with crop"
         crop_hint: "Drag to suggest a crop."
         crop_present_hint: "The full image will be posted with this crop overlay."
@@ -233,7 +238,9 @@ en:
         eye_path_starter: "My eye moves through the image like this..."
         # Attention Pull tool — observational marker for areas that pull
         # attention. Wording avoids "distraction" / "problem" framing.
-        attention_pull: "Attention pull"
+        # Toolbar label shortened to "Attention"; tooltip keeps the full
+        # descriptive form.
+        attention_pull: "Attention"
         attention_pull_done: "Done with attention pull"
         attention_pull_hint: "Drag on the image to mark an area that pulls your attention."
         attention_pull_remove: "Remove selected"
@@ -267,6 +274,34 @@ en:
         strong_area_popover_title: "Strong area"
         strong_area_popover_dialog_label: "Add a note for this strong area"
         strong_area_popover_placeholder: "What's working well here?"
+        # Direction Arrow — one-way arrow for "this leads my eye
+        # toward..." / "this gesture points back toward the subject."
+        # Distinct from Eye Path (curve through 2+ points) and from
+        # Attention Pull (bounded area with an A<N> label).
+        direction_arrow: "Arrow"
+        direction_arrow_title: "Draw a one-way arrow showing direction or visual pull"
+        direction_arrow_done: "Done with arrow"
+        direction_arrow_hint: "Drag from start to end to mark direction or visual pull."
+        direction_arrow_remove: "Remove selected"
+        direction_arrow_clear: "Clear arrows"
+        direction_arrow_a11y_label: "Arrow %{label}"
+        direction_arrow_line_template: "[%{label}] %{text}"
+        direction_arrow_popover_title: "Arrow"
+        direction_arrow_popover_dialog_label: "Add a note for this arrow"
+        direction_arrow_popover_placeholder: "What direction does this lead the eye?"
+        # Relationship Arrow — two-way arrow for "these areas relate
+        # / echo / balance / compete with each other."
+        relationship_arrow: "Relationship"
+        relationship_arrow_title: "Draw a two-way arrow showing a relationship between areas"
+        relationship_arrow_done: "Done with relationship"
+        relationship_arrow_hint: "Drag between two areas to mark a relationship, echo, or tension."
+        relationship_arrow_remove: "Remove selected"
+        relationship_arrow_clear: "Clear relationships"
+        relationship_arrow_a11y_label: "Relationship %{label}"
+        relationship_arrow_line_template: "[%{label}] %{text}"
+        relationship_arrow_popover_title: "Relationship"
+        relationship_arrow_popover_dialog_label: "Add a note for this relationship"
+        relationship_arrow_popover_placeholder: "How are these areas related?"
         # Popover that appears when the eye path crosses its second
         # point — gives the critic a chance to describe the flow.
         eye_path_popover_title: "Eye path"

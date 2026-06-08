@@ -70,6 +70,8 @@ export function buildVisualNotesCanvas({
   eyePaths,
   attentionPulls,
   strongAreas,
+  directionArrows,
+  relationshipArrows,
   maxDimension = MAX_DIMENSION,
 }) {
   const sourceWidth = image.naturalWidth || image.width;
@@ -118,6 +120,25 @@ export function buildVisualNotesCanvas({
   if (Array.isArray(eyePaths)) {
     for (const eyePath of eyePaths) {
       drawEyePathOnCanvas(ctx, eyePath, targetWidth, targetHeight);
+    }
+  }
+  // Direction + Relationship arrows sit above the eye path but below
+  // pins. Direction is one-way (single arrowhead), Relationship is
+  // two-way (arrowheads on both ends, dashed stroke).
+  if (Array.isArray(directionArrows)) {
+    for (const arrow of directionArrows) {
+      drawArrowOnCanvas(ctx, arrow, targetWidth, targetHeight, {
+        bothEnds: false,
+        dashed: false,
+      });
+    }
+  }
+  if (Array.isArray(relationshipArrows)) {
+    for (const arrow of relationshipArrows) {
+      drawArrowOnCanvas(ctx, arrow, targetWidth, targetHeight, {
+        bothEnds: true,
+        dashed: true,
+      });
     }
   }
   drawPinsOnCanvas(ctx, pins, targetWidth, targetHeight);
@@ -752,6 +773,142 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
       ctx.fill();
       ctx.stroke();
     }
+  }
+
+  ctx.restore();
+}
+
+// Two-endpoint arrow drawer for direction_arrow + relationship_arrow.
+// Renders halo, visible stroke, arrowhead(s), and a label badge — the
+// same primitives the Konva editor uses, drawn straight to the export
+// canvas with the canvas 2D context. Coordinates are percentages; we
+// convert to pixels against the target canvas dimensions.
+function drawArrowOnCanvas(ctx, arrow, width, height, { bothEnds, dashed }) {
+  if (!arrow) {
+    return;
+  }
+  const x1 = (arrow.x1_pct ?? arrow.x1Pct ?? 0) * (width / 100);
+  const y1 = (arrow.y1_pct ?? arrow.y1Pct ?? 0) * (height / 100);
+  const x2 = (arrow.x2_pct ?? arrow.x2Pct ?? 0) * (width / 100);
+  const y2 = (arrow.y2_pct ?? arrow.y2Pct ?? 0) * (height / 100);
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len <= 0) {
+    return;
+  }
+  const ux = dx / len;
+  const uy = dy / len;
+
+  const shortEdge = Math.min(width, height);
+  const lineWidth = Math.max(2, Math.round(shortEdge * 0.004));
+  const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
+  const arrowheadLen = Math.max(10, Math.round(shortEdge * 0.018));
+  const trim = arrowheadLen * 0.55;
+  const lineStartX = bothEnds ? x1 + ux * trim : x1;
+  const lineStartY = bothEnds ? y1 + uy * trim : y1;
+  const lineEndX = x2 - ux * trim;
+  const lineEndY = y2 - uy * trim;
+
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  // Halo first (under the visible stroke).
+  ctx.strokeStyle = ANNOTATION_HALO;
+  ctx.lineWidth = haloWidth;
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.moveTo(lineStartX, lineStartY);
+  ctx.lineTo(lineEndX, lineEndY);
+  ctx.stroke();
+
+  // Visible stroke. Canvas's setLineDash is the dashed-stroke control;
+  // restore [] for the arrowhead fill that follows.
+  ctx.strokeStyle = ANNOTATION_BLUE;
+  ctx.lineWidth = lineWidth;
+  ctx.globalAlpha = 1;
+  if (dashed) {
+    ctx.setLineDash([
+      Math.max(6, Math.round(shortEdge * 0.012)),
+      Math.max(4, Math.round(shortEdge * 0.008)),
+    ]);
+  }
+  ctx.beginPath();
+  ctx.moveTo(lineStartX, lineStartY);
+  ctx.lineTo(lineEndX, lineEndY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Arrowhead at the tip — closed triangle, filled in the tertiary
+  // colour with a halo-coloured stroke for contrast.
+  function drawArrowhead(tipX, tipY, uxLocal, uyLocal) {
+    const perpX = -uyLocal;
+    const perpY = uxLocal;
+    const baseCx = tipX - uxLocal * arrowheadLen;
+    const baseCy = tipY - uyLocal * arrowheadLen;
+    const baseHalf = arrowheadLen * 0.55;
+    ctx.fillStyle = ANNOTATION_BLUE;
+    ctx.strokeStyle = ANNOTATION_HALO;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.95;
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(baseCx + perpX * baseHalf, baseCy + perpY * baseHalf);
+    ctx.lineTo(baseCx - perpX * baseHalf, baseCy - perpY * baseHalf);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  drawArrowhead(x2, y2, ux, uy);
+  if (bothEnds) {
+    drawArrowhead(x1, y1, -ux, -uy);
+  }
+
+  // Label badge — same midpoint-perpendicular placement as the Konva
+  // editor (without the dynamic flip; the export is static so we
+  // just centre the badge perpendicular to the line at its midpoint).
+  if (arrow.label) {
+    const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+    const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+    const badgeHeight = badgeFontSize + 2 * badgePadding;
+    const badgeOffset = Math.max(6, Math.round(shortEdge * 0.006));
+    ctx.font = `bold ${badgeFontSize}px sans-serif`;
+    const textMetrics = ctx.measureText(arrow.label);
+    const badgeWidth = textMetrics.width + 2 * badgePadding;
+    const midX = (x1 + x2) / 2;
+    const midY = (y1 + y2) / 2;
+    let perpX = -uy;
+    let perpY = ux;
+    let labelX = midX + perpX * badgeOffset - badgeWidth / 2;
+    let labelY = midY + perpY * badgeOffset - badgeHeight / 2;
+    if (
+      labelX < 0 ||
+      labelX + badgeWidth > width ||
+      labelY < 0 ||
+      labelY + badgeHeight > height
+    ) {
+      perpX = uy;
+      perpY = -ux;
+      labelX = midX + perpX * badgeOffset - badgeWidth / 2;
+      labelY = midY + perpY * badgeOffset - badgeHeight / 2;
+    }
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = ANNOTATION_BLUE;
+    ctx.strokeStyle = ANNOTATION_HALO;
+    ctx.lineWidth = 1.5;
+    // Rounded-rect badge background.
+    tracePillRect(ctx, labelX, labelY, badgeWidth, badgeHeight, 3);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = ANNOTATION_HALO;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    ctx.fillText(
+      arrow.label,
+      labelX + badgePadding,
+      labelY + badgeHeight / 2
+    );
   }
 
   ctx.restore();

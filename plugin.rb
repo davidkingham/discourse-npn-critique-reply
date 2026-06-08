@@ -25,6 +25,12 @@ register_svg_icon "highlighter"
 # counterpart to Attention Pull. Visible "supportive observation" cue
 # without overreading as "correct answer".
 register_svg_icon "circle-check"
+# `arrow-right` is the Direction Arrow tool button — one-way arrow for
+# "this leads my eye toward..." use cases.
+register_svg_icon "arrow-right"
+# `arrows-left-right` is the Relationship Arrow tool button — two-way
+# arrow for "these areas relate / echo / balance" use cases.
+register_svg_icon "arrows-left-right"
 
 module ::DiscourseNpnCritiqueReply
   PLUGIN_NAME = "discourse-npn-critique-reply"

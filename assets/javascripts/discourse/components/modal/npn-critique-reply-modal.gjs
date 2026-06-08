@@ -32,15 +32,20 @@ import {
 } from "../../lib/npn-critique-reply-visual-notes";
 import {
   MAX_ATTENTION_PULL_COUNT,
+  MAX_DIRECTION_ARROW_COUNT,
   MAX_EYE_PATH_COUNT,
   MAX_EYE_PATH_POINTS,
+  MAX_RELATIONSHIP_ARROW_COUNT,
   MAX_STRONG_AREA_COUNT,
   annotationsToAttentionPulls,
+  annotationsToDirectionArrows,
   annotationsToPins,
+  annotationsToRelationshipArrows,
   annotationsToStrongAreas,
   annotationToCrop,
   annotationToEyePath,
   attentionPullsToAnnotations,
+  directionArrowsToAnnotations,
   nextEyePathId,
   nextEyePathLabel,
   buildVisualAnnotationPayload,
@@ -48,8 +53,11 @@ import {
   eyePathToAnnotation,
   eyePathsToAnnotations,
   nextAttentionPullLabel,
+  nextDirectionArrowLabel,
+  nextRelationshipArrowLabel,
   nextStrongAreaLabel,
   pinsToAnnotations,
+  relationshipArrowsToAnnotations,
   strongAreasToAnnotations,
 } from "../../lib/npn-critique-reply-annotation-schema";
 import didUpdate from "@ember/render-modifiers/modifiers/did-update";
@@ -234,6 +242,22 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked selectedStrongAreaId = null;
   _strongAreaIdCounter = 0;
 
+  // Direction Arrow state. Drag-to-create like attention pull, but
+  // the stored shape is two endpoints (x1/y1 → x2/y2) instead of a
+  // bounding rect. `D<N>` labels. Same popover-on-create flow as
+  // attention pull: open near the head (end) point on placement.
+  @tracked directionArrows = [];
+  @tracked selectedDirectionArrowId = null;
+  _directionArrowIdCounter = 0;
+
+  // Relationship Arrow state. Twin of Direction Arrow but renders
+  // with arrowheads on BOTH ends and uses `R<N>` labels — for "these
+  // areas relate / echo / balance / compete with each other" instead
+  // of one-way direction.
+  @tracked relationshipArrows = [];
+  @tracked selectedRelationshipArrowId = null;
+  _relationshipArrowIdCounter = 0;
+
   // Note popovers for attention pull and eye path mirror the pin
   // popover pattern: open immediately after the user creates / first
   // commits the annotation, capture optional descriptive text, append
@@ -249,6 +273,13 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked pendingStrongAreaPopoverText = "";
   @tracked pendingEyePathPopover = null;
   @tracked pendingEyePathPopoverText = "";
+  // Arrow popovers anchor at the arrowhead (x2/y2 for both kinds —
+  // for relationship arrows either end would work, but we pin to
+  // the just-released endpoint for consistency with the drag motion).
+  @tracked pendingDirectionArrowPopover = null;
+  @tracked pendingDirectionArrowPopoverText = "";
+  @tracked pendingRelationshipArrowPopover = null;
+  @tracked pendingRelationshipArrowPopoverText = "";
 
   // When set, a pin was just placed and the inline note popover is
   // open near it. Holds { number, xPct, yPct } — the same shape the
@@ -548,7 +579,9 @@ export default class NpnCritiqueReplyModal extends Component {
       !!this.crop ||
       this.hasEyePath ||
       this.attentionPulls.length > 0 ||
-      this.strongAreas.length > 0
+      this.strongAreas.length > 0 ||
+      this.directionArrows.length > 0 ||
+      this.relationshipArrows.length > 0
     );
   }
 
@@ -558,7 +591,9 @@ export default class NpnCritiqueReplyModal extends Component {
       (this.crop ? 1 : 0) +
       this.eyePathCount +
       this.attentionPulls.length +
-      this.strongAreas.length
+      this.strongAreas.length +
+      this.directionArrows.length +
+      this.relationshipArrows.length
     );
   }
 
@@ -588,6 +623,36 @@ export default class NpnCritiqueReplyModal extends Component {
 
   get strongAreasAtMax() {
     return this.strongAreas.length >= MAX_STRONG_AREA_COUNT;
+  }
+
+  get selectedDirectionArrow() {
+    if (!this.selectedDirectionArrowId) {
+      return null;
+    }
+    return (
+      this.directionArrows.find(
+        (a) => a.id === this.selectedDirectionArrowId
+      ) ?? null
+    );
+  }
+
+  get directionArrowsAtMax() {
+    return this.directionArrows.length >= MAX_DIRECTION_ARROW_COUNT;
+  }
+
+  get selectedRelationshipArrow() {
+    if (!this.selectedRelationshipArrowId) {
+      return null;
+    }
+    return (
+      this.relationshipArrows.find(
+        (a) => a.id === this.selectedRelationshipArrowId
+      ) ?? null
+    );
+  }
+
+  get relationshipArrowsAtMax() {
+    return this.relationshipArrows.length >= MAX_RELATIONSHIP_ARROW_COUNT;
   }
 
   // True when at least one eye path with at least one valid point
@@ -771,6 +836,8 @@ export default class NpnCritiqueReplyModal extends Component {
         eyePaths: this.eyePaths,
         attentionPulls: this.attentionPulls,
         strongAreas: this.strongAreas,
+        directionArrows: this.directionArrows,
+        relationshipArrows: this.relationshipArrows,
       });
       blob = await exportCanvasToBlob(canvas);
     } catch (e) {
@@ -889,11 +956,15 @@ export default class NpnCritiqueReplyModal extends Component {
     this._eyePathStarterInserted = false;
     this.attentionPulls = [];
     this.strongAreas = [];
+    this.directionArrows = [];
+    this.relationshipArrows = [];
     this.selectedPinNumber = null;
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
     this.selectedStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
     this.visualMode = null;
     this.pendingPin = null;
     this.pendingPinNoteText = "";
@@ -903,6 +974,10 @@ export default class NpnCritiqueReplyModal extends Component {
     this.pendingStrongAreaPopoverText = "";
     this.pendingEyePathPopover = null;
     this.pendingEyePathPopoverText = "";
+    this.pendingDirectionArrowPopover = null;
+    this.pendingDirectionArrowPopoverText = "";
+    this.pendingRelationshipArrowPopover = null;
+    this.pendingRelationshipArrowPopoverText = "";
   }
 
   // -- Visual Notes ------------------------------------------------------
@@ -944,6 +1019,12 @@ export default class NpnCritiqueReplyModal extends Component {
   get strongAreaMode() {
     return this.visualMode === "strong_area";
   }
+  get directionArrowMode() {
+    return this.visualMode === "direction_arrow";
+  }
+  get relationshipArrowMode() {
+    return this.visualMode === "relationship_arrow";
+  }
 
   @action
   toggleNoteMode() {
@@ -968,6 +1049,20 @@ export default class NpnCritiqueReplyModal extends Component {
   @action
   toggleStrongAreaMode() {
     this._setVisualMode(this.strongAreaMode ? null : "strong_area");
+  }
+
+  @action
+  toggleDirectionArrowMode() {
+    this._setVisualMode(
+      this.directionArrowMode ? null : "direction_arrow"
+    );
+  }
+
+  @action
+  toggleRelationshipArrowMode() {
+    this._setVisualMode(
+      this.relationshipArrowMode ? null : "relationship_arrow"
+    );
   }
 
   _setVisualMode(mode) {
@@ -996,6 +1091,20 @@ export default class NpnCritiqueReplyModal extends Component {
       this.pendingEyePathPopover = null;
       this.pendingEyePathPopoverText = "";
     }
+    if (
+      this.pendingDirectionArrowPopover &&
+      mode !== "direction_arrow"
+    ) {
+      this.pendingDirectionArrowPopover = null;
+      this.pendingDirectionArrowPopoverText = "";
+    }
+    if (
+      this.pendingRelationshipArrowPopover &&
+      mode !== "relationship_arrow"
+    ) {
+      this.pendingRelationshipArrowPopover = null;
+      this.pendingRelationshipArrowPopoverText = "";
+    }
     const previousMode = this.visualMode;
     this.visualMode = mode;
     // Switching modes drops any active selection so toolbar context
@@ -1006,6 +1115,8 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
     this.selectedStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
     // Eye-path session tracking. Each entry into eye_path mode is
     // one path session: the first click creates a new path (up to
     // the per-critique cap) and subsequent clicks extend it. Leaving
@@ -1077,6 +1188,8 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
     this.selectedStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
     if (this.selectedPinNumber === pin.number) {
       this.selectedPinNumber = null;
     } else {
@@ -1148,6 +1261,8 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
     this.selectedStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
     this.cropSelected = !this.cropSelected;
   }
 
@@ -1469,6 +1584,8 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cropSelected = false;
     this.selectedAttentionPullId = null;
     this.selectedStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
     // Selecting an EXISTING path takes over from the active session
     // — the next click on empty stage should still start a new path
     // (active session = null), which preserves the user's expectation
@@ -1628,6 +1745,8 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
     if (this.selectedAttentionPullId === id) {
       // Clicking the already-selected marker deselects (parallel
       // with pin / crop toggle behavior).
@@ -1822,6 +1941,10 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedAttentionPullId = null;
     if (this.selectedStrongAreaId === id) {
       this.selectedStrongAreaId = null;
+      this.selectedDirectionArrowId = null;
+      this.selectedRelationshipArrowId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
     } else {
       this.selectedStrongAreaId = id;
     }
@@ -1851,6 +1974,10 @@ export default class NpnCritiqueReplyModal extends Component {
     this.strongAreas = this.strongAreas.filter((p) => p.id !== id);
     if (this.selectedStrongAreaId === id) {
       this.selectedStrongAreaId = null;
+      this.selectedDirectionArrowId = null;
+      this.selectedRelationshipArrowId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
     }
     if (this.pendingStrongAreaPopover?.id === id) {
       this.pendingStrongAreaPopover = null;
@@ -1880,6 +2007,8 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this.strongAreas = [];
     this.selectedStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
     this.pendingStrongAreaPopover = null;
     this.pendingStrongAreaPopoverText = "";
   }
@@ -1940,6 +2069,294 @@ export default class NpnCritiqueReplyModal extends Component {
   skipPendingStrongAreaPopover() {
     this.pendingStrongAreaPopover = null;
     this.pendingStrongAreaPopoverText = "";
+  }
+
+  // ---- Direction Arrow ----------------------------------------------
+  //
+  // Drag-to-create like attention pull, but the stored shape is two
+  // endpoints (tail → head) instead of a bounding rect. Cap is
+  // MAX_DIRECTION_ARROW_COUNT (per-kind cap mirroring the other
+  // labeled tools). Below-threshold drags are dropped silently — the
+  // Konva stage filters those before calling `addDirectionArrow`.
+  @action
+  addDirectionArrow(x1Pct, y1Pct, x2Pct, y2Pct) {
+    if (this.visualMode !== "direction_arrow") {
+      return;
+    }
+    if (this.directionArrowsAtMax) {
+      return;
+    }
+    if (this.pendingDirectionArrowPopover) {
+      // A previous arrow's popover is still open — treat the new
+      // drag as implicit Skip on it (same pattern as attention pull
+      // / strong area).
+      this.pendingDirectionArrowPopover = null;
+      this.pendingDirectionArrowPopoverText = "";
+    }
+    this._directionArrowIdCounter += 1;
+    const id = `direction_arrow_${this._directionArrowIdCounter}`;
+    const label = nextDirectionArrowLabel(
+      this.directionArrows.map((a) => a.label)
+    );
+    const newArrow = { id, label, x1Pct, y1Pct, x2Pct, y2Pct };
+    this.directionArrows = [...this.directionArrows, newArrow];
+    // Mutex: selecting a new arrow clears every other selection
+    // (the cross-kind exclusivity rule).
+    this.selectedPinNumber = null;
+    this.cropSelected = false;
+    this.selectedEyePathId = null;
+    this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
+    this.selectedRelationshipArrowId = null;
+    this.selectedDirectionArrowId = id;
+    // Popover anchors at the arrowhead (x2/y2) — that's where the
+    // user just released, so the cursor is already nearby.
+    this.pendingDirectionArrowPopover = {
+      id,
+      label,
+      anchorXPct: x2Pct,
+      anchorYPct: y2Pct,
+    };
+    this.pendingDirectionArrowPopoverText = "";
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] add-direction-arrow", {
+        topicId: this.topic?.id,
+        id,
+        label,
+      });
+    }
+  }
+
+  @action
+  selectDirectionArrow(id) {
+    if (!id) {
+      return;
+    }
+    if (!this.directionArrows.some((a) => a.id === id)) {
+      return;
+    }
+    this._setVisualMode("direction_arrow");
+    // Cross-kind mutex.
+    this.selectedPinNumber = null;
+    this.cropSelected = false;
+    this.selectedEyePathId = null;
+    this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
+    this.selectedRelationshipArrowId = null;
+    // Toggle: clicking the already-selected arrow deselects.
+    this.selectedDirectionArrowId =
+      this.selectedDirectionArrowId === id ? null : id;
+  }
+
+  @action
+  removeSelectedDirectionArrow() {
+    if (!this.selectedDirectionArrowId) {
+      return;
+    }
+    this.removeDirectionArrowById(this.selectedDirectionArrowId);
+  }
+
+  @action
+  removeDirectionArrowById(id) {
+    if (!id) {
+      return;
+    }
+    if (!this.directionArrows.some((a) => a.id === id)) {
+      return;
+    }
+    this.directionArrows = this.directionArrows.filter((a) => a.id !== id);
+    if (this.selectedDirectionArrowId === id) {
+      this.selectedDirectionArrowId = null;
+    }
+    if (this.pendingDirectionArrowPopover?.id === id) {
+      this.pendingDirectionArrowPopover = null;
+      this.pendingDirectionArrowPopoverText = "";
+    }
+  }
+
+  @action
+  clearDirectionArrows() {
+    if (this.directionArrows.length === 0) {
+      return;
+    }
+    this.directionArrows = [];
+    this.selectedDirectionArrowId = null;
+    this.pendingDirectionArrowPopover = null;
+    this.pendingDirectionArrowPopoverText = "";
+  }
+
+  @action
+  updatePendingDirectionArrowPopoverText(event) {
+    this.pendingDirectionArrowPopoverText = event?.target?.value ?? "";
+  }
+
+  @action
+  confirmPendingDirectionArrowPopover() {
+    if (!this.pendingDirectionArrowPopover) {
+      return;
+    }
+    const text = this.pendingDirectionArrowPopoverText.trim();
+    const label = this.pendingDirectionArrowPopover.label;
+    if (text) {
+      const line = i18n(
+        "npn_critique_reply.visual_notes.direction_arrow_line_template",
+        { label, text }
+      );
+      this._appendToTextarea(line);
+      const id = this.pendingDirectionArrowPopover.id;
+      this.directionArrows = this.directionArrows.map((a) =>
+        a.id === id ? { ...a, noteText: text } : a
+      );
+    }
+    this.pendingDirectionArrowPopover = null;
+    this.pendingDirectionArrowPopoverText = "";
+  }
+
+  @action
+  skipPendingDirectionArrowPopover() {
+    this.pendingDirectionArrowPopover = null;
+    this.pendingDirectionArrowPopoverText = "";
+  }
+
+  // ---- Relationship Arrow -------------------------------------------
+  //
+  // Twin of Direction Arrow but with arrowheads on both ends and
+  // "R<N>" labels. Same drag-to-create + popover-on-place flow.
+  @action
+  addRelationshipArrow(x1Pct, y1Pct, x2Pct, y2Pct) {
+    if (this.visualMode !== "relationship_arrow") {
+      return;
+    }
+    if (this.relationshipArrowsAtMax) {
+      return;
+    }
+    if (this.pendingRelationshipArrowPopover) {
+      this.pendingRelationshipArrowPopover = null;
+      this.pendingRelationshipArrowPopoverText = "";
+    }
+    this._relationshipArrowIdCounter += 1;
+    const id = `relationship_arrow_${this._relationshipArrowIdCounter}`;
+    const label = nextRelationshipArrowLabel(
+      this.relationshipArrows.map((a) => a.label)
+    );
+    const newArrow = { id, label, x1Pct, y1Pct, x2Pct, y2Pct };
+    this.relationshipArrows = [...this.relationshipArrows, newArrow];
+    this.selectedPinNumber = null;
+    this.cropSelected = false;
+    this.selectedEyePathId = null;
+    this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = id;
+    this.pendingRelationshipArrowPopover = {
+      id,
+      label,
+      // Anchor mid-line so the popover doesn't favour either end —
+      // relationship arrows are non-directional.
+      anchorXPct: (x1Pct + x2Pct) / 2,
+      anchorYPct: (y1Pct + y2Pct) / 2,
+    };
+    this.pendingRelationshipArrowPopoverText = "";
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] add-relationship-arrow", {
+        topicId: this.topic?.id,
+        id,
+        label,
+      });
+    }
+  }
+
+  @action
+  selectRelationshipArrow(id) {
+    if (!id) {
+      return;
+    }
+    if (!this.relationshipArrows.some((a) => a.id === id)) {
+      return;
+    }
+    this._setVisualMode("relationship_arrow");
+    this.selectedPinNumber = null;
+    this.cropSelected = false;
+    this.selectedEyePathId = null;
+    this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId =
+      this.selectedRelationshipArrowId === id ? null : id;
+  }
+
+  @action
+  removeSelectedRelationshipArrow() {
+    if (!this.selectedRelationshipArrowId) {
+      return;
+    }
+    this.removeRelationshipArrowById(this.selectedRelationshipArrowId);
+  }
+
+  @action
+  removeRelationshipArrowById(id) {
+    if (!id) {
+      return;
+    }
+    if (!this.relationshipArrows.some((a) => a.id === id)) {
+      return;
+    }
+    this.relationshipArrows = this.relationshipArrows.filter(
+      (a) => a.id !== id
+    );
+    if (this.selectedRelationshipArrowId === id) {
+      this.selectedRelationshipArrowId = null;
+    }
+    if (this.pendingRelationshipArrowPopover?.id === id) {
+      this.pendingRelationshipArrowPopover = null;
+      this.pendingRelationshipArrowPopoverText = "";
+    }
+  }
+
+  @action
+  clearRelationshipArrows() {
+    if (this.relationshipArrows.length === 0) {
+      return;
+    }
+    this.relationshipArrows = [];
+    this.selectedRelationshipArrowId = null;
+    this.pendingRelationshipArrowPopover = null;
+    this.pendingRelationshipArrowPopoverText = "";
+  }
+
+  @action
+  updatePendingRelationshipArrowPopoverText(event) {
+    this.pendingRelationshipArrowPopoverText = event?.target?.value ?? "";
+  }
+
+  @action
+  confirmPendingRelationshipArrowPopover() {
+    if (!this.pendingRelationshipArrowPopover) {
+      return;
+    }
+    const text = this.pendingRelationshipArrowPopoverText.trim();
+    const label = this.pendingRelationshipArrowPopover.label;
+    if (text) {
+      const line = i18n(
+        "npn_critique_reply.visual_notes.relationship_arrow_line_template",
+        { label, text }
+      );
+      this._appendToTextarea(line);
+      const id = this.pendingRelationshipArrowPopover.id;
+      this.relationshipArrows = this.relationshipArrows.map((a) =>
+        a.id === id ? { ...a, noteText: text } : a
+      );
+    }
+    this.pendingRelationshipArrowPopover = null;
+    this.pendingRelationshipArrowPopoverText = "";
+  }
+
+  @action
+  skipPendingRelationshipArrowPopover() {
+    this.pendingRelationshipArrowPopover = null;
+    this.pendingRelationshipArrowPopoverText = "";
   }
 
   // ---- Eye-path popover ----------------------------------------------
@@ -2249,6 +2666,8 @@ export default class NpnCritiqueReplyModal extends Component {
               eyePaths: this.eyePaths,
               attentionPulls: this.attentionPulls,
               strongAreas: this.strongAreas,
+              directionArrows: this.directionArrows,
+              relationshipArrows: this.relationshipArrows,
             })
           : null;
 
@@ -2603,6 +3022,14 @@ export default class NpnCritiqueReplyModal extends Component {
       this.strongAreas
         .map((s) => `${s.id}:${s.xPct}:${s.yPct}:${s.widthPct}:${s.heightPct}`)
         .join(","),
+      this.directionArrows.length,
+      this.directionArrows
+        .map((a) => `${a.id}:${a.x1Pct}:${a.y1Pct}:${a.x2Pct}:${a.y2Pct}`)
+        .join(","),
+      this.relationshipArrows.length,
+      this.relationshipArrows
+        .map((a) => `${a.id}:${a.x1Pct}:${a.y1Pct}:${a.x2Pct}:${a.y2Pct}`)
+        .join(","),
       this.promptsHidden ? 1 : 0,
       this.promptsExpanded ? 1 : 0,
     ].join("|");
@@ -2728,6 +3155,16 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     for (const area of strongAreasToAnnotations(this.strongAreas ?? [])) {
       annotations.push(area);
+    }
+    for (const arrow of directionArrowsToAnnotations(
+      this.directionArrows ?? []
+    )) {
+      annotations.push(arrow);
+    }
+    for (const arrow of relationshipArrowsToAnnotations(
+      this.relationshipArrows ?? []
+    )) {
+      annotations.push(arrow);
     }
     const payload = {
       schema_version: 1,
@@ -2898,6 +3335,10 @@ export default class NpnCritiqueReplyModal extends Component {
 
     this.attentionPulls = annotationsToAttentionPulls(synthPayload);
     this.strongAreas = annotationsToStrongAreas(synthPayload);
+    this.directionArrows = annotationsToDirectionArrows(synthPayload);
+    this.relationshipArrows = annotationsToRelationshipArrows(synthPayload);
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
 
     // Bump id counters past any restored ids so newly-created
     // markers don't collide.
@@ -2908,6 +3349,14 @@ export default class NpnCritiqueReplyModal extends Component {
     this._strongAreaIdCounter = this.strongAreas.reduce(
       (max, s) => Math.max(max, extractIdSuffix(s.id) ?? 0),
       this._strongAreaIdCounter ?? 0
+    );
+    this._directionArrowIdCounter = this.directionArrows.reduce(
+      (max, a) => Math.max(max, extractIdSuffix(a.id) ?? 0),
+      this._directionArrowIdCounter ?? 0
+    );
+    this._relationshipArrowIdCounter = this.relationshipArrows.reduce(
+      (max, a) => Math.max(max, extractIdSuffix(a.id) ?? 0),
+      this._relationshipArrowIdCounter ?? 0
     );
   }
 
@@ -2960,11 +3409,15 @@ export default class NpnCritiqueReplyModal extends Component {
     this._eyePathStarterInserted = false;
     this.attentionPulls = [];
     this.strongAreas = [];
+    this.directionArrows = [];
+    this.relationshipArrows = [];
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedPinNumber = null;
     this.selectedAttentionPullId = null;
     this.selectedStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
     this.draftRestoreNotice = null;
     this.draftStatus = DRAFT_STATUS.IDLE;
     this.draftHasSaved = false;
@@ -3168,6 +3621,46 @@ export default class NpnCritiqueReplyModal extends Component {
                     }}
                     @disabled={{this.isPosting}}
                   />
+                  <DButton
+                    class={{if
+                      this.directionArrowMode
+                      "btn-primary"
+                      "btn-default"
+                    }}
+                    @action={{this.toggleDirectionArrowMode}}
+                    @icon={{if
+                      this.directionArrowMode
+                      "check"
+                      "arrow-right"
+                    }}
+                    @label={{if
+                      this.directionArrowMode
+                      "npn_critique_reply.visual_notes.direction_arrow_done"
+                      "npn_critique_reply.visual_notes.direction_arrow"
+                    }}
+                    @title="npn_critique_reply.visual_notes.direction_arrow_title"
+                    @disabled={{this.isPosting}}
+                  />
+                  <DButton
+                    class={{if
+                      this.relationshipArrowMode
+                      "btn-primary"
+                      "btn-default"
+                    }}
+                    @action={{this.toggleRelationshipArrowMode}}
+                    @icon={{if
+                      this.relationshipArrowMode
+                      "check"
+                      "arrows-left-right"
+                    }}
+                    @label={{if
+                      this.relationshipArrowMode
+                      "npn_critique_reply.visual_notes.relationship_arrow_done"
+                      "npn_critique_reply.visual_notes.relationship_arrow"
+                    }}
+                    @title="npn_critique_reply.visual_notes.relationship_arrow_title"
+                    @disabled={{this.isPosting}}
+                  />
 
                 </div>
 
@@ -3353,6 +3846,48 @@ export default class NpnCritiqueReplyModal extends Component {
                         />
                       {{/if}}
                     {{/if}}
+
+                    {{! Direction-arrow mode actions. }}
+                    {{#if this.directionArrowMode}}
+                      {{#if this.selectedDirectionArrow}}
+                        <DButton
+                          class="btn-default npn-critique-reply-modal__remove-pin"
+                          @icon="trash-can"
+                          @action={{this.removeSelectedDirectionArrow}}
+                          @label="npn_critique_reply.visual_notes.direction_arrow_remove"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                      {{#if this.directionArrows.length}}
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__clear-notes"
+                          @action={{this.clearDirectionArrows}}
+                          @label="npn_critique_reply.visual_notes.direction_arrow_clear"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                    {{/if}}
+
+                    {{! Relationship-arrow mode actions. }}
+                    {{#if this.relationshipArrowMode}}
+                      {{#if this.selectedRelationshipArrow}}
+                        <DButton
+                          class="btn-default npn-critique-reply-modal__remove-pin"
+                          @icon="trash-can"
+                          @action={{this.removeSelectedRelationshipArrow}}
+                          @label="npn_critique_reply.visual_notes.relationship_arrow_remove"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                      {{#if this.relationshipArrows.length}}
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__clear-notes"
+                          @action={{this.clearRelationshipArrows}}
+                          @label="npn_critique_reply.visual_notes.relationship_arrow_clear"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                    {{/if}}
                 </div>
               {{/if}}
 
@@ -3403,6 +3938,24 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onPendingEyePathPopoverInput={{this.updatePendingEyePathPopoverText}}
                 @onConfirmPendingEyePathPopover={{this.confirmPendingEyePathPopover}}
                 @onSkipPendingEyePathPopover={{this.skipPendingEyePathPopover}}
+                @directionArrows={{this.directionArrows}}
+                @selectedDirectionArrowId={{this.selectedDirectionArrowId}}
+                @onAddDirectionArrow={{this.addDirectionArrow}}
+                @onSelectDirectionArrow={{this.selectDirectionArrow}}
+                @pendingDirectionArrowPopover={{this.pendingDirectionArrowPopover}}
+                @pendingDirectionArrowPopoverText={{this.pendingDirectionArrowPopoverText}}
+                @onPendingDirectionArrowPopoverInput={{this.updatePendingDirectionArrowPopoverText}}
+                @onConfirmPendingDirectionArrowPopover={{this.confirmPendingDirectionArrowPopover}}
+                @onSkipPendingDirectionArrowPopover={{this.skipPendingDirectionArrowPopover}}
+                @relationshipArrows={{this.relationshipArrows}}
+                @selectedRelationshipArrowId={{this.selectedRelationshipArrowId}}
+                @onAddRelationshipArrow={{this.addRelationshipArrow}}
+                @onSelectRelationshipArrow={{this.selectRelationshipArrow}}
+                @pendingRelationshipArrowPopover={{this.pendingRelationshipArrowPopover}}
+                @pendingRelationshipArrowPopoverText={{this.pendingRelationshipArrowPopoverText}}
+                @onPendingRelationshipArrowPopoverInput={{this.updatePendingRelationshipArrowPopoverText}}
+                @onConfirmPendingRelationshipArrowPopover={{this.confirmPendingRelationshipArrowPopover}}
+                @onSkipPendingRelationshipArrowPopover={{this.skipPendingRelationshipArrowPopover}}
                 @cropAspectRatio={{this.cropAspectRatio}}
                 @pendingPin={{this.pendingPin}}
                 @pendingPinNoteText={{this.pendingPinNoteText}}
@@ -3581,6 +4134,80 @@ export default class NpnCritiqueReplyModal extends Component {
                           {{on
                             "click"
                             (fn this.removeStrongAreaById area.id)
+                          }}
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.a11y_remove"
+                          }}</button>
+                      </li>
+                    {{/each}}
+                    {{#each this.directionArrows as |arrow|}}
+                      <li>
+                        <span
+                          class="npn-critique-reply-modal__a11y-list-label"
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.direction_arrow_a11y_label"
+                            label=arrow.label
+                          }}</span>
+                        <button
+                          type="button"
+                          class="btn-small btn-default"
+                          aria-pressed={{if
+                            (eq arrow.id this.selectedDirectionArrowId)
+                            "true"
+                            "false"
+                          }}
+                          disabled={{this.isPosting}}
+                          {{on
+                            "click"
+                            (fn this.selectDirectionArrow arrow.id)
+                          }}
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.a11y_select"
+                          }}</button>
+                        <button
+                          type="button"
+                          class="btn-small btn-flat"
+                          disabled={{this.isPosting}}
+                          {{on
+                            "click"
+                            (fn this.removeDirectionArrowById arrow.id)
+                          }}
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.a11y_remove"
+                          }}</button>
+                      </li>
+                    {{/each}}
+                    {{#each this.relationshipArrows as |arrow|}}
+                      <li>
+                        <span
+                          class="npn-critique-reply-modal__a11y-list-label"
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.relationship_arrow_a11y_label"
+                            label=arrow.label
+                          }}</span>
+                        <button
+                          type="button"
+                          class="btn-small btn-default"
+                          aria-pressed={{if
+                            (eq arrow.id this.selectedRelationshipArrowId)
+                            "true"
+                            "false"
+                          }}
+                          disabled={{this.isPosting}}
+                          {{on
+                            "click"
+                            (fn this.selectRelationshipArrow arrow.id)
+                          }}
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.a11y_select"
+                          }}</button>
+                        <button
+                          type="button"
+                          class="btn-small btn-flat"
+                          disabled={{this.isPosting}}
+                          {{on
+                            "click"
+                            (fn this.removeRelationshipArrowById arrow.id)
                           }}
                         >{{i18n
                             "npn_critique_reply.visual_notes.a11y_remove"

@@ -23,8 +23,19 @@ module DiscourseNpnCritiqueReply
     MAX_EYE_PATH_POINTS = 10
     MAX_ATTENTION_PULL_COUNT = 8
     MAX_STRONG_AREA_COUNT = 8
+    MAX_DIRECTION_ARROW_COUNT = 8
+    MAX_RELATIONSHIP_ARROW_COUNT = 8
+    MIN_ARROW_DISTANCE_PCT = 3.0
 
-    ACTIVE_KINDS = %w[pin crop eye_path attention_pull strong_area].freeze
+    ACTIVE_KINDS = %w[
+      pin
+      crop
+      eye_path
+      attention_pull
+      strong_area
+      direction_arrow
+      relationship_arrow
+    ].freeze
 
     UI_ALLOWED_KEYS = %w[prompts_hidden prompts_expanded].freeze
 
@@ -80,6 +91,8 @@ module DiscourseNpnCritiqueReply
       eye_path_count = 0
       attention_pull_count = 0
       strong_area_count = 0
+      direction_arrow_count = 0
+      relationship_arrow_count = 0
       seen_ids = {}
       out = []
 
@@ -115,6 +128,16 @@ module DiscourseNpnCritiqueReply
             next if strong_area_count >= MAX_STRONG_AREA_COUNT
             normalize_shape(entry, kind: "strong_area").tap do |n|
               strong_area_count += 1 if n
+            end
+          when "direction_arrow"
+            next if direction_arrow_count >= MAX_DIRECTION_ARROW_COUNT
+            normalize_arrow(entry, kind: "direction_arrow").tap do |n|
+              direction_arrow_count += 1 if n
+            end
+          when "relationship_arrow"
+            next if relationship_arrow_count >= MAX_RELATIONSHIP_ARROW_COUNT
+            normalize_arrow(entry, kind: "relationship_arrow").tap do |n|
+              relationship_arrow_count += 1 if n
             end
           end
 
@@ -188,6 +211,38 @@ module DiscourseNpnCritiqueReply
       # used by normalize_rect for crop / attention_pull / strong_area.
       id = normalize_string(entry["id"] || entry[:id]) || "eye_path_#{rand(1_000_000)}"
       out = { "id" => id, "kind" => "eye_path", "points" => points }
+      label = normalize_string(entry["label"] || entry[:label])
+      out["label"] = label if label
+      note = normalize_string(entry["note"] || entry[:note])
+      out["note"] = note if note
+      out
+    end
+
+    # Two-endpoint arrow normalizer — used for both direction_arrow
+    # and relationship_arrow. The kinds share their coordinate shape
+    # and only differ in how they render in the editor and which
+    # label pattern (D vs R) they use. Tiny drags (below
+    # MIN_ARROW_DISTANCE_PCT) are dropped as misclicks, matching the
+    # tiny-rect filter on attention pulls.
+    def normalize_arrow(entry, kind:)
+      x1 = clamp_pct(entry["x1_pct"] || entry[:x1_pct])
+      y1 = clamp_pct(entry["y1_pct"] || entry[:y1_pct])
+      x2 = clamp_pct(entry["x2_pct"] || entry[:x2_pct])
+      y2 = clamp_pct(entry["y2_pct"] || entry[:y2_pct])
+      return nil if x1.nil? || y1.nil? || x2.nil? || y2.nil?
+      dx = x2 - x1
+      dy = y2 - y1
+      return nil if Math.sqrt((dx * dx) + (dy * dy)) < MIN_ARROW_DISTANCE_PCT
+
+      id = normalize_string(entry["id"] || entry[:id]) || "#{kind}_#{rand(1_000_000)}"
+      out = {
+        "id" => id,
+        "kind" => kind,
+        "x1_pct" => x1,
+        "y1_pct" => y1,
+        "x2_pct" => x2,
+        "y2_pct" => y2,
+      }
       label = normalize_string(entry["label"] || entry[:label])
       out["label"] = label if label
       note = normalize_string(entry["note"] || entry[:note])

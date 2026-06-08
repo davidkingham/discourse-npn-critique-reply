@@ -92,7 +92,9 @@ export default class NpnCritiqueImageReference extends Component {
       this.args.crop ||
       (this.args.eyePaths?.length ?? 0) > 0 ||
       (this.args.attentionPulls?.length ?? 0) > 0 ||
-      (this.args.strongAreas?.length ?? 0) > 0
+      (this.args.strongAreas?.length ?? 0) > 0 ||
+      (this.args.directionArrows?.length ?? 0) > 0 ||
+      (this.args.relationshipArrows?.length ?? 0) > 0
     ) {
       this._konvaContainerNeeded = true;
     }
@@ -203,6 +205,18 @@ export default class NpnCritiqueImageReference extends Component {
             widthPct,
             heightPct
           ),
+        directionArrows: this.args.directionArrows,
+        selectedDirectionArrowId: this.args.selectedDirectionArrowId,
+        onAddDirectionArrow: (x1Pct, y1Pct, x2Pct, y2Pct) =>
+          this.args.onAddDirectionArrow?.(x1Pct, y1Pct, x2Pct, y2Pct),
+        onSelectDirectionArrow: (id) =>
+          this.args.onSelectDirectionArrow?.(id),
+        relationshipArrows: this.args.relationshipArrows,
+        selectedRelationshipArrowId: this.args.selectedRelationshipArrowId,
+        onAddRelationshipArrow: (x1Pct, y1Pct, x2Pct, y2Pct) =>
+          this.args.onAddRelationshipArrow?.(x1Pct, y1Pct, x2Pct, y2Pct),
+        onSelectRelationshipArrow: (id) =>
+          this.args.onSelectRelationshipArrow?.(id),
       });
 
       if (this._destroyed) {
@@ -243,11 +257,15 @@ export default class NpnCritiqueImageReference extends Component {
       eyePaths: this.args.eyePaths,
       attentionPulls: this.args.attentionPulls,
       strongAreas: this.args.strongAreas,
+      directionArrows: this.args.directionArrows,
+      relationshipArrows: this.args.relationshipArrows,
       selectedPinNumber: this.args.selectedNumber,
       cropSelected: this.args.cropSelected,
       selectedEyePathId: this.args.selectedEyePathId,
       selectedAttentionPullId: this.args.selectedAttentionPullId,
       selectedStrongAreaId: this.args.selectedStrongAreaId,
+      selectedDirectionArrowId: this.args.selectedDirectionArrowId,
+      selectedRelationshipArrowId: this.args.selectedRelationshipArrowId,
       visualMode: this.args.visualMode,
       aspectRatio: this.args.cropAspectRatio,
       pinMoveEnabled: this.args.pinMoveEnabled,
@@ -401,6 +419,28 @@ export default class NpnCritiqueImageReference extends Component {
   }
 
   @action
+  handleDirectionArrowPopoverKeydown(event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      this.args.onConfirmPendingDirectionArrowPopover?.();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      this.args.onSkipPendingDirectionArrowPopover?.();
+    }
+  }
+
+  @action
+  handleRelationshipArrowPopoverKeydown(event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      this.args.onConfirmPendingRelationshipArrowPopover?.();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      this.args.onSkipPendingRelationshipArrowPopover?.();
+    }
+  }
+
+  @action
   handleOverlayClick(event) {
     // HTML fallback only supports the numbered-notes mode — crop is
     // Konva-only. The toolbar already hides the Crop tool when Konva
@@ -441,6 +481,8 @@ export default class NpnCritiqueImageReference extends Component {
           {{if (eq @visualMode 'eye_path') 'is-eye-path-mode'}}
           {{if (eq @visualMode 'attention_pull') 'is-attention-pull-mode'}}
           {{if (eq @visualMode 'strong_area') 'is-strong-area-mode'}}
+          {{if (eq @visualMode 'direction_arrow') 'is-direction-arrow-mode'}}
+          {{if (eq @visualMode 'relationship_arrow') 'is-relationship-arrow-mode'}}
           {{if this._konvaStage 'is-konva-active'}}"
         data-markup-slot="image"
         {{didUpdate
@@ -451,6 +493,8 @@ export default class NpnCritiqueImageReference extends Component {
           @eyePaths
           @attentionPulls
           @strongAreas
+          @directionArrows
+          @relationshipArrows
         }}
         {{willDestroy this.teardownKonva}}
       >
@@ -487,6 +531,10 @@ export default class NpnCritiqueImageReference extends Component {
                 @strongAreas
                 @selectedStrongAreaId
                 @strongAreaEditEnabled
+                @directionArrows
+                @selectedDirectionArrowId
+                @relationshipArrows
+                @selectedRelationshipArrowId
               }}
             ></div>
           {{/if}}
@@ -738,6 +786,118 @@ export default class NpnCritiqueImageReference extends Component {
               </div>
             </div>
           {{/if}}
+
+          {{#if @pendingDirectionArrowPopover}}
+            <div
+              class="npn-critique-image-reference__note-popover"
+              role="dialog"
+              aria-label={{i18n
+                "npn_critique_reply.visual_notes.direction_arrow_popover_dialog_label"
+              }}
+              {{didInsert
+                this.positionNotePopover
+                @pendingDirectionArrowPopover
+              }}
+              {{didUpdate
+                this.positionNotePopover
+                @pendingDirectionArrowPopover
+              }}
+            >
+              <div
+                class="npn-critique-image-reference__note-popover-title"
+              >{{i18n
+                  "npn_critique_reply.visual_notes.direction_arrow_popover_title"
+                }}</div>
+              <input
+                type="text"
+                class="npn-critique-image-reference__note-popover-input"
+                placeholder={{i18n
+                  "npn_critique_reply.visual_notes.direction_arrow_popover_placeholder"
+                }}
+                value={{@pendingDirectionArrowPopoverText}}
+                autocomplete="off"
+                {{on "input" @onPendingDirectionArrowPopoverInput}}
+                {{on "keydown" this.handleDirectionArrowPopoverKeydown}}
+                {{didInsert this.focusNoteInput}}
+              />
+              <div
+                class="npn-critique-image-reference__note-popover-actions"
+              >
+                <button
+                  type="button"
+                  class="btn btn-primary btn-small
+                    npn-critique-image-reference__note-popover-add"
+                  {{on "click" @onConfirmPendingDirectionArrowPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.note_popover_add"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-flat btn-small
+                    npn-critique-image-reference__note-popover-skip"
+                  {{on "click" @onSkipPendingDirectionArrowPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.note_popover_skip"
+                  }}</button>
+              </div>
+            </div>
+          {{/if}}
+
+          {{#if @pendingRelationshipArrowPopover}}
+            <div
+              class="npn-critique-image-reference__note-popover"
+              role="dialog"
+              aria-label={{i18n
+                "npn_critique_reply.visual_notes.relationship_arrow_popover_dialog_label"
+              }}
+              {{didInsert
+                this.positionNotePopover
+                @pendingRelationshipArrowPopover
+              }}
+              {{didUpdate
+                this.positionNotePopover
+                @pendingRelationshipArrowPopover
+              }}
+            >
+              <div
+                class="npn-critique-image-reference__note-popover-title"
+              >{{i18n
+                  "npn_critique_reply.visual_notes.relationship_arrow_popover_title"
+                }}</div>
+              <input
+                type="text"
+                class="npn-critique-image-reference__note-popover-input"
+                placeholder={{i18n
+                  "npn_critique_reply.visual_notes.relationship_arrow_popover_placeholder"
+                }}
+                value={{@pendingRelationshipArrowPopoverText}}
+                autocomplete="off"
+                {{on "input" @onPendingRelationshipArrowPopoverInput}}
+                {{on "keydown" this.handleRelationshipArrowPopoverKeydown}}
+                {{didInsert this.focusNoteInput}}
+              />
+              <div
+                class="npn-critique-image-reference__note-popover-actions"
+              >
+                <button
+                  type="button"
+                  class="btn btn-primary btn-small
+                    npn-critique-image-reference__note-popover-add"
+                  {{on "click" @onConfirmPendingRelationshipArrowPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.note_popover_add"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-flat btn-small
+                    npn-critique-image-reference__note-popover-skip"
+                  {{on "click" @onSkipPendingRelationshipArrowPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.note_popover_skip"
+                  }}</button>
+              </div>
+            </div>
+          {{/if}}
         </div>
 
         {{#if (eq @visualMode "numbered_notes")}}
@@ -784,6 +944,20 @@ export default class NpnCritiqueImageReference extends Component {
             aria-live="polite"
           >{{i18n
               "npn_critique_reply.visual_notes.strong_area_hint"
+            }}</p>
+        {{else if (eq @visualMode "direction_arrow")}}
+          <p
+            class="npn-critique-image-reference__hint"
+            aria-live="polite"
+          >{{i18n
+              "npn_critique_reply.visual_notes.direction_arrow_hint"
+            }}</p>
+        {{else if (eq @visualMode "relationship_arrow")}}
+          <p
+            class="npn-critique-image-reference__hint"
+            aria-live="polite"
+          >{{i18n
+              "npn_critique_reply.visual_notes.relationship_arrow_hint"
             }}</p>
         {{/if}}
       </figure>

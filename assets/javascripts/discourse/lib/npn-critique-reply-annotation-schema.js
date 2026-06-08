@@ -72,6 +72,18 @@ export const ANNOTATION_KINDS = Object.freeze({
   EYE_PATH: "eye_path",
   ATTENTION_PULL: "attention_pull",
   STRONG_AREA: "strong_area",
+  // Direction arrow — one-way (single arrowhead), labeled "D<N>".
+  // For "this leads my eye toward..." / "this gesture points toward
+  // the subject..." use cases. Distinct from eye_path: eye_path is
+  // a curve through 2+ points capturing the eye's journey; an arrow
+  // is a single straight directional cue.
+  DIRECTION_ARROW: "direction_arrow",
+  // Relationship arrow — two-way (arrowheads on both ends), labeled
+  // "R<N>". For "these areas echo each other" / "these compete with
+  // each other" / "this balances that" use cases. Renders with a
+  // slightly lighter / dashed stroke so it reads as a relationship
+  // line rather than a measurement tool.
+  RELATIONSHIP_ARROW: "relationship_arrow",
   // Reserved-but-inactive — see notes above. Normalizer drops these.
   ARROW: "arrow",
   CIRCLE: "circle",
@@ -88,6 +100,8 @@ const ACTIVE_KINDS_V1 = Object.freeze(
     ANNOTATION_KINDS.EYE_PATH,
     ANNOTATION_KINDS.ATTENTION_PULL,
     ANNOTATION_KINDS.STRONG_AREA,
+    ANNOTATION_KINDS.DIRECTION_ARROW,
+    ANNOTATION_KINDS.RELATIONSHIP_ARROW,
   ])
 );
 
@@ -182,6 +196,17 @@ export const MIN_ATTENTION_PULL_DIMENSION_PCT = 3;
 export const MAX_STRONG_AREA_COUNT = 8;
 export const MIN_STRONG_AREA_DIMENSION_PCT = 3;
 
+// Arrow caps. Two distinct labeled tools sharing the same coordinate
+// shape (two endpoints):
+//   • direction_arrow — one-way arrowhead. "D<N>" labels.
+//   • relationship_arrow — both ends arrowed. "R<N>" labels.
+// 8 per kind matches attention pulls / strong areas. 3% minimum total
+// distance between endpoints (Pythagorean across the image) drops
+// drags that look like misclicks.
+export const MAX_DIRECTION_ARROW_COUNT = 8;
+export const MAX_RELATIONSHIP_ARROW_COUNT = 8;
+export const MIN_ARROW_DISTANCE_PCT = 3;
+
 // Attention-pull labels are short "A<N>" tags — visible on the image
 // as a small pill and embedded in the critique text as `[A<N>]`. The
 // pattern is strict so any garbage in a hand-edited payload gets
@@ -192,6 +217,13 @@ export const ATTENTION_PULL_LABEL_PATTERN = /^A\d+$/;
 // so the two kinds are unambiguous in both the image badge and the
 // textarea references.
 export const STRONG_AREA_LABEL_PATTERN = /^S\d+$/;
+
+// Direction arrows use "D<N>" — deliberately not "A" (taken by
+// Attention Pull) to keep the in-text references unambiguous.
+export const DIRECTION_ARROW_LABEL_PATTERN = /^D\d+$/;
+
+// Relationship arrows use "R<N>".
+export const RELATIONSHIP_ARROW_LABEL_PATTERN = /^R\d+$/;
 
 // Next-label generator. Walks the existing labels, finds the maximum
 // numeric suffix, returns `A<max+1>`. Matches the pin-numbering
@@ -216,6 +248,47 @@ export function nextAttentionPullLabel(existingLabels) {
     }
   }
   return `A${max + 1}`;
+}
+
+// Direction arrow + Relationship arrow label generators. Both follow
+// the max-suffix+1 pattern so deleting a marker doesn't shift the
+// surviving labels' numbers (D1, D2, D3 with D2 removed → next is D4).
+export function nextDirectionArrowLabel(existingLabels) {
+  let max = 0;
+  if (Array.isArray(existingLabels)) {
+    for (const lbl of existingLabels) {
+      if (typeof lbl !== "string") {
+        continue;
+      }
+      const m = DIRECTION_ARROW_LABEL_PATTERN.exec(lbl);
+      if (m) {
+        const n = parseInt(lbl.slice(1), 10);
+        if (Number.isFinite(n) && n > max) {
+          max = n;
+        }
+      }
+    }
+  }
+  return `D${max + 1}`;
+}
+
+export function nextRelationshipArrowLabel(existingLabels) {
+  let max = 0;
+  if (Array.isArray(existingLabels)) {
+    for (const lbl of existingLabels) {
+      if (typeof lbl !== "string") {
+        continue;
+      }
+      const m = RELATIONSHIP_ARROW_LABEL_PATTERN.exec(lbl);
+      if (m) {
+        const n = parseInt(lbl.slice(1), 10);
+        if (Number.isFinite(n) && n > max) {
+          max = n;
+        }
+      }
+    }
+  }
+  return `R${max + 1}`;
 }
 
 // Reserved aspect-ratio values. Documenting in the schema keeps the
@@ -701,6 +774,193 @@ export function annotationsToStrongAreas(payload) {
   return out;
 }
 
+// ----- Direction-arrow + Relationship-arrow normalizers ----------
+//
+// Both kinds share the same coordinate shape — two endpoints, in
+// percent-of-image. They differ only in how they render (single
+// arrowhead vs. double) and in their label patterns (D<N> vs R<N>).
+// The per-kind helpers below stay separate so the kind/label/pattern
+// stays explicit in every code path; the underlying coordinate
+// validation is factored into `normalizeArrowCoords`.
+//
+// Modal in-memory shape:
+//   { id, label, x1Pct, y1Pct, x2Pct, y2Pct, noteText? }
+// Schema persisted shape: snake_case + kind.
+
+function normalizeArrowCoords(raw) {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const x1 = clampPct(raw.x1_pct ?? raw.x1Pct);
+  const y1 = clampPct(raw.y1_pct ?? raw.y1Pct);
+  const x2 = clampPct(raw.x2_pct ?? raw.x2Pct);
+  const y2 = clampPct(raw.y2_pct ?? raw.y2Pct);
+  if (x1 == null || y1 == null || x2 == null || y2 == null) {
+    return null;
+  }
+  // Pythagorean distance in percent-of-image. Anything below the
+  // floor reads as a misclick and is dropped — same idea as the
+  // tiny-rectangle filter on attention pulls / strong areas.
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  if (Math.hypot(dx, dy) < MIN_ARROW_DISTANCE_PCT) {
+    return null;
+  }
+  return { x1_pct: x1, y1_pct: y1, x2_pct: x2, y2_pct: y2 };
+}
+
+export function normalizeDirectionArrowAnnotation(raw) {
+  const coords = normalizeArrowCoords(raw);
+  if (!coords) {
+    return null;
+  }
+  const id = isNonEmptyString(raw.id) ? raw.id : null;
+  const rawLabel = raw.label;
+  const label =
+    typeof rawLabel === "string" && DIRECTION_ARROW_LABEL_PATTERN.test(rawLabel)
+      ? rawLabel
+      : null;
+  return {
+    id,
+    kind: ANNOTATION_KINDS.DIRECTION_ARROW,
+    label,
+    ...coords,
+  };
+}
+
+export function normalizeRelationshipArrowAnnotation(raw) {
+  const coords = normalizeArrowCoords(raw);
+  if (!coords) {
+    return null;
+  }
+  const id = isNonEmptyString(raw.id) ? raw.id : null;
+  const rawLabel = raw.label;
+  const label =
+    typeof rawLabel === "string" &&
+    RELATIONSHIP_ARROW_LABEL_PATTERN.test(rawLabel)
+      ? rawLabel
+      : null;
+  return {
+    id,
+    kind: ANNOTATION_KINDS.RELATIONSHIP_ARROW,
+    label,
+    ...coords,
+  };
+}
+
+// Modal-shape array → schema annotations array. Mirrors
+// `attentionPullsToAnnotations` and `strongAreasToAnnotations`.
+export function directionArrowsToAnnotations(arrows) {
+  if (!Array.isArray(arrows)) {
+    return [];
+  }
+  const out = [];
+  let idCounter = 1;
+  const usedLabels = new Set();
+  for (const arrow of arrows) {
+    if (out.length >= MAX_DIRECTION_ARROW_COUNT) {
+      break;
+    }
+    const normalized = normalizeDirectionArrowAnnotation({
+      id: arrow.id ?? `direction_arrow_${idCounter}`,
+      label: arrow.label,
+      x1_pct: arrow.x1Pct,
+      y1_pct: arrow.y1Pct,
+      x2_pct: arrow.x2Pct,
+      y2_pct: arrow.y2Pct,
+    });
+    if (normalized) {
+      if (!normalized.id) {
+        normalized.id = `direction_arrow_${idCounter}`;
+      }
+      if (!normalized.label || usedLabels.has(normalized.label)) {
+        normalized.label = nextDirectionArrowLabel(Array.from(usedLabels));
+      }
+      usedLabels.add(normalized.label);
+      out.push(normalized);
+      idCounter += 1;
+    }
+  }
+  return out;
+}
+
+export function relationshipArrowsToAnnotations(arrows) {
+  if (!Array.isArray(arrows)) {
+    return [];
+  }
+  const out = [];
+  let idCounter = 1;
+  const usedLabels = new Set();
+  for (const arrow of arrows) {
+    if (out.length >= MAX_RELATIONSHIP_ARROW_COUNT) {
+      break;
+    }
+    const normalized = normalizeRelationshipArrowAnnotation({
+      id: arrow.id ?? `relationship_arrow_${idCounter}`,
+      label: arrow.label,
+      x1_pct: arrow.x1Pct,
+      y1_pct: arrow.y1Pct,
+      x2_pct: arrow.x2Pct,
+      y2_pct: arrow.y2Pct,
+    });
+    if (normalized) {
+      if (!normalized.id) {
+        normalized.id = `relationship_arrow_${idCounter}`;
+      }
+      if (!normalized.label || usedLabels.has(normalized.label)) {
+        normalized.label = nextRelationshipArrowLabel(Array.from(usedLabels));
+      }
+      usedLabels.add(normalized.label);
+      out.push(normalized);
+      idCounter += 1;
+    }
+  }
+  return out;
+}
+
+// Schema → modal-shape array. Used by edit-mode / draft restore.
+export function annotationsToDirectionArrows(payload) {
+  if (!payload || !Array.isArray(payload.annotations)) {
+    return [];
+  }
+  const out = [];
+  for (const a of payload.annotations) {
+    if (a?.kind !== ANNOTATION_KINDS.DIRECTION_ARROW) {
+      continue;
+    }
+    out.push({
+      id: a.id,
+      label: a.label,
+      x1Pct: a.x1_pct,
+      y1Pct: a.y1_pct,
+      x2Pct: a.x2_pct,
+      y2Pct: a.y2_pct,
+    });
+  }
+  return out;
+}
+
+export function annotationsToRelationshipArrows(payload) {
+  if (!payload || !Array.isArray(payload.annotations)) {
+    return [];
+  }
+  const out = [];
+  for (const a of payload.annotations) {
+    if (a?.kind !== ANNOTATION_KINDS.RELATIONSHIP_ARROW) {
+      continue;
+    }
+    out.push({
+      id: a.id,
+      label: a.label,
+      x1Pct: a.x1_pct,
+      y1Pct: a.y1_pct,
+      x2Pct: a.x2_pct,
+      y2Pct: a.y2_pct,
+    });
+  }
+  return out;
+}
+
 // Modal crop model shape:
 //   { xPct, yPct, widthPct, heightPct, aspectRatio }
 // Schema crop is the same fields snake_case + id + kind.
@@ -885,6 +1145,8 @@ export function buildVisualAnnotationPayload({
   eyePaths,
   attentionPulls,
   strongAreas,
+  directionArrows,
+  relationshipArrows,
 } = {}) {
   const annotations = pinsToAnnotations(pins ?? []);
   if (crop) {
@@ -906,6 +1168,20 @@ export function buildVisualAnnotationPayload({
   if (Array.isArray(strongAreas) && strongAreas.length > 0) {
     for (const areaAnnotation of strongAreasToAnnotations(strongAreas)) {
       annotations.push(areaAnnotation);
+    }
+  }
+  if (Array.isArray(directionArrows) && directionArrows.length > 0) {
+    for (const arrowAnnotation of directionArrowsToAnnotations(
+      directionArrows
+    )) {
+      annotations.push(arrowAnnotation);
+    }
+  }
+  if (Array.isArray(relationshipArrows) && relationshipArrows.length > 0) {
+    for (const arrowAnnotation of relationshipArrowsToAnnotations(
+      relationshipArrows
+    )) {
+      annotations.push(arrowAnnotation);
     }
   }
   return {
@@ -933,6 +1209,12 @@ function normalizeAnnotationsArray(raw) {
   let strongAreaCount = 0;
   let strongAreaIdCounter = 1;
   const usedStrongAreaLabels = new Set();
+  let directionArrowCount = 0;
+  let directionArrowIdCounter = 1;
+  const usedDirectionArrowLabels = new Set();
+  let relationshipArrowCount = 0;
+  let relationshipArrowIdCounter = 1;
+  const usedRelationshipArrowLabels = new Set();
   const out = [];
   for (const entry of raw) {
     if (out.length >= MAX_ANNOTATION_COUNT) {
@@ -1033,6 +1315,53 @@ function normalizeAnnotationsArray(raw) {
           usedStrongAreaLabels.add(normalized.label);
           strongAreaCount += 1;
           strongAreaIdCounter += 1;
+        }
+        break;
+      case ANNOTATION_KINDS.DIRECTION_ARROW:
+        // One-way arrows. Same cap + label-fallback pattern as
+        // attention pull / strong area, with "D<N>" labels.
+        if (directionArrowCount >= MAX_DIRECTION_ARROW_COUNT) {
+          continue;
+        }
+        normalized = normalizeDirectionArrowAnnotation(entry);
+        if (normalized) {
+          if (!normalized.id) {
+            normalized.id = `direction_arrow_${directionArrowIdCounter}`;
+          }
+          if (
+            !normalized.label ||
+            usedDirectionArrowLabels.has(normalized.label)
+          ) {
+            normalized.label = nextDirectionArrowLabel(
+              Array.from(usedDirectionArrowLabels)
+            );
+          }
+          usedDirectionArrowLabels.add(normalized.label);
+          directionArrowCount += 1;
+          directionArrowIdCounter += 1;
+        }
+        break;
+      case ANNOTATION_KINDS.RELATIONSHIP_ARROW:
+        // Two-way arrows. "R<N>" labels.
+        if (relationshipArrowCount >= MAX_RELATIONSHIP_ARROW_COUNT) {
+          continue;
+        }
+        normalized = normalizeRelationshipArrowAnnotation(entry);
+        if (normalized) {
+          if (!normalized.id) {
+            normalized.id = `relationship_arrow_${relationshipArrowIdCounter}`;
+          }
+          if (
+            !normalized.label ||
+            usedRelationshipArrowLabels.has(normalized.label)
+          ) {
+            normalized.label = nextRelationshipArrowLabel(
+              Array.from(usedRelationshipArrowLabels)
+            );
+          }
+          usedRelationshipArrowLabels.add(normalized.label);
+          relationshipArrowCount += 1;
+          relationshipArrowIdCounter += 1;
         }
         break;
       default:
