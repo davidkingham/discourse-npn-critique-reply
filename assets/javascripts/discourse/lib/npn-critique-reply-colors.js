@@ -26,6 +26,20 @@ export const ATTENTION_PULL_OCHRE = "#b8852f";
 // as supportive without competing with the photograph's own greens.
 export const STRONG_AREA_SAGE = "#6e9c81";
 
+// Direction Arrow — muted indigo / blue-violet. Distinct from the
+// eye-path cyan-blue so the two flow-related kinds read as siblings
+// rather than duplicates. "Clear but not loud" per the design intent:
+// solid, direct, with a stronger badge weight than Relationship but
+// less prominent than a pin's filled badge.
+export const DIRECTION_ARROW_INDIGO = "#5f63a7";
+
+// Relationship — warm gray / taupe. Distinct from BOTH the eye-path
+// cyan-blue AND the direction-arrow indigo. Reads as a relational
+// connector — a soft tie between two areas — rather than as movement
+// or attention. Picked warm-neutral on purpose so the line never
+// competes for attention with the actual subject of the photograph.
+export const RELATIONSHIP_TAUPE = "#8a7866";
+
 // Shared white halo that wraps strokes for contrast against dark
 // imagery. Plain white reads as a clean cue without picking up the
 // theme's secondary tint.

@@ -1,6 +1,8 @@
 import { ajax } from "discourse/lib/ajax";
 import {
   ANNOTATION_BLUE,
+  DIRECTION_ARROW_INDIGO,
+  RELATIONSHIP_TAUPE,
   ANNOTATION_HALO,
   AREA_FILL_OPACITY_UNSELECTED,
   ATTENTION_PULL_OCHRE,
@@ -130,6 +132,9 @@ export function buildVisualNotesCanvas({
       drawArrowOnCanvas(ctx, arrow, targetWidth, targetHeight, {
         bothEnds: false,
         dashed: false,
+        tertiary: DIRECTION_ARROW_INDIGO,
+        strokeWeight: 1,
+        baseOpacity: 0.9,
       });
     }
   }
@@ -138,6 +143,9 @@ export function buildVisualNotesCanvas({
       drawArrowOnCanvas(ctx, arrow, targetWidth, targetHeight, {
         bothEnds: true,
         dashed: true,
+        tertiary: RELATIONSHIP_TAUPE,
+        strokeWeight: 0.85,
+        baseOpacity: 0.8,
       });
     }
   }
@@ -783,7 +791,23 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
 // same primitives the Konva editor uses, drawn straight to the export
 // canvas with the canvas 2D context. Coordinates are percentages; we
 // convert to pixels against the target canvas dimensions.
-function drawArrowOnCanvas(ctx, arrow, width, height, { bothEnds, dashed }) {
+function drawArrowOnCanvas(
+  ctx,
+  arrow,
+  width,
+  height,
+  {
+    bothEnds,
+    dashed,
+    // Per-kind colour + weight. Default to the legacy cyan-blue +
+    // standard weight so any caller that hasn't been updated still
+    // gets the historical look — the modal's caller always sets
+    // both now.
+    tertiary = ANNOTATION_BLUE,
+    strokeWeight = 1,
+    baseOpacity = 0.9,
+  }
+) {
   if (!arrow) {
     return;
   }
@@ -801,8 +825,8 @@ function drawArrowOnCanvas(ctx, arrow, width, height, { bothEnds, dashed }) {
   const uy = dy / len;
 
   const shortEdge = Math.min(width, height);
-  const lineWidth = Math.max(2, Math.round(shortEdge * 0.004));
-  const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
+  const lineWidth = Math.max(2, Math.round(shortEdge * 0.004 * strokeWeight));
+  const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075 * strokeWeight));
   const arrowheadLen = Math.max(10, Math.round(shortEdge * 0.018));
   const trim = arrowheadLen * 0.55;
   const lineStartX = bothEnds ? x1 + ux * trim : x1;
@@ -825,9 +849,9 @@ function drawArrowOnCanvas(ctx, arrow, width, height, { bothEnds, dashed }) {
 
   // Visible stroke. Canvas's setLineDash is the dashed-stroke control;
   // restore [] for the arrowhead fill that follows.
-  ctx.strokeStyle = ANNOTATION_BLUE;
+  ctx.strokeStyle = tertiary;
   ctx.lineWidth = lineWidth;
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = baseOpacity;
   if (dashed) {
     ctx.setLineDash([
       Math.max(6, Math.round(shortEdge * 0.012)),
@@ -848,7 +872,7 @@ function drawArrowOnCanvas(ctx, arrow, width, height, { bothEnds, dashed }) {
     const baseCx = tipX - uxLocal * arrowheadLen;
     const baseCy = tipY - uyLocal * arrowheadLen;
     const baseHalf = arrowheadLen * 0.55;
-    ctx.fillStyle = ANNOTATION_BLUE;
+    ctx.fillStyle = tertiary;
     ctx.strokeStyle = ANNOTATION_HALO;
     ctx.lineWidth = 1.5;
     ctx.globalAlpha = 0.95;
@@ -894,7 +918,7 @@ function drawArrowOnCanvas(ctx, arrow, width, height, { bothEnds, dashed }) {
       labelY = midY + perpY * badgeOffset - badgeHeight / 2;
     }
     ctx.globalAlpha = 0.95;
-    ctx.fillStyle = ANNOTATION_BLUE;
+    ctx.fillStyle = tertiary;
     ctx.strokeStyle = ANNOTATION_HALO;
     ctx.lineWidth = 1.5;
     // Rounded-rect badge background.

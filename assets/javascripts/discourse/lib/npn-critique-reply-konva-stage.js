@@ -7,6 +7,8 @@ import {
   AREA_FILL_OPACITY_UNSELECTED,
   ATTENTION_PULL_OCHRE,
   CROP_DIM_FILL,
+  DIRECTION_ARROW_INDIGO,
+  RELATIONSHIP_TAUPE,
   STRONG_AREA_SAGE,
 } from "./npn-critique-reply-colors";
 
@@ -1985,12 +1987,25 @@ export async function createAnnotationStage({
     onUpdate,
     bothEnds,
     dashed,
+    // Per-kind palette + weight. Direction arrows use the slightly
+    // more prominent indigo + standard stroke weight; relationship
+    // arrows use the warmer taupe with a slightly thinner stroke and
+    // lower base opacity so they read as "quieter" relational ties
+    // rather than as a competing directional pull.
+    tertiary = ANNOTATION_BLUE,
+    strokeWeight = 1,
+    baseOpacity = 0.9,
   }) {
     const shortEdge = Math.min(sw, sh);
-    const tertiary = ANNOTATION_BLUE;
     const secondary = ANNOTATION_HALO;
-    const lineWidth = Math.max(2, Math.round(shortEdge * 0.004));
-    const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
+    const lineWidth = Math.max(
+      2,
+      Math.round(shortEdge * 0.004 * strokeWeight)
+    );
+    const haloWidth = Math.max(
+      5,
+      Math.round(shortEdge * 0.0075 * strokeWeight)
+    );
     const arrowheadLen = Math.max(10, Math.round(shortEdge * 0.018));
     const dash = dashed
       ? [
@@ -2056,7 +2071,7 @@ export async function createAnnotationStage({
           strokeWidth: lineWidth,
           lineCap: "round",
           lineJoin: "round",
-          opacity: isSelected ? 1 : 0.9,
+          opacity: isSelected ? 1 : baseOpacity,
           dash,
           listening: false,
         })
@@ -2328,6 +2343,14 @@ export async function createAnnotationStage({
         },
         bothEnds: false,
         dashed: false,
+        // Indigo — distinct from the eye-path cyan-blue so the two
+        // direction/flow tools don't read as duplicates.
+        tertiary: DIRECTION_ARROW_INDIGO,
+        // Default weight + opacity — direction arrows are the
+        // primary "this leads my eye" markers and should read
+        // clearly without being loud.
+        strokeWeight: 1,
+        baseOpacity: 0.9,
       });
     }
     annotationsLayer.batchDraw();
@@ -2362,6 +2385,16 @@ export async function createAnnotationStage({
         // from direction arrows, reads as "soft connection" rather
         // than "measurement / hard pointer."
         dashed: true,
+        // Warm taupe — distinct from both eye-path cyan-blue and the
+        // direction-arrow indigo. Reads as a relational tie rather
+        // than movement.
+        tertiary: RELATIONSHIP_TAUPE,
+        // Slightly thinner stroke (0.85×) and lower base opacity so
+        // relationship arrows read quieter than direction arrows
+        // (per the hierarchy spec — "readable but quieter than
+        // Direction Arrow").
+        strokeWeight: 0.85,
+        baseOpacity: 0.8,
       });
     }
     annotationsLayer.batchDraw();
