@@ -4406,13 +4406,17 @@ export default class NpnCritiqueReplyModal extends Component {
                   {{#if this.critiqueStyleLabel}}
                     <div class="npn-critique-reply-modal__request-row">
                       <dt>{{i18n "npn_critique_reply.modal.critique_style"}}</dt>
-                      <dd>{{this.critiqueStyleLabel}}</dd>
+                      <dd><span
+                          class="npn-critique-reply-modal__request-value"
+                        >{{this.critiqueStyleLabel}}</span></dd>
                     </div>
                   {{/if}}
                   {{#if this.feedbackFocusLabel}}
                     <div class="npn-critique-reply-modal__request-row">
                       <dt>{{i18n "npn_critique_reply.modal.feedback_focus"}}</dt>
-                      <dd>{{this.feedbackFocusLabel}}</dd>
+                      <dd><span
+                          class="npn-critique-reply-modal__request-value"
+                        >{{this.feedbackFocusLabel}}</span></dd>
                     </div>
                   {{/if}}
                   {{#if this.weeklyChallengeTitle}}
@@ -4420,7 +4424,9 @@ export default class NpnCritiqueReplyModal extends Component {
                       <dt>{{i18n
                           "npn_critique_reply.modal.weekly_challenge"
                         }}</dt>
-                      <dd>{{this.weeklyChallengeTitle}}</dd>
+                      <dd><span
+                          class="npn-critique-reply-modal__request-value"
+                        >{{this.weeklyChallengeTitle}}</span></dd>
                     </div>
                   {{/if}}
                   {{#if this.weeklyChallengeDates}}
@@ -4428,7 +4434,9 @@ export default class NpnCritiqueReplyModal extends Component {
                       <dt>{{i18n
                           "npn_critique_reply.modal.weekly_challenge_dates"
                         }}</dt>
-                      <dd>{{this.weeklyChallengeDates}}</dd>
+                      <dd><span
+                          class="npn-critique-reply-modal__request-value"
+                        >{{this.weeklyChallengeDates}}</span></dd>
                     </div>
                   {{/if}}
                 </dl>

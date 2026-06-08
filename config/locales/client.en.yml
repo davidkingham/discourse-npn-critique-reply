@@ -29,9 +29,9 @@ en:
       modal:
         title: "Start a Critique"
         intro: "Use the image and suggested prompts as a starting point. You can edit or delete anything before posting."
-        request_heading: "The photographer asked for"
-        critique_style: "Critique style"
-        feedback_focus: "Feedback focus"
+        request_heading: "Photographer’s request"
+        critique_style: "Style"
+        feedback_focus: "Focus"
         weekly_challenge: "Weekly Challenge"
         weekly_challenge_dates: "Dates"
         critique_type: "Critique type"

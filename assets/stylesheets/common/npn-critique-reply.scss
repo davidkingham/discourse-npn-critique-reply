@@ -216,42 +216,68 @@
   }
 
   // -- Request summary ---------------------------------------------------
+  //
+  // Compact card summarising what the photographer asked for. Subtle
+  // tinted background + hairline border + thin left accent so it
+  // reads as a connected piece of the workspace rather than free-
+  // floating metadata. Values render as small muted pills, which
+  // makes the two scannable lines (Style / Focus) easy to pick out
+  // without competing with the writing area beside it.
 
   &__request {
     margin: 0;
-    padding: 0.75em 1em;
+    padding: 0.65em 0.85em 0.75em;
     background: var(--primary-very-low);
+    border: 1px solid var(--primary-low);
     border-left: 3px solid var(--primary-low-mid);
     border-radius: var(--d-border-radius, 4px);
   }
 
   &__request-heading {
     @extend %npn-critique-section-heading;
+    margin: 0 0 0.5em;
   }
 
   &__request-list {
     margin: 0;
-    display: grid;
-    gap: 0.35em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
   }
 
   &__request-row {
     display: grid;
-    grid-template-columns: minmax(7em, 30%) 1fr;
-    gap: 0.5em 1em;
-    align-items: baseline;
+    grid-template-columns: minmax(4.5em, 5.5em) 1fr;
+    gap: 0.4em 0.8em;
+    align-items: center;
     margin: 0;
 
     dt {
       font-weight: 600;
-      color: var(--primary-high);
+      color: var(--primary-medium);
       font-size: var(--font-down-1);
       margin: 0;
     }
     dd {
       margin: 0;
-      color: var(--primary);
+      min-width: 0; // let pills wrap inside the grid cell
     }
+  }
+
+  // Pill for the value text. Subtle background + hairline border so
+  // it reads as a tag, not a button. Wraps cleanly on long focus
+  // names instead of overflowing the row.
+  &__request-value {
+    display: inline-block;
+    max-width: 100%;
+    padding: 0.15em 0.55em;
+    background: var(--secondary);
+    color: var(--primary-high);
+    border: 1px solid var(--primary-low);
+    border-radius: 999px;
+    font-size: var(--font-down-1);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
   }
 
   &__no-request {
@@ -616,7 +642,7 @@
 
     &__request-row {
       grid-template-columns: 1fr;
-      gap: 0.15em;
+      gap: 0.2em;
     }
 
     &__questions-list,
@@ -637,8 +663,9 @@
       border-color: ButtonText;
     }
     &__request {
-      border-left-color: ButtonText;
+      border-color: ButtonText;
     }
+    &__request-value,
     &__more-ideas,
     &__textarea {
       border-color: ButtonText;
