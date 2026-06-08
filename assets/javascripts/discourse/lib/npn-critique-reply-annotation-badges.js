@@ -57,7 +57,10 @@ export function buildAnnotationLabelMap(annotations) {
     }
     if (annotation.kind === "crop") {
       // Crop has no per-instance label (one crop per critique).
-      // Fixed CROP token gives the prose a styleable handle.
+      // Fixed `Crop` token in the prose styles as a pill. Also
+      // accept the legacy uppercase `CROP` form so posts written
+      // before the rename keep their styled badge.
+      map.set("Crop", suffix);
       map.set("CROP", suffix);
       continue;
     }
@@ -86,8 +89,9 @@ const SKIP_ANCESTOR_TAGS = new Set([
 // Single pattern covering every valid token shape — the label-map
 // gate after-the-fact filters out anything that's not in this
 // post's annotations. Numeric form for pins, alpha+number for the
-// other labelled kinds, fixed `CROP` for the single crop instance.
-const TOKEN_PATTERN = /\[([1-9]\d{0,2}|CROP|[ASDRE]\d{1,3})\]/g;
+// other labelled kinds. `Crop` is the canonical form, `CROP` is
+// the legacy form (kept so old posts still render badges).
+const TOKEN_PATTERN = /\[([1-9]\d{0,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
 
 // Walk every text node under `root` whose ancestors don't include a
 // skip-tag, and hand each one to `replaceTokensInTextNode`. We

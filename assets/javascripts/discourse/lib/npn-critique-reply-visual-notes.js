@@ -6,7 +6,6 @@ import {
   ATTENTION_PULL_OCHRE,
   CROP_DIM_FILL,
   CROP_EXPORT_GRAY,
-  CROP_EXPORT_LIGHT_GRAY,
   DIRECTION_ARROW_INDIGO,
   EYE_PATH_PALE_CYAN,
   NOTE_BLUE,
@@ -238,97 +237,10 @@ function drawCropOnCanvas(ctx, crop, width, height) {
   const inset = borderWidth / 2;
   ctx.strokeRect(cx + inset, cy + inset, cw - borderWidth, ch - borderWidth);
 
-  // Corner brackets + midpoint edge bars — mirrors the editor's
-  // photo-editor-style decoration so the exported JPEG carries the
-  // same framing language. Light gray on top of the mid-gray
-  // boundary; brackets read as the salient corner markers while the
-  // perimeter line acts as their connector. Each marker also gets a
-  // soft white halo behind for readability on dark/bright edges.
-  const shortEdge = Math.min(width, height);
-  const bracketArm = Math.max(20, Math.round(shortEdge * 0.035));
-  const bracketThick = Math.max(4, Math.round(shortEdge * 0.006));
-  const edgeBarLen = Math.max(20, Math.round(shortEdge * 0.03));
-  const edgeBarThick = bracketThick;
-  const markerHaloPad = Math.max(1, Math.round(bracketThick * 0.4));
-
-  ctx.lineCap = "square";
-  ctx.lineJoin = "miter";
-
-  // L-bracket helper: three-segment line meeting at the corner, two
-  // arms reaching `bracketArm` along the adjacent edges inward.
-  // Drawn TWICE — first a slightly fatter white-halo stroke for
-  // contrast, then the visible light-gray stroke on top.
-  function drawCornerBracket(cornerX, cornerY, dx, dy) {
-    const arm1X = cornerX + dx * bracketArm;
-    const arm2Y = cornerY + dy * bracketArm;
-    // Halo.
-    ctx.strokeStyle = ANNOTATION_HALO;
-    ctx.lineWidth = bracketThick + 2 * markerHaloPad;
-    ctx.globalAlpha = 0.55;
-    ctx.beginPath();
-    ctx.moveTo(arm1X, cornerY);
-    ctx.lineTo(cornerX, cornerY);
-    ctx.lineTo(cornerX, arm2Y);
-    ctx.stroke();
-    // Visible light gray.
-    ctx.strokeStyle = CROP_EXPORT_LIGHT_GRAY;
-    ctx.lineWidth = bracketThick;
-    ctx.globalAlpha = 1;
-    ctx.beginPath();
-    ctx.moveTo(arm1X, cornerY);
-    ctx.lineTo(cornerX, cornerY);
-    ctx.lineTo(cornerX, arm2Y);
-    ctx.stroke();
-  }
-  drawCornerBracket(cx, cy, 1, 1); // top-left
-  drawCornerBracket(cx + cw, cy, -1, 1); // top-right
-  drawCornerBracket(cx, cy + ch, 1, -1); // bottom-left
-  drawCornerBracket(cx + cw, cy + ch, -1, -1); // bottom-right
-
-  // Edge midpoint bars — four small rects, one centred on each
-  // edge. Same colour family as the corner brackets so the four
-  // markers read as a set. Halo first, then the visible bar.
-  function drawEdgeBar(barX, barY, barW, barH) {
-    ctx.fillStyle = ANNOTATION_HALO;
-    ctx.globalAlpha = 0.55;
-    ctx.fillRect(
-      barX - markerHaloPad,
-      barY - markerHaloPad,
-      barW + 2 * markerHaloPad,
-      barH + 2 * markerHaloPad
-    );
-    ctx.fillStyle = CROP_EXPORT_LIGHT_GRAY;
-    ctx.globalAlpha = 1;
-    ctx.fillRect(barX, barY, barW, barH);
-  }
-  // Top edge — centred horizontally.
-  drawEdgeBar(
-    cx + cw / 2 - edgeBarLen / 2,
-    cy - edgeBarThick / 2,
-    edgeBarLen,
-    edgeBarThick
-  );
-  // Bottom edge.
-  drawEdgeBar(
-    cx + cw / 2 - edgeBarLen / 2,
-    cy + ch - edgeBarThick / 2,
-    edgeBarLen,
-    edgeBarThick
-  );
-  // Left edge — centred vertically.
-  drawEdgeBar(
-    cx - edgeBarThick / 2,
-    cy + ch / 2 - edgeBarLen / 2,
-    edgeBarThick,
-    edgeBarLen
-  );
-  // Right edge.
-  drawEdgeBar(
-    cx + cw - edgeBarThick / 2,
-    cy + ch / 2 - edgeBarLen / 2,
-    edgeBarThick,
-    edgeBarLen
-  );
+  // Corner brackets + midpoint edge bars are EDITOR-ONLY now.
+  // The posted image gets just the dim + perimeter line — the
+  // handles read as active-editing affordances and felt out of
+  // place on a finished framing suggestion.
 
   ctx.restore();
 }

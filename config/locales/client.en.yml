@@ -67,7 +67,7 @@ en:
         # Edit-existing-critique flow. Same modal, primary action
         # flipped to PUT the saved post + visual_notes instead of
         # POST a new reply.
-        edit_critique_button: "Edit Critique"
+        edit_critique_button: "Edit my Critique"
         edit_critique_button_title: "Reopen the critique workspace to edit the text or visual annotations on this post"
         update_critique: "Update critique"
         updating: "Updating…"
@@ -198,14 +198,17 @@ en:
         crop_a11y_label: "Crop suggestion"
         # Inserted into the textarea when the user creates a crop and
         # either typed nothing in the popover before confirming or
-        # took no action. Just the [CROP] token — the cooked-post
+        # took no action. Just the [Crop] token — the cooked-post
         # decorator styles it as a dark-grey pill so the prose
-        # connects visually to the on-image crop.
-        crop_starter: "[CROP]"
+        # connects visually to the on-image crop. (The decorator
+        # also matches the legacy uppercase [CROP] for posts
+        # critiqued before this rename, so old posts still get the
+        # styled pill.)
+        crop_starter: "[Crop]"
         # Textarea line appended when the user types a description in
-        # the crop popover and clicks Add note: "[CROP] {text}".
+        # the crop popover and clicks Add note: "[Crop] {text}".
         # Parallel to attention_pull_line_template etc.
-        crop_line_template: "[CROP] %{text}"
+        crop_line_template: "[Crop] %{text}"
         # Popover that opens after the user drags a crop rectangle
         # (mirrors the Attention Pull / Strong Area / Arrow flow).
         crop_popover_title: "Crop suggestion"
