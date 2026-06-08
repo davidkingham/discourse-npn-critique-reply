@@ -13,12 +13,25 @@
 // vary `--tertiary`, `--bookmark`, `--success` widely, and we want
 // critiques to read the same regardless of the host theme.
 
-// Pins and eye path share the cyan-blue family. Pins are the most
-// prominent (solid filled badge); eye path is "elegant and
-// directional". Crop has its own pair (see CROP_EDITOR_* and
-// CROP_EXPORT_* below) — it switches between an active blue-gray
-// in the editor and a quieter neutral gray in the finished JPEG.
+// Legacy umbrella token. Still exported as a fallback default for
+// caller signatures (drawArrowOnCanvas, buildArrowGroup) that take
+// `tertiary` as an option — the modal always passes an explicit
+// per-kind colour now, so this default is rarely reached in
+// practice. Prefer the kind-specific tokens below for new code.
 export const ANNOTATION_BLUE = "#3e7ea3";
+
+// Notes / pins — deeper muted teal-blue. The clearest, most
+// prominent annotation marker (filled circle with a white number).
+// Distinct from the eye-path pale cyan so the two no longer read
+// as variants of the same idea.
+export const NOTE_BLUE = "#2d728f";
+
+// Eye Path — pale glacial cyan. Reads as a soft, organic flow line
+// rather than a "read this note" marker. Lighter than Notes and
+// distinct from the muted indigo used by Direction Arrow so the
+// three flow-adjacent tools (eye path, direction, relationship)
+// all sit in different colour families.
+export const EYE_PATH_PALE_CYAN = "#8fd3e8";
 
 // Crop — editor styling. Muted blue-gray so the perimeter still
 // reads as an active editable tool inside the modal, but pulled a
@@ -42,27 +55,33 @@ export const CROP_EXPORT_GRAY = "#9a9a9a";
 // salient visual element, perimeter is the supporting connector.
 export const CROP_EXPORT_LIGHT_GRAY = "#d4d4d4";
 
-// Attention Pull — muted ochre. Distinct from the pin/eye/crop blue
-// and not as alarm-bell-bright as a saturated orange.
-export const ATTENTION_PULL_OCHRE = "#b8852f";
+// Attention Pull — muted ochre/amber. Observational, not warning-
+// like. Slightly lighter than the original saturated ochre so the
+// area marker stays subtle alongside the photograph.
+export const ATTENTION_PULL_OCHRE = "#c2a15a";
 
-// Strong Area — muted sage. Distinct from attention pull and reads
-// as supportive without competing with the photograph's own greens.
-export const STRONG_AREA_SAGE = "#6e9c81";
+// Strong Area — muted sage-teal. Reads as supportive without
+// competing with the photograph's own greens. Lightened so it
+// remains visible over green foliage where the previous deeper
+// sage tended to blend in.
+export const STRONG_AREA_SAGE = "#8fb9a7";
 
-// Direction Arrow — muted indigo / blue-violet. Distinct from the
-// eye-path cyan-blue so the two flow-related kinds read as siblings
-// rather than duplicates. "Clear but not loud" per the design intent:
-// solid, direct, with a stronger badge weight than Relationship but
-// less prominent than a pin's filled badge.
-export const DIRECTION_ARROW_INDIGO = "#5f63a7";
+// Direction Arrow — muted blue-violet / periwinkle. Distinct from
+// the eye-path pale cyan so the two flow-related kinds read as
+// siblings rather than duplicates. "Clear but not loud" per the
+// design intent: solid, direct, with a stronger badge weight than
+// Relationship but less prominent than a pin's filled badge.
+export const DIRECTION_ARROW_INDIGO = "#7478ad";
 
-// Relationship — warm gray / taupe. Distinct from BOTH the eye-path
-// cyan-blue AND the direction-arrow indigo. Reads as a relational
-// connector — a soft tie between two areas — rather than as movement
-// or attention. Picked warm-neutral on purpose so the line never
-// competes for attention with the actual subject of the photograph.
-export const RELATIONSHIP_TAUPE = "#8a7866";
+// Relationship — warm stone / taupe. Distinct from BOTH the eye-
+// path cyan AND the direction-arrow periwinkle. Reads as a
+// relational connector — a soft tie between two areas — rather
+// than as movement or attention. Warm-neutral on purpose so the
+// line never competes for attention with the actual subject of
+// the photograph; lightened from the previous deeper taupe so the
+// marker sits comfortably in the "quieter than Arrow" hierarchy
+// slot.
+export const RELATIONSHIP_TAUPE = "#bdb49f";
 
 // Shared white halo that wraps strokes for contrast against dark
 // imagery. Plain white reads as a clean cue without picking up the

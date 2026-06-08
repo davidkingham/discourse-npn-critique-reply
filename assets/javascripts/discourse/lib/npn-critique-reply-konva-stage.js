@@ -9,6 +9,8 @@ import {
   CROP_DIM_FILL,
   CROP_EDITOR_BLUE_GRAY,
   DIRECTION_ARROW_INDIGO,
+  EYE_PATH_PALE_CYAN,
+  NOTE_BLUE,
   RELATIONSHIP_TAUPE,
   STRONG_AREA_SAGE,
 } from "./npn-critique-reply-colors";
@@ -670,10 +672,12 @@ export async function createAnnotationStage({
     // Annotation palette is fixed (not theme-derived) so critiques
     // read the same across themes — see npn-critique-reply-colors.js.
     // Pins are the most prominent of the muted family — the numbered
-    // badge is the primary critique anchor.
-    const tertiary = ANNOTATION_BLUE;
+    // badge is the primary critique anchor. NOTE_BLUE is deeper and
+    // more saturated than the eye-path pale cyan so Notes don't
+    // visually overlap with the flow line.
+    const tertiary = NOTE_BLUE;
     const secondary = ANNOTATION_HALO;
-    const tertiaryHover = ANNOTATION_BLUE;
+    const tertiaryHover = NOTE_BLUE;
 
     const isSelected = pin.number === state.selectedPinNumber;
     // Selected pin → draggable, unless the modal explicitly suppresses
@@ -1397,11 +1401,15 @@ export async function createAnnotationStage({
       return;
     }
 
-    // Eye path shares the muted blue family with pins and crop —
-    // "elegant and directional, not loud" per the palette refinement.
-    const tertiary = ANNOTATION_BLUE;
+    // Eye path uses a pale glacial cyan — distinct from the deeper
+    // Notes blue so the two no longer read as variants of the same
+    // marker. The white halo on the polyline provides contrast on
+    // dark backgrounds; against bright skies the pale tertiary will
+    // sit quieter (intentional — eye path should feel like organic
+    // flow, not a "read this note" stamp).
+    const tertiary = EYE_PATH_PALE_CYAN;
     const secondary = ANNOTATION_HALO;
-    const tertiaryHover = ANNOTATION_BLUE;
+    const tertiaryHover = EYE_PATH_PALE_CYAN;
     const shortEdge = Math.min(sw, sh);
 
     for (const path of paths) {
@@ -1763,13 +1771,17 @@ export async function createAnnotationStage({
         );
 
         // Label badge — small tertiary pill near the start dot.
-        // Uses the same Konva.Label pattern as attention pulls but
-        // tinted to the eye-path tertiary so the two badges are
-        // visually distinguishable on the same image.
+        // The eye-path badge is intentionally quieter than the D/R
+        // arrow badges and much quieter than the filled Notes pins:
+        // smaller font (~12% smaller) and lower unselected opacity
+        // (0.7 vs the other tools' 0.95). Eye Path is meant to read
+        // as organic flow, not as a labeled callout; the badge is
+        // here for "which path is which" identification when 2+
+        // paths exist, not as the primary visual element.
         const label = path.label;
         if (label) {
-          const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
-          const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+          const badgeFontSize = Math.max(10, Math.round(shortEdge * 0.016));
+          const badgePadding = Math.max(2, Math.round(badgeFontSize * 0.25));
           const badgeHeight = badgeFontSize + 2 * badgePadding;
           const badgeOffset = Math.max(6, Math.round(shortEdge * 0.006));
           // Estimated badge width — Konva won't tell us the rendered
@@ -1799,8 +1811,8 @@ export async function createAnnotationStage({
               fill: isSelected ? tertiaryHover : tertiary,
               cornerRadius: 3,
               stroke: secondary,
-              strokeWidth: 1.5,
-              opacity: isSelected ? 1 : 0.95,
+              strokeWidth: 1,
+              opacity: isSelected ? 1 : 0.7,
             })
           );
           labelNode.add(
@@ -2972,10 +2984,17 @@ export async function createAnnotationStage({
   // Arrow-shape drag preview — a dashed line with a tip mark. Used
   // for both direction_arrow and relationship_arrow during the
   // mousedown→mouseup drag; the rect-shaped preview above wouldn't
-  // make sense for an arrow.
-  function renderArrowPreview(x1, y1, x2, y2, { dashed = false } = {}) {
+  // make sense for an arrow. Caller passes the per-kind colour so
+  // the in-flight preview matches the colour the finished marker
+  // will end up.
+  function renderArrowPreview(
+    x1,
+    y1,
+    x2,
+    y2,
+    { dashed = false, tertiary = ANNOTATION_BLUE } = {}
+  ) {
     previewLayer.destroyChildren();
-    const tertiary = ANNOTATION_BLUE;
     previewLayer.add(
       new Konva.Line({
         points: [x1, y1, x2, y2],
@@ -3092,7 +3111,7 @@ export async function createAnnotationStage({
         directionArrowDrag.startY,
         pos.x,
         pos.y,
-        { dashed: false }
+        { dashed: false, tertiary: DIRECTION_ARROW_INDIGO }
       );
       return;
     }
@@ -3102,7 +3121,7 @@ export async function createAnnotationStage({
         relationshipArrowDrag.startY,
         pos.x,
         pos.y,
-        { dashed: true }
+        { dashed: true, tertiary: RELATIONSHIP_TAUPE }
       );
     }
   });

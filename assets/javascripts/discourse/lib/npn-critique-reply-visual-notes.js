@@ -8,6 +8,8 @@ import {
   CROP_EXPORT_GRAY,
   CROP_EXPORT_LIGHT_GRAY,
   DIRECTION_ARROW_INDIGO,
+  EYE_PATH_PALE_CYAN,
+  NOTE_BLUE,
   RELATIONSHIP_TAUPE,
   STRONG_AREA_SAGE,
 } from "./npn-critique-reply-colors";
@@ -726,9 +728,10 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
     return;
   }
 
-  // Eye path uses the same muted blue as pins/crop — see
+  // Eye path uses the pale glacial cyan that distinguishes it
+  // from the deeper NOTE_BLUE used by pins — see
   // npn-critique-reply-colors.js.
-  const tertiary = ANNOTATION_BLUE;
+  const tertiary = EYE_PATH_PALE_CYAN;
   const secondary = ANNOTATION_HALO;
   const shortEdge = Math.min(width, height);
 
@@ -832,11 +835,14 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
     ctx.fill();
 
     // Label badge — small tertiary pill above-right of the start
-    // dot. Matches the editor (renderEyePath in the Konva stage).
+    // dot. Quieter than the D/R arrow badges and much quieter than
+    // the Notes pin: smaller font (~12% smaller) + 0.7 opacity so
+    // Eye Path reads as organic flow first and "labeled callout"
+    // second. Matches the editor (renderEyePath in the Konva stage).
     const label = eyePath.label;
     if (label) {
-      const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
-      const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+      const badgeFontSize = Math.max(10, Math.round(shortEdge * 0.016));
+      const badgePadding = Math.max(2, Math.round(badgeFontSize * 0.25));
       const badgeOffset = Math.max(6, Math.round(shortEdge * 0.006));
       ctx.font = `bold ${badgeFontSize}px sans-serif`;
       ctx.textBaseline = "top";
@@ -847,11 +853,12 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
       const by = start.y - badgeHeight - badgeOffset;
       tracePillRect(ctx, bx, by, badgeWidth, badgeHeight, 3);
       ctx.fillStyle = tertiary;
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = 0.7;
       ctx.fill();
       ctx.strokeStyle = secondary;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1;
       ctx.stroke();
+      ctx.globalAlpha = 1;
       ctx.fillStyle = secondary;
       ctx.fillText(label, bx + badgePadding, by + badgePadding);
     }
@@ -1069,10 +1076,13 @@ function drawPinsOnCanvas(ctx, pins, width, height) {
   const haloThickness = Math.max(MIN_HALO, Math.round(pinRadius * HALO_RATIO));
   const fontSize = Math.round(pinRadius * 1.05);
 
-  // Numbered pins use the muted blue (most prominent of the muted
-  // family — the numbered badge is the primary critique anchor).
-  // See npn-critique-reply-colors.js.
-  const pinFill = ANNOTATION_BLUE;
+  // Numbered pins use the deeper NOTE_BLUE — the most prominent
+  // marker in the muted family, since the numbered badge is the
+  // primary critique anchor and the only marker that references
+  // a specific written-text line. Distinct from the pale eye-path
+  // cyan so the two don't read as variants. See
+  // npn-critique-reply-colors.js.
+  const pinFill = NOTE_BLUE;
   const pinText = ANNOTATION_HALO;
   const halo = ANNOTATION_HALO;
 
