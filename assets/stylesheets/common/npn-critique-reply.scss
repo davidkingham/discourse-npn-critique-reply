@@ -1401,27 +1401,39 @@
   color: #ffffff;
 }
 
-// Notes ([1], [2], …) — the deepest tone in the family. Slightly
-// more pill-rounded than the alpha-labelled badges so a numeric
-// badge reads as the "primary marker" sibling of the on-image pin.
+// Notes ([1], [2], …) — the deepest tone in the family. Rendered
+// as a round filled circle so the inline badge mirrors the on-
+// image numbered pin's geometry. `border-radius: 50%` plus min-
+// width/min-height + flex centring produces a true circle for
+// single-digit numbers and a rounded-ended ellipse for two-digit
+// numbers (still reads as round). Inline-flex (overriding the
+// shared inline-block) keeps the digit vertically centred without
+// the asymmetric padding the other badges use.
 .npn-annotation-badge--note {
   background: #2d728f;
-  border-radius: 1em;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.7em;
+  min-height: 1.7em;
+  padding: 0 0.35em;
   font-weight: 700;
-  // Pins on the image are the loudest annotation; the inline note
-  // badge is the only badge that bumps font-weight up to match.
-  padding: 0.18em 0.6em;
+  line-height: 1;
 }
 
 // Eye Path ([E1], [E2], …) — pale glacial cyan. Quieter than the
 // other badges by design (matches the on-image eye-path being the
-// softest line). Slightly smaller font and a dark text colour
-// because white-on-pale would wash out.
+// softest line). Smaller font + a stronger text shadow so the
+// white label keeps readable contrast on the pale background.
 .npn-annotation-badge--eye-path {
   background: #8fd3e8;
-  color: #1f3d47;
   font-size: 0.78em;
-  font-weight: 600;
+  font-weight: 700;
+  // Darker drop-shadow under the white text to recover legibility
+  // on the pale background. Mirrors the on-image badge, which
+  // gets its contrast from the white halo around the pill.
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
 }
 
 // Attention ([A1], [A2], …) — muted ochre. Observational tone, not
@@ -1443,10 +1455,11 @@
 }
 
 // Relationship ([R1], [R2], …) — warm stone / taupe. Lightest of
-// the non-pale-cyan badges, so a darker text colour reads better.
+// the painted badges, so the white label gets a stronger text
+// shadow to keep contrast.
 .npn-annotation-badge--relationship {
   background: #bdb49f;
-  color: #3a342a;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
 }
 
 // Forced-colors (Windows High Contrast Mode) — drop the painted
