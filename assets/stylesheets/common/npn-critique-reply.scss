@@ -607,12 +607,34 @@
     }
   }
 
-  // -- Textarea ----------------------------------------------------------
-
+  // -- Writing panel + textarea -----------------------------------------
+  //
+  // `__textarea-section` is the writing panel: it groups the YOUR
+  // CRITIQUE label, any inline validation/error/status messages, the
+  // Insert-link toolbar (or its inline form), and the textarea into a
+  // single bordered surface. Visually consistent with the
+  // "Photographer's request" card on the left — same rounded corners,
+  // hairline border, subtle off-modal background.
+  //
+  // The dark-mode failure mode the old styling had was background-
+  // only contrast: `--secondary` (textarea) sat against a modal body
+  // that's very close in tone, with only a `--primary-low` border to
+  // separate them. We add:
+  //   1. A panel-level border + tint, so the writing surface as a
+  //      WHOLE separates from the modal background.
+  //   2. A heavier `--primary-low-mid` border on the textarea, so it
+  //      separates from the panel background even when the colors
+  //      are close.
+  //   3. A focus ring (`--tertiary-low`) plus the existing
+  //      `--tertiary` border so keyboard focus is unmistakable.
   &__textarea-section {
     display: flex;
     flex-direction: column;
-    gap: 0.4em;
+    gap: 0.55em;
+    padding: 0.85em 1em 1em;
+    background: var(--primary-very-low);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
   }
 
   &__textarea-label {
@@ -790,12 +812,20 @@
     resize: vertical;
     padding: 0.75em;
     background: var(--secondary);
-    border: 1px solid var(--primary-low);
+    // `--primary-low-mid` (rather than `--primary-low`) so the
+    // textarea separates cleanly from the panel's tinted background
+    // in BOTH light and dark themes — dark-theme `--primary-low` is
+    // sometimes too close to `--primary-very-low` to read as an
+    // edge on its own.
+    border: 1px solid var(--primary-low-mid);
     border-radius: var(--d-border-radius, 4px);
     color: var(--primary);
     font: inherit;
     line-height: 1.55;
     box-sizing: border-box;
+    transition:
+      border-color 0.12s ease,
+      box-shadow 0.12s ease;
 
     &::placeholder {
       color: var(--primary-medium);
@@ -803,9 +833,13 @@
 
     &:focus,
     &:focus-visible {
-      outline: 2px solid var(--tertiary);
-      outline-offset: -1px;
+      // Tertiary border + soft tertiary-low ring. The ring is the
+      // key dark-mode affordance — outline + box-shadow together
+      // make the focus state visible whether the theme has high or
+      // low contrast between background tokens.
+      outline: none;
       border-color: var(--tertiary);
+      box-shadow: 0 0 0 3px var(--tertiary-low);
     }
   }
 
