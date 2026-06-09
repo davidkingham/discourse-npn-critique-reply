@@ -2801,21 +2801,49 @@ export async function createAnnotationStage({
     }
     // Crop decoration uses the same editor blue-gray as the
     // perimeter (CROP_EDITOR_BLUE_GRAY) so the brackets/edge bars
-    // read as part of the same active tool. Bracket / bar thickness
-    // at 8px so the corner / edge handles read as solidly editable
-    // affordances; arm length extended to 30px so the L's actually
-    // reach far enough to read as brackets instead of thick stubs.
+    // read as part of the same active tool. Bracket arm length +
+    // thickness are TUNED FOR LARGE STAGES (~30/8 px), where the
+    // L-shaped brackets need to read solidly even on busy
+    // photographs. On smaller laptop modals / narrow rendered
+    // images, the same fixed sizes would cover too much of the
+    // crop edge and make the crop hard to judge.
+    //
+    // We scale all decoration metrics against
+    // min(stage.width, stage.height) — the smaller dimension drives
+    // the perceived "tightness" of the handles relative to the
+    // image, so it's the safer axis to drive sizing.
+    //
+    //   bracketArm / bracketThick / edgeBarLen / edgeBarThick:
+    //     scaled per spec — clamp(base * factor, MIN, MAX).
+    //   perimeterStroke:
+    //     barely scales (1.5 → 2 px); the perimeter is supportive,
+    //     not a primary handle.
+    //
+    // Hit-test geometry (the Transformer's invisible anchors at
+    // size 24 set further up) is unchanged so touch/click usability
+    // is preserved on every viewport.
     const stageColor = CROP_EDITOR_BLUE_GRAY;
-    const bracketArm = 30;
-    const bracketThick = 8;
-    const edgeBarLen = 28;
-    const edgeBarThick = 8;
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const stageBase = Math.min(stage.width(), stage.height());
+    const bracketArm = clamp(stageBase * 0.055, 14, 30);
+    const bracketThick = clamp(stageBase * 0.014, 4, 8);
+    const edgeBarLen = clamp(stageBase * 0.05, 12, 28);
+    const edgeBarThick = clamp(stageBase * 0.014, 4, 8);
+    const perimeterStroke = clamp(stageBase * 0.0035, 1.5, 2);
+    // Drop midpoint bars on very narrow stages — even at their
+    // minimum size they cover meaningful image edge when the stage
+    // is small, and the corner brackets alone are enough to anchor
+    // the crop visually. Free-ratio resize via the midpoints is
+    // still available via the (invisible) Transformer anchors when
+    // it's needed; the only thing missing is the on-screen affordance.
+    const showMidpointBars = !isRatioLocked && stageBase >= 380;
 
     const group = new Konva.Group({ listening: false });
 
-    // Perimeter connecting the brackets. 2 px at 0.7 opacity so it
-    // reads as quieter than the 8 px brackets but still anchors the
-    // four corners as a single rectangle on busy photographs.
+    // Perimeter connecting the brackets. Lightly scaled with the
+    // stage (1.5 → 2 px) so the supporting line stays proportional
+    // to the rest of the decoration; 0.7 opacity keeps it quieter
+    // than the brackets but visible on busy photographs.
     group.add(
       new Konva.Rect({
         x,
@@ -2823,7 +2851,7 @@ export async function createAnnotationStage({
         width: w,
         height: h,
         stroke: stageColor,
-        strokeWidth: 2,
+        strokeWidth: perimeterStroke,
         opacity: 0.7,
         listening: false,
       })
@@ -2853,11 +2881,13 @@ export async function createAnnotationStage({
     group.add(bracket(x, y + h, 1, -1)); // bottom-left
     group.add(bracket(x + w, y + h, -1, -1)); // bottom-right
 
-    // 4 edge midpoint bars — only when free-ratio. Hidden in
-    // ratio-locked mode because edge anchors are disabled then
-    // (showing the bar would promise an interaction the user
-    // can't actually do).
-    if (!isRatioLocked) {
+    // 4 edge midpoint bars — only when free-ratio AND the stage
+    // has room to show them without overpowering the image. Hidden
+    // in ratio-locked mode because edge anchors are disabled then
+    // (showing the bar would promise an interaction the user can't
+    // actually do) and hidden on very narrow stages even at the
+    // smallest size (see `showMidpointBars` for the threshold).
+    if (showMidpointBars) {
       // Top
       group.add(
         new Konva.Rect({
