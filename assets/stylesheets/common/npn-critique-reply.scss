@@ -258,28 +258,28 @@
 
   // -- Processing Example section ---------------------------------------
   //
-  // Lives in the left pane between the version selector and the
-  // visual-tools toolbar. Quiet panel — hairline border, soft tinted
-  // background — so it reads as workflow context rather than a peer
-  // of the annotation tools.
+  // Lives at the BOTTOM of the left pane — visually secondary to the
+  // main image / visual-notes workflow. Hairline top separator (rather
+  // than a heavy panel background) so it reads as a quiet workflow
+  // section rather than competing with the image above it.
   &__processing-example {
     display: flex;
     flex-direction: column;
-    gap: 0.55em;
-    padding: 0.65em 0.85em 0.75em;
-    margin: 0 0 0.8em;
-    background: var(--primary-very-low);
-    border: 1px solid var(--primary-low);
-    border-left: 3px solid var(--primary-low-mid);
-    border-radius: var(--d-border-radius, 4px);
+    gap: 0.45em;
+    padding: 0.75em 0 0;
+    margin: 0.9em 0 0;
+    border-top: 1px solid var(--primary-low);
   }
 
   &__processing-example-heading {
     margin: 0;
+    // Smaller / lighter than the section headings above the image —
+    // the section is supporting, not a primary surface.
     font-size: var(--font-down-1);
-    font-weight: 600;
-    color: var(--primary-high);
-    letter-spacing: 0.01em;
+    font-weight: 500;
+    color: var(--primary-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   &__processing-example-help {

@@ -105,8 +105,7 @@ en:
         # "Revision" is reserved for the photographer's own next image.
         processing_example:
           section_title: "Processing Example"
-          add: "Add a processing example"
-          helper: "Download the reference image, make a processing example, then upload it with your critique."
+          helper: "Download the reference image if you want to demonstrate a processing idea."
           download: "Download Reference Image"
           upload: "Upload Processing Example"
           uploaded: "Processing example uploaded"

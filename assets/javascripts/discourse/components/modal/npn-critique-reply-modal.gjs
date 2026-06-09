@@ -365,14 +365,9 @@ export default class NpnCritiqueReplyModal extends Component {
   //                                flight (disables the controls).
   //   processingExampleError     — { stage, message } when the last
   //                                upload failed; cleared on retry.
-  //   showProcessingExamplePanel — UI toggle for the collapsed/expanded
-  //                                state of the section. Expanded after
-  //                                upload, after restore, or after the
-  //                                user clicks "Add a processing example".
   @tracked processingExample = null;
   @tracked processingExampleUploading = false;
   @tracked processingExampleError = null;
-  @tracked showProcessingExamplePanel = false;
 
   // Which image the LARGE image-area shows. Independent of the
   // visual-annotation selectedVersionKey — switching the large view
@@ -1353,11 +1348,6 @@ export default class NpnCritiqueReplyModal extends Component {
     });
   }
 
-  @action
-  toggleProcessingExamplePanel() {
-    this.showProcessingExamplePanel = !this.showProcessingExamplePanel;
-  }
-
   // Opens the hidden file input. The handler below reads the selected
   // file, uploads via Discourse's standard endpoint, and stores the
   // resulting upload reference in `this.processingExample`.
@@ -1413,7 +1403,6 @@ export default class NpnCritiqueReplyModal extends Component {
           file.name ??
           filename,
       };
-      this.showProcessingExamplePanel = true;
       // Auto-switch the large image area to the freshly uploaded
       // example so the critic can immediately evaluate / write about
       // what they just submitted. Replace flows hit the same code
@@ -3912,7 +3901,6 @@ export default class NpnCritiqueReplyModal extends Component {
       const restored = normalizeProcessingExampleFromServer(examplePayload);
       if (restored) {
         this.processingExample = restored;
-        this.showProcessingExamplePanel = true;
         // Open the modal on the example view by default when editing a
         // post that carries one — same rationale as the post-upload
         // auto-switch: surface the artifact the critic is about to
@@ -4050,9 +4038,6 @@ export default class NpnCritiqueReplyModal extends Component {
         this.processingExample = normalizeProcessingExampleFromServer(
           draft.processing_example
         );
-        if (this.processingExample) {
-          this.showProcessingExamplePanel = true;
-        }
       }
 
       // Large-image view restore. The draft may carry a persisted
@@ -4325,150 +4310,6 @@ export default class NpnCritiqueReplyModal extends Component {
                     </button>
                   {{/each}}
                 </div>
-              {{/if}}
-
-              {{! Processing Example section.
-                  Sits between the image controls (version selector) and
-                  the visual-tools toolbar by spec. Three view modes:
-                    1. Collapsed — single button: "Add a processing example"
-                    2. Expanded, no upload — helper text + Download +
-                       Upload buttons
-                    3. After upload — thumbnail + Replace / Remove
-                  Hidden entirely when the topic opts out, the site
-                  setting is off, or there's no reference image. }}
-              {{#if this.processingExampleAvailable}}
-                <section
-                  class="npn-critique-reply-modal__processing-example"
-                  aria-labelledby="npn-critique-reply-processing-example-heading"
-                >
-                  <h4
-                    id="npn-critique-reply-processing-example-heading"
-                    class="npn-critique-reply-modal__processing-example-heading"
-                  >
-                    {{i18n
-                      "npn_critique_reply.modal.processing_example.section_title"
-                    }}
-                  </h4>
-
-                  {{#if this.hasProcessingExample}}
-                    <div
-                      class="npn-critique-reply-modal__processing-example-preview"
-                    >
-                      <img
-                        class="npn-critique-reply-modal__processing-example-thumb"
-                        src={{this.processingExample.url}}
-                        alt={{i18n
-                          "npn_critique_reply.modal.processing_example.preview_alt"
-                        }}
-                      />
-                      <div
-                        class="npn-critique-reply-modal__processing-example-status"
-                      >
-                        <p
-                          class="npn-critique-reply-modal__processing-example-status-text"
-                        >
-                          {{i18n
-                            "npn_critique_reply.modal.processing_example.uploaded"
-                          }}
-                        </p>
-                        {{#if this.processingExample.filename}}
-                          <p
-                            class="npn-critique-reply-modal__processing-example-filename"
-                            title={{this.processingExample.filename}}
-                          >
-                            {{this.processingExample.filename}}
-                          </p>
-                        {{/if}}
-                      </div>
-                    </div>
-                    <div
-                      class="npn-critique-reply-modal__processing-example-actions"
-                    >
-                      <DButton
-                        class="btn-default btn-small npn-critique-reply-modal__processing-example-replace"
-                        @action={{this.triggerProcessingExampleFilePicker}}
-                        @icon="rotate"
-                        @label="npn_critique_reply.modal.processing_example.replace"
-                        @disabled={{this.processingExampleUploading}}
-                      />
-                      <DButton
-                        class="btn-flat btn-small npn-critique-reply-modal__processing-example-remove"
-                        @action={{this.removeProcessingExample}}
-                        @icon="trash-can"
-                        @label="npn_critique_reply.modal.processing_example.remove"
-                        @disabled={{this.processingExampleUploading}}
-                      />
-                    </div>
-                  {{else if this.showProcessingExamplePanel}}
-                    <p
-                      class="npn-critique-reply-modal__processing-example-help"
-                    >
-                      {{i18n
-                        "npn_critique_reply.modal.processing_example.helper"
-                      }}
-                    </p>
-                    <div
-                      class="npn-critique-reply-modal__processing-example-actions"
-                    >
-                      {{! Direct anchor for the download. `download` attr
-                          is honoured for same-origin URLs; on cross-
-                          origin (Bunny CDN) the browser falls back to
-                          opening in a new tab, which is the documented
-                          acceptable degradation. }}
-                      <a
-                        class="btn btn-default btn-small npn-critique-reply-modal__processing-example-download"
-                        href={{this.processingExampleSourceUrl}}
-                        download={{this.processingExampleSourceDownloadFilename}}
-                        rel="noopener"
-                        target="_blank"
-                      >
-                        {{dIcon "download"}}
-                        <span>
-                          {{i18n
-                            "npn_critique_reply.modal.processing_example.download"
-                          }}
-                        </span>
-                      </a>
-                      <DButton
-                        class="btn-primary btn-small npn-critique-reply-modal__processing-example-upload"
-                        @action={{this.triggerProcessingExampleFilePicker}}
-                        @icon="upload"
-                        @label="npn_critique_reply.modal.processing_example.upload"
-                        @disabled={{this.processingExampleUploading}}
-                        @isLoading={{this.processingExampleUploading}}
-                      />
-                    </div>
-                  {{else}}
-                    <DButton
-                      class="btn-default btn-small npn-critique-reply-modal__processing-example-toggle"
-                      @action={{this.toggleProcessingExamplePanel}}
-                      @icon="plus"
-                      @label="npn_critique_reply.modal.processing_example.add"
-                      @disabled={{this.isPosting}}
-                    />
-                  {{/if}}
-
-                  {{#if this.processingExampleError}}
-                    <p
-                      class="npn-critique-reply-modal__processing-example-error"
-                      role="alert"
-                    >
-                      {{this.processingExampleError.message}}
-                    </p>
-                  {{/if}}
-
-                  {{! Hidden file input owned by the section, opened
-                      programmatically via the Upload / Replace
-                      buttons. Single-file, image MIME types only. }}
-                  <input
-                    id="npn-critique-reply-processing-example-input"
-                    class="npn-critique-reply-modal__processing-example-input"
-                    type="file"
-                    accept="image/*"
-                    hidden
-                    {{on "change" this.onProcessingExampleFileChange}}
-                  />
-                </section>
               {{/if}}
 
               {{! Large-image view toggle. Surfaces only once a
@@ -5322,6 +5163,142 @@ export default class NpnCritiqueReplyModal extends Component {
                     </span>
                   {{/if}}
                 </p>
+              {{/if}}
+
+              {{! Processing Example section. Lives at the bottom of
+                  the left pane — visually secondary to the main
+                  image / visual-notes workflow. Two states only:
+                    1. No upload — helper + Download + Upload
+                    2. After upload — thumbnail + Replace / Remove
+                  Hidden entirely when the topic opts out, the site
+                  setting is off, or there's no reference image. }}
+              {{#if this.processingExampleAvailable}}
+                <section
+                  class="npn-critique-reply-modal__processing-example"
+                  aria-labelledby="npn-critique-reply-processing-example-heading"
+                >
+                  <h4
+                    id="npn-critique-reply-processing-example-heading"
+                    class="npn-critique-reply-modal__processing-example-heading"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.processing_example.section_title"
+                    }}
+                  </h4>
+
+                  {{#if this.hasProcessingExample}}
+                    <div
+                      class="npn-critique-reply-modal__processing-example-preview"
+                    >
+                      <img
+                        class="npn-critique-reply-modal__processing-example-thumb"
+                        src={{this.processingExample.url}}
+                        alt={{i18n
+                          "npn_critique_reply.modal.processing_example.preview_alt"
+                        }}
+                      />
+                      <div
+                        class="npn-critique-reply-modal__processing-example-status"
+                      >
+                        <p
+                          class="npn-critique-reply-modal__processing-example-status-text"
+                        >
+                          {{i18n
+                            "npn_critique_reply.modal.processing_example.uploaded"
+                          }}
+                        </p>
+                        {{#if this.processingExample.filename}}
+                          <p
+                            class="npn-critique-reply-modal__processing-example-filename"
+                            title={{this.processingExample.filename}}
+                          >
+                            {{this.processingExample.filename}}
+                          </p>
+                        {{/if}}
+                      </div>
+                    </div>
+                    <div
+                      class="npn-critique-reply-modal__processing-example-actions"
+                    >
+                      <DButton
+                        class="btn-default btn-small npn-critique-reply-modal__processing-example-replace"
+                        @action={{this.triggerProcessingExampleFilePicker}}
+                        @icon="rotate"
+                        @label="npn_critique_reply.modal.processing_example.replace"
+                        @disabled={{this.processingExampleUploading}}
+                      />
+                      <DButton
+                        class="btn-flat btn-small npn-critique-reply-modal__processing-example-remove"
+                        @action={{this.removeProcessingExample}}
+                        @icon="trash-can"
+                        @label="npn_critique_reply.modal.processing_example.remove"
+                        @disabled={{this.processingExampleUploading}}
+                      />
+                    </div>
+                  {{else}}
+                    <p
+                      class="npn-critique-reply-modal__processing-example-help"
+                    >
+                      {{i18n
+                        "npn_critique_reply.modal.processing_example.helper"
+                      }}
+                    </p>
+                    <div
+                      class="npn-critique-reply-modal__processing-example-actions"
+                    >
+                      {{! Direct anchor for the download. `download` attr
+                          is honoured for same-origin URLs; on cross-
+                          origin (Bunny CDN) the browser falls back to
+                          opening in a new tab — acceptable degradation. }}
+                      <a
+                        class="btn btn-default btn-small npn-critique-reply-modal__processing-example-download"
+                        href={{this.processingExampleSourceUrl}}
+                        download={{this.processingExampleSourceDownloadFilename}}
+                        rel="noopener"
+                        target="_blank"
+                      >
+                        {{dIcon "download"}}
+                        <span>
+                          {{i18n
+                            "npn_critique_reply.modal.processing_example.download"
+                          }}
+                        </span>
+                      </a>
+                      {{! Upload kept as btn-default so the section
+                          reads as secondary — never stronger than
+                          Post Critique in the modal footer. }}
+                      <DButton
+                        class="btn-default btn-small npn-critique-reply-modal__processing-example-upload"
+                        @action={{this.triggerProcessingExampleFilePicker}}
+                        @icon="upload"
+                        @label="npn_critique_reply.modal.processing_example.upload"
+                        @disabled={{this.processingExampleUploading}}
+                        @isLoading={{this.processingExampleUploading}}
+                      />
+                    </div>
+                  {{/if}}
+
+                  {{#if this.processingExampleError}}
+                    <p
+                      class="npn-critique-reply-modal__processing-example-error"
+                      role="alert"
+                    >
+                      {{this.processingExampleError.message}}
+                    </p>
+                  {{/if}}
+
+                  {{! Hidden file input owned by the section, opened
+                      programmatically via the Upload / Replace
+                      buttons. Single-file, image MIME types only. }}
+                  <input
+                    id="npn-critique-reply-processing-example-input"
+                    class="npn-critique-reply-modal__processing-example-input"
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    {{on "change" this.onProcessingExampleFileChange}}
+                  />
+                </section>
               {{/if}}
             </aside>
           {{/if}}
