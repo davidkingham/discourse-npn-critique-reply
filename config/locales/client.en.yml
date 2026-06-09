@@ -137,7 +137,7 @@ en:
           # while the processing example is the active large view.
           # Reminds the user that annotations live on the reference
           # — they're not gone, just not editable from this view.
-          tools_apply_to_reference: "Visual notes apply to the reference image."
+          tools_apply_to_reference: "Visual notes are available on the Reference Image tab"
 
         # Re-exposed top-level alias for `large_image_view.showing_processing_example`
         # so the existing `showingVersionLabel` getter can format both
