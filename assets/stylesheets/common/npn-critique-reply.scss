@@ -54,12 +54,34 @@
     // Image column gets a little more room since the photo is the
     // anchor; the write column still has plenty of width for prose.
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    // Named areas so a third sibling (Processing Example) can sit
+    // BELOW the image column on desktop while staying part of the
+    // visually-secondary left side. On mobile, the same three
+    // siblings stack naturally in source order (image → write →
+    // example) and the user reaches the writing area without
+    // scrolling past the Processing Example workflow.
+    grid-template-areas:
+      "image write"
+      "example write";
     gap: 1.5em;
     align-items: start;
   }
 
+  &__image-col {
+    grid-area: image;
+  }
+  &__write-col {
+    grid-area: write;
+  }
+  &__processing-example-row {
+    grid-area: example;
+  }
+
   &.npn-critique-reply-modal--no-image &__layout {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "write"
+      "example";
   }
 
   // -- Image column ------------------------------------------------------
@@ -261,12 +283,81 @@
     display: block;
   }
 
+  // -- Mobile-only disclosure buttons -----------------------------------
+  //
+  // Both the Visual tools panel and the Processing Example section
+  // get a tap-to-expand summary button on narrow viewports so the
+  // user reaches the writing area without scrolling past collapsed
+  // workflow surfaces. The default rule HIDES both buttons; the
+  // mobile media query above flips them visible and gates the
+  // adjacent `__*-content` blocks on `is-open`.
+  &__visual-tools-summary,
+  &__processing-example-summary {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5em;
+    width: 100%;
+    padding: 0.55em 0.7em;
+    background: var(--secondary);
+    color: var(--primary-high);
+    border: 1px solid var(--primary-low-mid);
+    border-radius: var(--d-border-radius, 4px);
+    font: inherit;
+    font-size: var(--font-down-1);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease;
+
+    &:hover {
+      background: var(--tertiary-low);
+      border-color: var(--tertiary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+  }
+
+  &__visual-tools-summary-label,
+  &__processing-example-summary-label {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  &__processing-example-summary-status {
+    flex: 0 1 auto;
+    font-weight: 400;
+    color: var(--primary-medium);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: var(--font-down-2, var(--font-down-1));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__visual-tools-summary-chevron,
+  &__processing-example-summary-chevron {
+    display: inline-flex;
+    align-items: center;
+    color: var(--primary-medium);
+    transition: transform 0.15s ease;
+  }
+
   // -- Processing Example section ---------------------------------------
   //
-  // Lives at the BOTTOM of the left pane — visually secondary to the
-  // main image / visual-notes workflow. Hairline top separator (rather
-  // than a heavy panel background) so it reads as a quiet workflow
-  // section rather than competing with the image above it.
+  // On DESKTOP this is now a third grid sibling of __layout (sitting
+  // in the left-column row below the image). The hairline top
+  // separator + uppercase heading keep the section reading as quiet
+  // workflow context rather than a peer of the image controls. On
+  // MOBILE the summary button above replaces the heading and the
+  // content gates on the `is-open` class.
   &__processing-example {
     display: flex;
     flex-direction: column;
@@ -274,6 +365,12 @@
     padding: 0.75em 0 0;
     margin: 0.9em 0 0;
     border-top: 1px solid var(--primary-low);
+  }
+
+  &__processing-example-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45em;
   }
 
   &__processing-example-heading {
@@ -960,6 +1057,13 @@
   @media (max-width: 720px) {
     &__layout {
       grid-template-columns: 1fr;
+      // Three rows now — image / write / example — stacked in source
+      // order. The user lands on the image, scrolls to the writing
+      // area without crossing the Processing Example workflow.
+      grid-template-areas:
+        "image"
+        "write"
+        "example";
       gap: 1.25em;
     }
 
@@ -970,7 +1074,77 @@
       // doesn't have a sticky column to keep in view, and the body
       // scrolls naturally.
       max-height: none;
-      display: block;
+      // Use flex so children can be CSS-`order`-reordered: the
+      // desired mobile sequence is heading → version selector →
+      // image → "Showing X" caption → view toggle → visual-tools
+      // disclosure → a11y list. Source order has the toolbar /
+      // view-toggle ABOVE the image (desktop intent); on mobile
+      // the image goes first so the user orients to the photo
+      // before deciding whether to open tools.
+      display: flex;
+      flex-direction: column;
+      gap: 0.6em;
+    }
+
+    &__image-heading {
+      order: 0;
+    }
+    &__version-selector {
+      order: 1;
+    }
+    .npn-critique-image-reference,
+    &__processing-example-large {
+      order: 2;
+    }
+    &__version-status {
+      order: 3;
+    }
+    &__large-image-view {
+      order: 4;
+      margin-bottom: 0;
+    }
+    &__visual-tools-disclosure,
+    &__visual-notes-disabled-note {
+      order: 5;
+    }
+    &__a11y-list {
+      order: 6;
+    }
+
+    // Visual tools collapse: show the summary button, gate the
+    // content. The default-closed state hides the toolbar entirely
+    // until the user taps the summary.
+    &__visual-tools-summary {
+      display: flex;
+    }
+    &__visual-tools-disclosure:not(.is-open)
+      > .npn-critique-reply-modal__visual-tools-content {
+      display: none;
+    }
+
+    // Processing Example collapse: same pattern. Summary visible
+    // on mobile; heading hidden; content gated by `is-open`.
+    &__processing-example-summary {
+      display: flex;
+    }
+    &__processing-example-heading {
+      // The summary button carries the title on mobile; the
+      // standalone heading would be redundant text immediately
+      // above it.
+      display: none;
+    }
+    &__processing-example-row:not(.is-open)
+      > .npn-critique-reply-modal__processing-example-content {
+      display: none;
+    }
+    // Open state: lift the chevron so it points up.
+    &__processing-example-row.is-open
+      > .npn-critique-reply-modal__processing-example-summary
+      > .npn-critique-reply-modal__processing-example-summary-chevron,
+    &__visual-tools-disclosure.is-open
+      > .npn-critique-reply-modal__visual-tools-summary
+      > .npn-critique-reply-modal__visual-tools-summary-chevron {
+      transform: rotate(180deg);
     }
 
     &__write-col {

@@ -145,6 +145,15 @@ en:
         # the getter side rather than the markup side.
         showing_processing_example: "Showing Processing Example"
 
+        # Mobile-only labels for the disclosure summary buttons. On
+        # narrow viewports the Visual tools panel and the Processing
+        # Example panel collapse behind a tappable summary so the
+        # writing area sits closer to the top of the scroll. Desktop
+        # hides the summary buttons via CSS — these strings never
+        # surface there.
+        mobile:
+          visual_tools_summary: "Visual tools"
+
         # Visual notes — async export + upload pipeline ----------------
         preparing_visual_notes: "Preparing visual notes…"
         uploading_visual_notes: "Uploading visual notes…"
