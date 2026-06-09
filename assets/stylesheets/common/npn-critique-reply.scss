@@ -152,6 +152,110 @@
     }
   }
 
+  // -- Large-image view toggle ------------------------------------------
+  //
+  // Shown only when a processing example exists. Mirrors the version
+  // selector visually so the two "what image am I looking at"
+  // affordances feel related, but uses aria-pressed buttons (not
+  // role=tab) since the panel below is a single conditional swap
+  // rather than tabbed sibling regions.
+  &__large-image-view {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35em;
+    margin-bottom: 0.6em;
+  }
+
+  &__large-image-view-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.3em 0.8em;
+    background: var(--secondary);
+    color: var(--primary);
+    border: 1px solid var(--primary-low-mid);
+    border-radius: 999px;
+    font: inherit;
+    font-size: var(--font-down-1);
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease,
+      color 0.12s ease;
+
+    &:hover,
+    &:focus {
+      background: var(--tertiary-low);
+      border-color: var(--tertiary);
+      color: var(--tertiary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+
+    &.is-selected {
+      background: var(--tertiary-low);
+      border-color: var(--tertiary);
+      color: var(--tertiary);
+      font-weight: 600;
+    }
+
+    @media (forced-colors: active) {
+      border-color: ButtonText;
+      &.is-selected {
+        border-width: 2px;
+      }
+    }
+  }
+
+  &__large-image-view-label {
+    line-height: 1;
+  }
+
+  // Compact note shown in place of the visual-tools toolbar while
+  // the processing example is the active large view. Quiet enough
+  // not to compete with the image, clear enough to explain why the
+  // tools aren't there.
+  &__visual-notes-disabled-note {
+    margin: 0 0 0.6em;
+    padding: 0.5em 0.7em;
+    background: var(--primary-very-low);
+    border-left: 3px solid var(--primary-low-mid);
+    border-radius: var(--d-border-radius, 4px);
+    color: var(--primary-medium);
+    font-size: var(--font-down-1);
+    line-height: 1.4;
+  }
+
+  // Large processing-example image frame. Mirrors the reference
+  // image's max-height cap (set on __image-col) so the modal
+  // doesn't grow when you switch views.
+  &__processing-example-large {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary-very-low);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+    overflow: hidden;
+    // Cap matches the reference-image frame so the column doesn't
+    // jump height when toggling between views. The image itself
+    // resolves its dimensions against this container.
+    max-height: calc(80vh - 4em);
+  }
+
+  &__processing-example-large-img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    display: block;
+  }
+
   // -- Processing Example section ---------------------------------------
   //
   // Lives in the left pane between the version selector and the

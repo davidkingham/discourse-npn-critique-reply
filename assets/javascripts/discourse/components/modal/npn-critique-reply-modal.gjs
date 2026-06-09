@@ -106,6 +106,17 @@ function parseIdList(value) {
 // "show all 6 prompts vs first 3."
 const STORAGE_KEY_MORE_IDEAS = "npn-critique-reply.more-ideas-expanded";
 
+// Large-image view enum. Drives which image the left pane shows at
+// full size — the photographer's reference (with annotations) or the
+// critic's uploaded processing example (no annotations in v1).
+// String values are persisted in drafts so they need to stay stable.
+const LARGE_IMAGE_VIEW_REFERENCE = "reference";
+const LARGE_IMAGE_VIEW_PROCESSING_EXAMPLE = "processing_example";
+const LARGE_IMAGE_VIEWS = Object.freeze([
+  LARGE_IMAGE_VIEW_REFERENCE,
+  LARGE_IMAGE_VIEW_PROCESSING_EXAMPLE,
+]);
+
 // Pull the numeric suffix off an id like "attention_pull_3" → 3. Used
 // only during draft restore so newly-created markers don't collide
 // with restored ones.
@@ -362,6 +373,20 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked processingExampleUploading = false;
   @tracked processingExampleError = null;
   @tracked showProcessingExamplePanel = false;
+
+  // Which image the LARGE image-area shows. Independent of the
+  // visual-annotation selectedVersionKey — switching the large view
+  // to "processing_example" doesn't change which reference-image
+  // version annotations are anchored to. Annotations always live on
+  // the reference image in v1.
+  //   • "reference"           — current photographer-supplied version
+  //                             (with full Konva annotation layer).
+  //   • "processing_example"  — the critic's uploaded example, shown
+  //                             as a plain image (no annotation layer).
+  // Auto-switches to processing_example on a successful upload and
+  // back to reference on remove. Toggleable by the user freely in
+  // between. Persisted in drafts so a chosen view survives reopen.
+  @tracked largeImageView = LARGE_IMAGE_VIEW_REFERENCE;
 
   // Tracks component teardown so async tasks (canvas export, upload,
   // post creation) don't try to set tracked properties on a destroyed
@@ -743,11 +768,86 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   get showingVersionLabel() {
+    // When the large view is the processing example, the caption
+    // describes THAT — not the underlying selected reference
+    // version. Annotations + version selector still operate on the
+    // reference behind the scenes; this caption tracks what the
+    // user is looking at.
+    if (this.viewingProcessingExample) {
+      return i18n(
+        "npn_critique_reply.modal.showing_processing_example"
+      );
+    }
     const v = this.selectedVersion;
     if (!v) {
       return null;
     }
     return i18n("npn_critique_reply.modal.showing_version", { label: v.label });
+  }
+
+  // ---- Large-image view --------------------------------------------------
+
+  get viewingProcessingExample() {
+    return (
+      this.largeImageView === LARGE_IMAGE_VIEW_PROCESSING_EXAMPLE &&
+      this.hasProcessingExample
+    );
+  }
+
+  get viewingReference() {
+    // The view defaults to reference whenever there's no processing
+    // example to show — guards against a stale "processing_example"
+    // flag (e.g. if state goes through a weird intermediate after
+    // remove). Annotations + visual tools are gated on this getter.
+    return !this.viewingProcessingExample;
+  }
+
+  // Single source of truth for what URL the large image area shows.
+  // `effectiveImageUrl` keeps pointing at the reference version so
+  // the visual-notes canvas export pipeline (which always bakes
+  // annotations onto the reference) is unaffected.
+  get largeImageUrl() {
+    if (this.viewingProcessingExample) {
+      return this.processingExample?.url ?? this.effectiveImageUrl;
+    }
+    return this.effectiveImageUrl;
+  }
+
+  get largeImageAlt() {
+    if (this.viewingProcessingExample) {
+      return i18n(
+        "npn_critique_reply.modal.processing_example.large_alt"
+      );
+    }
+    return this.imageAlt;
+  }
+
+  @action
+  setLargeImageView(view) {
+    // Validate against the known enum so a stale draft or external
+    // caller can't push the modal into an unknown state.
+    if (!LARGE_IMAGE_VIEWS.includes(view)) {
+      return;
+    }
+    // Can't switch INTO processing_example without an upload.
+    if (
+      view === LARGE_IMAGE_VIEW_PROCESSING_EXAMPLE &&
+      !this.hasProcessingExample
+    ) {
+      return;
+    }
+    if (this.largeImageView === view) {
+      return;
+    }
+    this.largeImageView = view;
+    this._scheduleDraftSaveAfterProcessingExampleChange();
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] set-large-image-view", {
+        topicId: this.topic?.id,
+        view,
+      });
+    }
   }
 
   get revisionNote() {
@@ -1314,6 +1414,11 @@ export default class NpnCritiqueReplyModal extends Component {
           filename,
       };
       this.showProcessingExamplePanel = true;
+      // Auto-switch the large image area to the freshly uploaded
+      // example so the critic can immediately evaluate / write about
+      // what they just submitted. Replace flows hit the same code
+      // path and benefit from the same switch.
+      this.largeImageView = LARGE_IMAGE_VIEW_PROCESSING_EXAMPLE;
       this._scheduleDraftSaveAfterProcessingExampleChange();
     } catch (e) {
       if (this._destroyed) {
@@ -1342,6 +1447,9 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this.processingExample = null;
     this.processingExampleError = null;
+    // Switch the large area back to the reference image — there's
+    // nothing else to show, and visual tools become relevant again.
+    this.largeImageView = LARGE_IMAGE_VIEW_REFERENCE;
     this._scheduleDraftSaveAfterProcessingExampleChange();
   }
 
@@ -3709,6 +3817,12 @@ export default class NpnCritiqueReplyModal extends Component {
             filename: this.processingExample.filename ?? null,
           }
         : null,
+      // Persisted large-image view selection. "reference" or
+      // "processing_example". Sent regardless of whether an example
+      // exists — the server whitelists the value and the restore
+      // path falls back to the auto-switch default if the view
+      // doesn't match the current state.
+      large_image_view: this.largeImageView,
       // `prompts_expanded` is reused on the wire as the "More ideas
       // expanded" boolean — same field name (so the Ruby DraftNormalizer
       // UI_ALLOWED_KEYS whitelist doesn't need to change) but the new
@@ -3799,6 +3913,11 @@ export default class NpnCritiqueReplyModal extends Component {
       if (restored) {
         this.processingExample = restored;
         this.showProcessingExamplePanel = true;
+        // Open the modal on the example view by default when editing a
+        // post that carries one — same rationale as the post-upload
+        // auto-switch: surface the artifact the critic is about to
+        // edit at full size. They can toggle back at any time.
+        this.largeImageView = LARGE_IMAGE_VIEW_PROCESSING_EXAMPLE;
       }
     }
   }
@@ -3934,6 +4053,25 @@ export default class NpnCritiqueReplyModal extends Component {
         if (this.processingExample) {
           this.showProcessingExamplePanel = true;
         }
+      }
+
+      // Large-image view restore. The draft may carry a persisted
+      // selection ("reference" or "processing_example"); fall back to
+      // the auto-switch default — show the example when one exists,
+      // otherwise the reference. Guard against an upload that was
+      // dropped above (eligibility-gated): can't view an example
+      // we don't have.
+      const savedView = draft.large_image_view;
+      if (savedView && LARGE_IMAGE_VIEWS.includes(savedView)) {
+        this.largeImageView =
+          savedView === LARGE_IMAGE_VIEW_PROCESSING_EXAMPLE &&
+          !this.hasProcessingExample
+            ? LARGE_IMAGE_VIEW_REFERENCE
+            : savedView;
+      } else if (this.hasProcessingExample) {
+        this.largeImageView = LARGE_IMAGE_VIEW_PROCESSING_EXAMPLE;
+      } else {
+        this.largeImageView = LARGE_IMAGE_VIEW_REFERENCE;
       }
     } finally {
       // Defer clearing the restoring flag until the next microtask so
@@ -4333,10 +4471,101 @@ export default class NpnCritiqueReplyModal extends Component {
                 </section>
               {{/if}}
 
+              {{! Large-image view toggle. Surfaces only once a
+                  processing example exists — before upload there's
+                  nothing to switch to. Implemented as a pill-button
+                  group matching the version selector visually so the
+                  two "what image am I looking at" affordances feel
+                  related. Uses aria-pressed so screen readers
+                  announce the active view. }}
+              {{#if this.hasProcessingExample}}
+                <div
+                  class="npn-critique-reply-modal__large-image-view"
+                  role="group"
+                  aria-label={{i18n
+                    "npn_critique_reply.modal.large_image_view.label"
+                  }}
+                >
+                  <button
+                    type="button"
+                    class="npn-critique-reply-modal__large-image-view-button
+                      {{if this.viewingReference 'is-selected'}}"
+                    aria-pressed={{if this.viewingReference "true" "false"}}
+                    {{on
+                      "click"
+                      (fn this.setLargeImageView "reference")
+                    }}
+                  >
+                    {{#if this.viewingReference}}
+                      <span
+                        class="npn-critique-reply-modal__large-image-view-check"
+                        aria-hidden="true"
+                      >
+                        {{dIcon "check"}}
+                      </span>
+                    {{/if}}
+                    <span
+                      class="npn-critique-reply-modal__large-image-view-label"
+                    >
+                      {{i18n
+                        "npn_critique_reply.modal.large_image_view.reference"
+                      }}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    class="npn-critique-reply-modal__large-image-view-button
+                      {{if this.viewingProcessingExample 'is-selected'}}"
+                    aria-pressed={{if
+                      this.viewingProcessingExample
+                      "true"
+                      "false"
+                    }}
+                    {{on
+                      "click"
+                      (fn this.setLargeImageView "processing_example")
+                    }}
+                  >
+                    {{#if this.viewingProcessingExample}}
+                      <span
+                        class="npn-critique-reply-modal__large-image-view-check"
+                        aria-hidden="true"
+                      >
+                        {{dIcon "check"}}
+                      </span>
+                    {{/if}}
+                    <span
+                      class="npn-critique-reply-modal__large-image-view-label"
+                    >
+                      {{i18n
+                        "npn_critique_reply.modal.large_image_view.processing_example"
+                      }}
+                    </span>
+                  </button>
+                </div>
+              {{/if}}
+
               {{! Toolbar moved ABOVE the image so it's visible without
                   scrolling. The image's sticky positioning + max-height
-                  could push the controls below the fold otherwise. }}
+                  could push the controls below the fold otherwise.
+
+                  Hidden entirely when the user is looking at the
+                  processing example — in v1 annotations apply only
+                  to the reference image, so surfacing the tools
+                  here would imply otherwise. A compact note
+                  replaces the toolbar so the disabled state is
+                  legible. }}
               {{#if this.visualNotesAvailable}}
+                {{#if this.viewingProcessingExample}}
+                  <p
+                    class="npn-critique-reply-modal__visual-notes-disabled-note"
+                    role="status"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.large_image_view.tools_apply_to_reference"
+                    }}
+                  </p>
+                {{else}}
                 <div
                   class="npn-critique-reply-modal__visual-notes-toolbar"
                   role="toolbar"
@@ -4720,8 +4949,24 @@ export default class NpnCritiqueReplyModal extends Component {
                       {{/if}}
                     {{/if}}
                 </div>
+                {{! Close the {{else}} branch of viewingProcessingExample
+                    — toolbar + secondary are the "reference view" path. }}
+                {{/if}}
               {{/if}}
 
+              {{#if this.viewingProcessingExample}}
+                {{! The alt text on the <img> already carries the
+                    accessible name; no separate figcaption needed. }}
+                <div
+                  class="npn-critique-reply-modal__processing-example-large"
+                >
+                  <img
+                    class="npn-critique-reply-modal__processing-example-large-img"
+                    src={{this.processingExample.url}}
+                    alt={{this.largeImageAlt}}
+                  />
+                </div>
+              {{else}}
               <NpnCritiqueImageReference
                 @imageUrl={{this.effectiveImageUrl}}
                 @alt={{this.imageAlt}}
@@ -4801,7 +5046,12 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onConfirmPendingNote={{this.confirmPendingPinNote}}
                 @onSkipPendingNote={{this.skipPendingPinNote}}
               />
+              {{/if}}
 
+              {{! Visual annotation list stays available on either
+                  view — annotations themselves persist while the
+                  user looks at the processing example, so the
+                  keyboard / screen-reader mirror keeps working. }}
               {{#if this.hasVisualAnnotations}}
                 <details
                   class="npn-critique-reply-modal__a11y-list"

@@ -39,6 +39,12 @@ module DiscourseNpnCritiqueReply
 
     UI_ALLOWED_KEYS = %w[prompts_hidden prompts_expanded].freeze
 
+    # Allowed values for the persisted large-image-view selection.
+    # Any other string is normalised to nil and the client falls
+    # back to the auto-switch default on restore. Kept in sync with
+    # `LARGE_IMAGE_VIEWS` in the modal component.
+    LARGE_IMAGE_VIEWS = %w[reference processing_example].freeze
+
     module_function
 
     # Returns a fully-normalized draft hash ready for PluginStore. The
@@ -63,8 +69,18 @@ module DiscourseNpnCritiqueReply
         # missing and nil as "no example".
         "processing_example" =>
           ProcessingExampleNormalizer.normalize_for_draft(payload["processing_example"]),
+        # Persisted large-image view selection. Null when missing or
+        # when the value isn't in the whitelist; client restore falls
+        # back to its auto-switch default in that case.
+        "large_image_view" => normalize_large_image_view(payload["large_image_view"]),
         "ui" => normalize_ui(payload["ui"]),
       }
+    end
+
+    def normalize_large_image_view(value)
+      return nil if value.nil?
+      str = value.to_s.strip
+      LARGE_IMAGE_VIEWS.include?(str) ? str : nil
     end
 
     def normalize_text(value)

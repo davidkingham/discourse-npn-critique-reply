@@ -113,11 +113,38 @@ en:
           replace: "Replace Example"
           remove: "Remove Example"
           preview_alt: "Processing example preview"
+          large_alt: "Processing example uploaded by the critic"
           image_alt: "processing example"
           heading_original: "Processing example based on the original image:"
           heading_revision: "Processing example based on %{label}:"
           upload_failed: "Couldn't upload the processing example. Please try again."
           generic_failure: "Couldn't add the processing example. Please try again."
+
+        # Large-image view toggle. Appears once a processing example
+        # has been uploaded so the critic can choose which image to
+        # see at full size. Annotations stay anchored to the
+        # reference; the toggle is purely a viewing affordance.
+        large_image_view:
+          label: "View"
+          reference: "Reference Image"
+          processing_example: "Processing Example"
+          # Status caption swapped in for "Showing Revision N" when
+          # the processing-example view is active. Surfaces what the
+          # critic is looking at without naming the underlying
+          # reference version (annotations still track that
+          # separately).
+          showing_processing_example: "Showing Processing Example"
+          # Compact note shown in place of the visual-tools toolbar
+          # while the processing example is the active large view.
+          # Reminds the user that annotations live on the reference
+          # — they're not gone, just not editable from this view.
+          tools_apply_to_reference: "Visual notes apply to the reference image."
+
+        # Re-exposed top-level alias for `large_image_view.showing_processing_example`
+        # so the existing `showingVersionLabel` getter can format both
+        # captions with one i18n() call. Keeps the template branch on
+        # the getter side rather than the markup side.
+        showing_processing_example: "Showing Processing Example"
 
         # Visual notes — async export + upload pipeline ----------------
         preparing_visual_notes: "Preparing visual notes…"
