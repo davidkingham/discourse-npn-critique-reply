@@ -4190,6 +4190,12 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
+    // Processing example is part of the workspace state too — wipe it
+    // here so Discard draft returns the modal to a true clean-start,
+    // not "everything except the uploaded example".
+    this.processingExample = null;
+    this.processingExampleError = null;
+    this.largeImageView = LARGE_IMAGE_VIEW_REFERENCE;
     this.draftRestoreNotice = null;
     this.draftStatus = DRAFT_STATUS.IDLE;
     this.draftHasSaved = false;
