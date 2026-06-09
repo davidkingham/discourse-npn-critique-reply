@@ -631,7 +631,7 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
         expect(created.custom_fields["npn_processing_example"]).to be_a(Hash)
       end
 
-      context "topic opt-out (npn_processing_examples_allowed)" do
+      context "with the topic opt-out flag (npn_processing_examples_allowed)" do
         it "treats a missing custom field as allowed (backward compat)" do
           # The fabricated topic doesn't carry the field at all.
           post_with_processing_example(processing_example: valid_processing_example)
