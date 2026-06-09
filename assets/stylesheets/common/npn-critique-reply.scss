@@ -4,24 +4,19 @@
 
 // Layout only — color/contrast comes from .btn-primary so the button
 // matches the invitation panel's "Start a Critique" CTA and stays
-// visible in both light and dark themes.
+// visible in both light and dark themes. Spacing inherits from
+// Discourse's `topic-footer-button` so the gap to adjacent buttons
+// (Bookmark, Flag, Reply) matches the rest of the footer; the older
+// 1em left margin produced a noticeable floating gap, especially on
+// mobile when the long "Resume Critique Draft" label wraps the row.
 .npn-critique-reply-start.npn-critique-reply-start {
-  margin-left: 1em;
-  margin-right: 0.25em;
-
   .d-icon {
     margin-right: 0.4em;
   }
-
-  &:focus-visible {
-    outline: 2px solid var(--tertiary);
-    outline-offset: 2px;
-  }
-}
-
-.mobile-view .npn-critique-reply-start {
+  // Keep the label on a single line — the longer "Resume Critique
+  // Draft" copy otherwise wraps onto two lines on narrow viewports
+  // and gives the button an irregular box compared to its peers.
   white-space: nowrap;
-  margin-left: 0.5em;
 }
 
 // Shared section heading used in both columns of the workspace modal —
