@@ -983,59 +983,45 @@
 .npn-critique-image-reference {
   margin: 0;
   width: 100%;
-  // The image figure flexes to fill whatever vertical space remains in
-  // the (height-capped) image column after the heading / selector /
-  // toolbar / status take their natural space.
-  flex: 1 1 auto;
-  // Min-height floor in viewport units. The IMG inside is positioned
-  // absolutely so it doesn't contribute any natural size — without
-  // this floor the figure + frame collapse to 0 height and the
-  // image becomes invisible. 40vh is generous enough to read on any
-  // reasonable desktop viewport (the mobile media query at 720 px
-  // takes over below that) but small enough that the column never
-  // overflows its `max-height: calc(80vh - 4em)` cap given the
-  // toolbar / heading / status chrome above it (chrome is ~200 px,
-  // 40 vh + 200 px ≤ 80 vh - 4 em on viewports ≥ 720 px).
-  min-height: 40vh;
+  // The figure now hugs its content (the IMG) instead of flex-growing
+  // to fill the column. The 40vh min-height floor we used to reserve
+  // was producing visible top/bottom whitespace for landscape images,
+  // because the IMG was absolutely positioned with `object-fit:
+  // contain` and the frame stayed locked at 40vh even when the
+  // image rendered shorter. Letting the IMG drive its own natural
+  // height (capped via max-height) removes that letterboxing without
+  // sacrificing portrait safety (the cap kicks in instead).
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
 
   &__frame {
     // `position: relative` is the containing block for the absolute
-    // image AND the absolute Konva canvas — both center on the
-    // frame's rendered box, so percentage sizing on them resolves
-    // against the frame's actual width / height regardless of how
-    // the flex chain produces that height.
+    // Konva canvas + overlay — both center on the frame's rendered
+    // box, so percentage sizing on them resolves against the
+    // frame's actual width / height. With the IMG now in flow, the
+    // frame's rendered size matches the image exactly (no
+    // letterboxing inside the frame), so pin coordinates computed
+    // in percent line up with where the user clicked.
     position: relative;
     width: 100%;
-    flex: 1 1 auto;
-    min-height: 0;
+    flex: 0 0 auto;
     background: var(--secondary);
     border: 1px solid var(--primary-low);
     border-radius: var(--d-border-radius, 4px);
     overflow: hidden;
   }
 
-  // Positioned absolutely + centered via auto margins so that
-  // `max-width / max-height: 100%` resolves against the frame's
-  // actual rendered size regardless of how the flex chain produces
-  // that size. Previously, with the IMG in the flex flow, the
-  // percentage maxes couldn't resolve through the figure → frame
-  // chain when the figure was sized by flex distribution, causing
-  // portrait photos to overflow the frame and get clipped by the
-  // frame's `overflow: hidden`. With absolute positioning, the
-  // containing block (the relatively-positioned frame) has a known
-  // size by the time the IMG is laid out, so the maxes work.
-  // `object-fit: contain` keeps aspect ratio, letterboxing as needed.
+  // In-flow IMG so the frame's height tracks the image exactly.
+  // `width: 100%; height: auto` preserves the natural aspect ratio
+  // for landscapes. The `max-height` cap protects portraits from
+  // dominating the column; `object-fit: contain` letterboxes
+  // INSIDE the IMG box only in that capped portrait case.
   &__img {
     display: block;
-    position: absolute;
-    inset: 0;
-    margin: auto;
-    width: auto;
+    width: 100%;
     height: auto;
-    max-width: 100%;
-    max-height: 100%;
+    max-height: calc(80vh - 4em);
     object-fit: contain;
     background: var(--secondary);
   }
