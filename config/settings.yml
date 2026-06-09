@@ -43,6 +43,17 @@ plugins:
     allow_any: false
     client: true
 
+  # Gates the entire Processing Example workflow (download reference
+  # image + upload one processed example into the critique reply).
+  # On by default — processing examples are part of NPN culture and
+  # photographers opt OUT per-topic via the submission form
+  # (npn_processing_examples_allowed topic custom field). Turning
+  # this off globally hides the UI everywhere and the server-side
+  # endpoints silently drop any processing-example payload.
+  npn_critique_reply_processing_examples_enabled:
+    default: true
+    client: true
+
   # Server-side critique workspace drafts. When true, the modal
   # autosaves to PluginStore and restores on next open across any
   # browser/device for the same user/topic.

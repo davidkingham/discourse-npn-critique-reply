@@ -43,6 +43,12 @@ module DiscourseNpnCritiqueReply
     SPECIFIC_CRITIQUE_QUESTIONS_KEY = "npn_specific_critique_questions"
     VISUAL_EXAMPLES_ALLOWED_KEY = "npn_visual_examples_allowed"
     IMAGE_REWORKS_ALLOWED_KEY = "npn_image_reworks_allowed"
+    # Per-topic opt-in/out for processing examples. Written by the
+    # submissions plugin (in progress). Missing → treated as allowed,
+    # so legacy topics created before the field existed still permit
+    # the workflow by default (NPN cultural norm). Explicit false is
+    # the only signal that disables the section.
+    PROCESSING_EXAMPLES_ALLOWED_KEY = "npn_processing_examples_allowed"
     PROJECT_ID_KEY = "npn_project_id"
     WEEKLY_CHALLENGE_ID_KEY = "npn_weekly_challenge_id"
     IMAGE_COUNT_KEY = "npn_image_count"
@@ -93,6 +99,11 @@ module DiscourseNpnCritiqueReply
           normalize_array(fields[SPECIFIC_CRITIQUE_QUESTIONS_KEY]),
         visual_examples_allowed: normalize_boolean(fields[VISUAL_EXAMPLES_ALLOWED_KEY]),
         image_reworks_allowed: normalize_boolean(fields[IMAGE_REWORKS_ALLOWED_KEY]),
+        # Backward-compatible: missing field → allowed (true). Only an
+        # explicit-false topic custom field hides the workflow. See
+        # `normalize_optional_boolean_default_true`.
+        processing_examples_allowed:
+          normalize_optional_boolean_default_true(fields[PROCESSING_EXAMPLES_ALLOWED_KEY]),
         # Shared metadata --------------------------------------------------
         schema_version: normalize_integer(fields[SCHEMA_VERSION_KEY]),
         project_id: normalize_integer(fields[PROJECT_ID_KEY]),
@@ -336,6 +347,24 @@ module DiscourseNpnCritiqueReply
       Integer(value.to_s.strip, 10)
     rescue ArgumentError, TypeError
       nil
+    end
+
+    # Booleans where ABSENCE means "allowed" (true). Used by features
+    # added after the submissions plugin shipped: a topic that predates
+    # the field shouldn't be silently opted out of a new affordance.
+    # Only an explicit-false signal disables.
+    def normalize_optional_boolean_default_true(value)
+      return true if value.nil?
+      return value if value == true || value == false
+
+      case value.to_s.strip.downcase
+      when "false", "f", "0", "no", "n"
+        false
+      when "", "true", "t", "1", "yes", "y"
+        true
+      else
+        true
+      end
     end
   end
 end

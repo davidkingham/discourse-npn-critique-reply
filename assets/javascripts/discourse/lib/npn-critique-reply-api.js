@@ -21,13 +21,18 @@ import { ajax } from "discourse/lib/ajax";
  *   reply. Pass null/undefined to skip metadata persistence (Post-
  *   without-visual-notes, text-only critiques, etc.). Sent as JSON
  *   so deeply-nested arrays round-trip cleanly.
+ * @param {?object} processingExample — optional nested wrapper
+ *   ({source, example_upload}). Server stores as the
+ *   `npn_processing_example` post custom field. Pass null to skip.
+ *   Same omit-when-absent pattern as visualNotes on the create path.
  * @returns {Promise<{success: true, post: {id, post_number, topic_id, url}}>}
  */
 export function postCritique(
   topicId,
   raw,
   selectedImageVersionKey,
-  visualNotes = null
+  visualNotes = null,
+  processingExample = null
 ) {
   const body = {
     raw,
@@ -35,6 +40,9 @@ export function postCritique(
   };
   if (visualNotes) {
     body.visual_notes = visualNotes;
+  }
+  if (processingExample) {
+    body.processing_example = processingExample;
   }
   return ajax(`/npn-critique-reply/topics/${topicId}/replies`, {
     type: "POST",
@@ -71,17 +79,19 @@ export function updateCritique(
   postId,
   raw,
   selectedImageVersionKey,
-  visualNotes = null
+  visualNotes = null,
+  processingExample = null
 ) {
-  // Note: `visual_notes` is intentionally always present in the body
-  // payload. Distinguishing "key absent" (preserve existing) from
-  // "key present with null value" (clear) is the entire mechanism
-  // the server uses to know it should delete the custom field. See
-  // `CritiqueRepliesController#sync_visual_notes_for_update`.
+  // Note: BOTH `visual_notes` and `processing_example` are always
+  // present in the update body. Distinguishing "key absent" (preserve
+  // existing) from "key present with null value" (clear) is how the
+  // server knows to delete the matching custom field. See
+  // `sync_visual_notes_for_update` / `sync_processing_example_for_update`.
   const body = {
     raw,
     selected_image_version_key: selectedImageVersionKey ?? null,
     visual_notes: visualNotes ?? null,
+    processing_example: processingExample ?? null,
   };
   return ajax(`/npn-critique-reply/posts/${postId}/critique`, {
     type: "PUT",

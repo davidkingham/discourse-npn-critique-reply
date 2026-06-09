@@ -27,7 +27,11 @@ export default class NpnEditVisualCritiqueButton extends Component {
     if (!post) {
       return false;
     }
-    if (!post.npn_visual_notes) {
+    // Either flavour of plugin-created reply qualifies — posts with
+    // visual notes, with a processing example, or with both. Keeps
+    // the button in sync with the transformer-level gate in the
+    // api-initializer.
+    if (!post.npn_visual_notes && !post.npn_processing_example) {
       return false;
     }
     // `can_edit` is Discourse's standard post-level edit flag —

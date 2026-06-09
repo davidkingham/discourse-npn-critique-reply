@@ -57,6 +57,12 @@ module DiscourseNpnCritiqueReply
           normalize_string(payload["selected_image_version_key"]),
         "critique_text" => normalize_text(payload["critique_text"]),
         "annotations" => normalize_annotations(payload["annotations"]),
+        # Processing example draft entry — flat shape, see
+        # ProcessingExampleNormalizer.normalize_for_draft. May be nil
+        # when the user has no upload pending; the client treats both
+        # missing and nil as "no example".
+        "processing_example" =>
+          ProcessingExampleNormalizer.normalize_for_draft(payload["processing_example"]),
         "ui" => normalize_ui(payload["ui"]),
       }
     end

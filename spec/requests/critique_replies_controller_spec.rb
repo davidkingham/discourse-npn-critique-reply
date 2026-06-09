@@ -516,6 +516,164 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
         ).to eq(false)
       end
     end
+
+    # ---- npn_processing_example custom field persistence ------------
+
+    describe "npn_processing_example post custom field" do
+      before { sign_in(user) }
+
+      let(:valid_processing_example) do
+        {
+          "schema_version" => 1,
+          "source" => {
+            "topic_id" => topic.id,
+            "image_version_key" => "revision_2",
+            "image_version_label" => "Revision 2",
+            "source_upload_id" => 456,
+            "source_url" => "/uploads/default/original/1X/source.jpg",
+          },
+          "example_upload" => {
+            "upload_id" => 789,
+            "url" => "/uploads/default/original/1X/example.jpg",
+            "short_url" => "upload://example.jpg",
+            "filename" => "example.jpg",
+          },
+        }
+      end
+
+      def post_with_processing_example(processing_example: nil, visual_notes: nil)
+        body = {
+          raw: valid_raw,
+          selected_image_version_key: "revision_2",
+        }
+        body[:visual_notes] = visual_notes if visual_notes
+        body[:processing_example] = processing_example if processing_example
+        post endpoint, params: body.to_json, headers: {
+          "CONTENT_TYPE" => "application/json",
+        }
+      end
+
+      it "doesn't attach the custom field when no processing_example payload is sent" do
+        post_with_processing_example
+        expect(response.status).to eq(200)
+        created = Post.find(response.parsed_body["post"]["id"])
+        expect(created.custom_fields["npn_processing_example"]).to be_nil
+      end
+
+      it "attaches a normalized payload when processing_example is sent" do
+        post_with_processing_example(processing_example: valid_processing_example)
+        expect(response.status).to eq(200)
+        created = Post.find(response.parsed_body["post"]["id"])
+        stored = created.custom_fields["npn_processing_example"]
+
+        expect(stored).to be_a(Hash)
+        expect(stored["schema_version"]).to eq(1)
+        expect(stored.dig("source", "topic_id")).to eq(topic.id)
+        expect(stored.dig("source", "image_version_key")).to eq("revision_2")
+        expect(stored.dig("source", "image_version_label")).to eq("Revision 2")
+        expect(stored.dig("example_upload", "upload_id")).to eq(789)
+        expect(stored.dig("example_upload", "short_url")).to eq("upload://example.jpg")
+        expect(stored.dig("example_upload", "filename")).to eq("example.jpg")
+      end
+
+      it "overwrites client-supplied source.topic_id with the route topic_id" do
+        spoofed =
+          valid_processing_example.merge(
+            "source" => valid_processing_example["source"].merge("topic_id" => 999_999),
+          )
+        post_with_processing_example(processing_example: spoofed)
+        expect(response.status).to eq(200)
+        created = Post.find(response.parsed_body["post"]["id"])
+        expect(created.custom_fields["npn_processing_example"].dig("source", "topic_id"))
+          .to eq(topic.id)
+      end
+
+      it "drops the payload when there's no usable upload reference" do
+        empty_upload =
+          valid_processing_example.merge(
+            "example_upload" => { "filename" => "orphan.jpg" },
+          )
+        post_with_processing_example(processing_example: empty_upload)
+        expect(response.status).to eq(200)
+        created = Post.find(response.parsed_body["post"]["id"])
+        expect(created.custom_fields["npn_processing_example"]).to be_nil
+      end
+
+      it "stores BOTH npn_visual_notes and npn_processing_example when both are sent" do
+        post endpoint,
+             params: {
+               raw: valid_raw,
+               selected_image_version_key: "revision_2",
+               visual_notes: {
+                 "source" => { "image_version_key" => "revision_2" },
+                 "visual_output" => {
+                   "upload_id" => 100,
+                   "short_url" => "upload://visual.jpg",
+                 },
+                 "annotations" => [
+                   {
+                     "id" => "pin_1",
+                     "kind" => "pin",
+                     "number" => 1,
+                     "x_pct" => 50,
+                     "y_pct" => 50,
+                   },
+                 ],
+               },
+               processing_example: valid_processing_example,
+             }.to_json,
+             headers: {
+               "CONTENT_TYPE" => "application/json",
+             }
+        expect(response.status).to eq(200)
+        created = Post.find(response.parsed_body["post"]["id"])
+        expect(created.custom_fields["npn_visual_notes"]).to be_a(Hash)
+        expect(created.custom_fields["npn_processing_example"]).to be_a(Hash)
+      end
+
+      context "topic opt-out (npn_processing_examples_allowed)" do
+        it "treats a missing custom field as allowed (backward compat)" do
+          # The fabricated topic doesn't carry the field at all.
+          post_with_processing_example(processing_example: valid_processing_example)
+          expect(response.status).to eq(200)
+          created = Post.find(response.parsed_body["post"]["id"])
+          expect(created.custom_fields["npn_processing_example"]).to be_a(Hash)
+        end
+
+        it "stores when the field is explicitly true" do
+          topic.custom_fields["npn_processing_examples_allowed"] = true
+          topic.save_custom_fields
+          post_with_processing_example(processing_example: valid_processing_example)
+          expect(response.status).to eq(200)
+          created = Post.find(response.parsed_body["post"]["id"])
+          expect(created.custom_fields["npn_processing_example"]).to be_a(Hash)
+        end
+
+        it "silently drops the payload when the field is explicitly false" do
+          topic.custom_fields["npn_processing_examples_allowed"] = false
+          topic.save_custom_fields
+          post_with_processing_example(processing_example: valid_processing_example)
+          # The reply itself still succeeds (the post body is the
+          # source of truth), but no metadata is persisted.
+          expect(response.status).to eq(200)
+          created = Post.find(response.parsed_body["post"]["id"])
+          expect(created.custom_fields["npn_processing_example"]).to be_nil
+        end
+      end
+
+      context "with the site setting disabled" do
+        before do
+          SiteSetting.npn_critique_reply_processing_examples_enabled = false
+        end
+
+        it "silently drops the payload" do
+          post_with_processing_example(processing_example: valid_processing_example)
+          expect(response.status).to eq(200)
+          created = Post.find(response.parsed_body["post"]["id"])
+          expect(created.custom_fields["npn_processing_example"]).to be_nil
+        end
+      end
+    end
   end
 
   describe "PUT /npn-critique-reply/posts/:post_id/critique (edit)" do
@@ -755,6 +913,125 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
         put_update(critique_reply.id)
         expect(response.status).to eq(200)
         expect(Post.find(critique_reply.id).raw).to eq(updated_raw)
+      end
+    end
+
+    # ---- npn_processing_example edit reconciliation ------------------
+
+    describe "processing_example edit behaviour" do
+      let(:processing_example_only_reply) do
+        reply =
+          Fabricate(
+            :post,
+            topic: critique_topic,
+            user: author,
+            raw: "Processing example based on the original image:\n\n![processing example](upload://example.jpg)\n\nWent for a quieter mid-tone.",
+          )
+        reply.custom_fields["npn_processing_example"] =
+          DiscourseNpnCritiqueReply::ProcessingExampleNormalizer.normalize_for_post(
+            {
+              "source" => { "image_version_key" => "original" },
+              "example_upload" => {
+                "upload_id" => 42,
+                "short_url" => "upload://example.jpg",
+                "url" => "/uploads/default/original/1X/example.jpg",
+                "filename" => "example.jpg",
+              },
+            },
+            topic_id: critique_topic.id,
+          )
+        reply.save_custom_fields
+        reply
+      end
+
+      def put_update_with(post_id, body)
+        put "/npn-critique-reply/posts/#{post_id}/critique.json",
+            params: body.to_json,
+            headers: {
+              "CONTENT_TYPE" => "application/json",
+            }
+      end
+
+      before { sign_in(author) }
+
+      it "allows editing a post that has only a processing example (no visual notes)" do
+        put_update_with(processing_example_only_reply.id, {
+          raw: "Processing example based on the original image:\n\n![processing example](upload://example.jpg)\n\nDifferent tone choice this pass.",
+          visual_notes: nil,
+          processing_example: {
+            "source" => { "image_version_key" => "original" },
+            "example_upload" => {
+              "upload_id" => 42,
+              "short_url" => "upload://example.jpg",
+              "url" => "/uploads/default/original/1X/example.jpg",
+              "filename" => "example.jpg",
+            },
+          },
+        })
+        expect(response.status).to eq(200)
+      end
+
+      it "clears npn_processing_example when explicit null is sent" do
+        put_update_with(processing_example_only_reply.id, {
+          raw: "Processing example based on the original image:\n\n![processing example](upload://example.jpg)\n\nKeeping but rewriting the prose.",
+          visual_notes: nil,
+          processing_example: nil,
+        })
+        expect(response.status).to eq(200)
+        reloaded = Post.find(processing_example_only_reply.id)
+        expect(reloaded.custom_fields["npn_processing_example"]).to be_nil
+      end
+
+      it "replaces npn_processing_example with the new normalized payload" do
+        new_filename = "fresh-pass.jpg"
+        put_update_with(processing_example_only_reply.id, {
+          raw: "Processing example based on the original image:\n\n![processing example](upload://example.jpg)\n\nReplaced the example.",
+          visual_notes: nil,
+          processing_example: {
+            "source" => { "image_version_key" => "original" },
+            "example_upload" => {
+              "upload_id" => 99,
+              "short_url" => "upload://newer.jpg",
+              "url" => "/uploads/default/original/1X/newer.jpg",
+              "filename" => new_filename,
+            },
+          },
+        })
+        expect(response.status).to eq(200)
+        reloaded = Post.find(processing_example_only_reply.id)
+        stored = reloaded.custom_fields["npn_processing_example"]
+        expect(stored.dig("example_upload", "upload_id")).to eq(99)
+        expect(stored.dig("example_upload", "filename")).to eq(new_filename)
+      end
+
+      it "clears the field when the topic has opted out, even if a payload is sent" do
+        critique_topic.custom_fields["npn_processing_examples_allowed"] = false
+        critique_topic.save_custom_fields
+        put_update_with(processing_example_only_reply.id, {
+          raw: "Edited prose only.",
+          visual_notes: nil,
+          processing_example: {
+            "source" => { "image_version_key" => "original" },
+            "example_upload" => {
+              "upload_id" => 42,
+              "short_url" => "upload://example.jpg",
+            },
+          },
+        })
+        expect(response.status).to eq(200)
+        reloaded = Post.find(processing_example_only_reply.id)
+        expect(reloaded.custom_fields["npn_processing_example"]).to be_nil
+      end
+
+      it "preserves npn_processing_example when the key is absent from the payload (defensive)" do
+        put_update_with(processing_example_only_reply.id, {
+          raw: "Edited prose only.",
+          visual_notes: nil,
+          # processing_example key intentionally omitted
+        })
+        expect(response.status).to eq(200)
+        reloaded = Post.find(processing_example_only_reply.id)
+        expect(reloaded.custom_fields["npn_processing_example"]).to be_a(Hash)
       end
     end
   end

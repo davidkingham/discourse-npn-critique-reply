@@ -44,6 +44,7 @@ after_initialize do
   require_relative "lib/discourse_npn_critique_reply/draft_normalizer"
   require_relative "lib/discourse_npn_critique_reply/draft_store"
   require_relative "lib/discourse_npn_critique_reply/visual_notes_normalizer"
+  require_relative "lib/discourse_npn_critique_reply/processing_example_normalizer"
   require_relative "app/controllers/discourse_npn_critique_reply/critique_replies_controller"
   require_relative "app/controllers/discourse_npn_critique_reply/drafts_controller"
 
@@ -53,6 +54,15 @@ after_initialize do
   # features (reopen-to-edit, interactive overlays, debug, renderer
   # migration) have something to work with.
   register_post_custom_field_type("npn_visual_notes", :json)
+
+  # Processing-example metadata: the critic downloaded the reference
+  # image, did an external processing pass, and re-uploaded one
+  # example. Stored separately from npn_visual_notes because it's an
+  # uploaded alternate image (not annotation metadata) with a
+  # different lifecycle and validation surface. A single reply may
+  # carry both — visual notes block + processing example block — and
+  # each is cleared independently on edit.
+  register_post_custom_field_type("npn_processing_example", :json)
 
   # These topic custom fields are populated by sibling plugins
   # (discourse-npn-submissions, discourse-revised-critique-image), but we
@@ -110,6 +120,19 @@ after_initialize do
         object.custom_fields["npn_visual_notes"].present?
     end,
   ) { object.custom_fields["npn_visual_notes"] }
+
+  # Surface the stored processing-example payload on the Post JSON so
+  # the client can restore the upload preview when reopening a
+  # critique reply for editing. Same restrictions as npn_visual_notes:
+  # signed-in viewers only, only emitted when present.
+  add_to_serializer(
+    :post,
+    :npn_processing_example,
+    include_condition: -> do
+      SiteSetting.npn_critique_reply_enabled && scope&.user.present? &&
+        object.custom_fields["npn_processing_example"].present?
+    end,
+  ) { object.custom_fields["npn_processing_example"] }
 
   # Mount the engine at root — `config/routes.rb` carries the full
   # `/npn-critique-reply/...` prefix, matching the URL the client uses.

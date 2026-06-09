@@ -52,6 +52,7 @@ module DiscourseNpnCritiqueReply
       end
 
       attach_visual_notes(post, params[:visual_notes], topic_id: topic.id)
+      attach_processing_example(post, params[:processing_example], topic: topic)
 
       render json: {
         success: true,
@@ -94,9 +95,13 @@ module DiscourseNpnCritiqueReply
       end
 
       # Gate the endpoint to existing critique replies. Without this,
-      # a user could attach a visual_notes payload to any post they
-      # own via this endpoint, bypassing the create path entirely.
-      if post.custom_fields["npn_visual_notes"].blank?
+      # a user could attach plugin metadata to any post they own via
+      # this endpoint, bypassing the create path entirely. A post
+      # qualifies if it carries EITHER the visual-notes payload OR the
+      # processing-example payload — both flavours of plugin-created
+      # critique should be reopenable here.
+      if post.custom_fields["npn_visual_notes"].blank? &&
+           post.custom_fields["npn_processing_example"].blank?
         raise Discourse::InvalidAccess
       end
 
@@ -113,6 +118,7 @@ module DiscourseNpnCritiqueReply
       end
 
       sync_visual_notes_for_update(post)
+      sync_processing_example_for_update(post)
 
       render json: {
         success: true,
@@ -231,6 +237,123 @@ module DiscourseNpnCritiqueReply
       annotations = payload["annotations"]
       visual_output = payload["visual_output"]
       annotations.blank? && visual_output.blank?
+    end
+
+    # ----- Processing example -------------------------------------------
+    #
+    # Mirrors the visual-notes attach/sync/clear triplet. Processing
+    # examples are gated by two layers:
+    #
+    #   1. The global site setting
+    #      (npn_critique_reply_processing_examples_enabled). When off,
+    #      every attach/sync call is silently dropped — the endpoint
+    #      returns success and the post body remains whatever the
+    #      client built into `raw`, but no metadata is persisted.
+    #
+    #   2. The per-topic opt-out custom field
+    #      (npn_processing_examples_allowed). Missing → allowed
+    #      (backward compat with topics created before the field
+    #      existed). Explicit-false → rejected.
+    #
+    # Both are silently dropped rather than raising 4xx so a stale
+    # client (e.g. tab opened before the photographer opted out)
+    # doesn't surface a confusing error after a successful post.
+    def attach_processing_example(post, raw, topic:)
+      return if raw.blank?
+      return unless processing_example_allowed?(topic)
+
+      payload = raw.respond_to?(:to_unsafe_h) ? raw.to_unsafe_h : raw
+      normalized =
+        ProcessingExampleNormalizer.normalize_for_post(payload, topic_id: topic.id)
+
+      # Normalizer returns nil when there's no usable upload reference.
+      # Don't persist an empty wrapper.
+      return if normalized.nil?
+
+      post.custom_fields["npn_processing_example"] = normalized
+      post.save_custom_fields
+    rescue => e
+      Discourse.warn_exception(
+        e,
+        message: "[discourse-npn-critique-reply] failed to attach " \
+          "npn_processing_example (post=#{post&.id})",
+      )
+    end
+
+    # Edit-mode reconciliation. Same three-case contract as
+    # `sync_visual_notes_for_update`:
+    #
+    #   • non-blank payload → replace the stored field
+    #   • explicit null/blank → clear the stored field
+    #   • key absent → no-op (defensive against pre-deploy clients)
+    #
+    # ALSO clears (not no-ops) when the global setting is off OR the
+    # topic is opted out — those are stricter than the create path
+    # because an existing field may have been written before the
+    # setting/opt-out flipped, and the post body has already lost
+    # the image markdown. Leaving the metadata behind would orphan
+    # it relative to the visible post.
+    def sync_processing_example_for_update(post)
+      return unless params.key?(:processing_example)
+
+      payload = params[:processing_example]
+      topic = post.topic
+
+      if payload.blank? || !processing_example_allowed?(topic)
+        clear_processing_example(post)
+        return
+      end
+
+      payload_hash = payload.respond_to?(:to_unsafe_h) ? payload.to_unsafe_h : payload
+      normalized =
+        ProcessingExampleNormalizer.normalize_for_post(
+          payload_hash,
+          topic_id: post.topic_id,
+        )
+
+      if normalized.nil?
+        clear_processing_example(post)
+      else
+        post.custom_fields["npn_processing_example"] = normalized
+        post.save_custom_fields
+      end
+    rescue => e
+      Discourse.warn_exception(
+        e,
+        message: "[discourse-npn-critique-reply] failed to sync " \
+          "npn_processing_example (post=#{post&.id})",
+      )
+    end
+
+    def clear_processing_example(post)
+      return if post.custom_fields["npn_processing_example"].blank?
+      post.custom_fields.delete("npn_processing_example")
+      post.save_custom_fields
+    rescue => e
+      Discourse.warn_exception(
+        e,
+        message: "[discourse-npn-critique-reply] failed to clear " \
+          "npn_processing_example (post=#{post&.id})",
+      )
+    end
+
+    # Returns true when both the global setting permits processing
+    # examples AND the topic isn't explicitly opted out. A missing
+    # topic custom field is treated as "allowed" — see
+    # TopicMetadataReader.normalize_optional_boolean_default_true.
+    def processing_example_allowed?(topic)
+      return false unless SiteSetting.npn_critique_reply_processing_examples_enabled
+      return true if topic.nil?
+      raw = topic.custom_fields["npn_processing_examples_allowed"]
+      return true if raw.nil?
+      return raw if raw == true || raw == false
+
+      case raw.to_s.strip.downcase
+      when "false", "f", "0", "no", "n"
+        false
+      else
+        true
+      end
     end
   end
 end

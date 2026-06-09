@@ -97,6 +97,28 @@ en:
         validation_empty: "Write a critique or use the prompts first."
         post_failed: "Couldn't post your critique. Please try again."
 
+        # Processing Example workflow. A critic downloads the reference
+        # image, processes it externally, and uploads ONE processing
+        # example to include alongside their critique. Always called
+        # "processing example" in user-facing copy — never "revision",
+        # "rework", "edited version", or "improved version".
+        # "Revision" is reserved for the photographer's own next image.
+        processing_example:
+          section_title: "Processing Example"
+          add: "Add a processing example"
+          helper: "Download the reference image, make a processing example, then upload it with your critique."
+          download: "Download Reference Image"
+          upload: "Upload Processing Example"
+          uploaded: "Processing example uploaded"
+          replace: "Replace Example"
+          remove: "Remove Example"
+          preview_alt: "Processing example preview"
+          image_alt: "processing example"
+          heading_original: "Processing example based on the original image:"
+          heading_revision: "Processing example based on %{label}:"
+          upload_failed: "Couldn't upload the processing example. Please try again."
+          generic_failure: "Couldn't add the processing example. Please try again."
+
         # Visual notes — async export + upload pipeline ----------------
         preparing_visual_notes: "Preparing visual notes…"
         uploading_visual_notes: "Uploading visual notes…"

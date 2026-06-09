@@ -152,6 +152,128 @@
     }
   }
 
+  // -- Processing Example section ---------------------------------------
+  //
+  // Lives in the left pane between the version selector and the
+  // visual-tools toolbar. Quiet panel — hairline border, soft tinted
+  // background — so it reads as workflow context rather than a peer
+  // of the annotation tools.
+  &__processing-example {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55em;
+    padding: 0.65em 0.85em 0.75em;
+    margin: 0 0 0.8em;
+    background: var(--primary-very-low);
+    border: 1px solid var(--primary-low);
+    border-left: 3px solid var(--primary-low-mid);
+    border-radius: var(--d-border-radius, 4px);
+  }
+
+  &__processing-example-heading {
+    margin: 0;
+    font-size: var(--font-down-1);
+    font-weight: 600;
+    color: var(--primary-high);
+    letter-spacing: 0.01em;
+  }
+
+  &__processing-example-help {
+    margin: 0;
+    color: var(--primary-medium);
+    font-size: var(--font-down-1);
+    line-height: 1.45;
+  }
+
+  &__processing-example-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4em;
+  }
+
+  // Wrap the icon + label inside the anchor download button so the
+  // spacing matches the adjacent DButtons. The anchor isn't a real
+  // .btn component, so we mimic the icon margin manually.
+  &__processing-example-download {
+    text-decoration: none;
+    .d-icon {
+      margin-right: 0.4em;
+    }
+  }
+
+  &__processing-example-preview {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65em;
+    min-width: 0;
+  }
+
+  &__processing-example-thumb {
+    flex: 0 0 auto;
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+    background: var(--secondary);
+  }
+
+  &__processing-example-status {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15em;
+  }
+
+  &__processing-example-status-text {
+    margin: 0;
+    font-size: var(--font-down-1);
+    font-weight: 500;
+    color: var(--primary-high);
+  }
+
+  &__processing-example-filename {
+    margin: 0;
+    font-size: var(--font-down-2, var(--font-down-1));
+    color: var(--primary-medium);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__processing-example-error {
+    margin: 0;
+    padding: 0.4em 0.6em;
+    background: var(--danger-low, var(--tertiary-low));
+    color: var(--danger, var(--primary-high));
+    border-left: 3px solid var(--danger, var(--tertiary));
+    border-radius: var(--d-border-radius, 4px);
+    font-size: var(--font-down-1);
+    line-height: 1.4;
+  }
+
+  // Hidden file input — display:none would block focus/programmatic
+  // click in some browsers; the `hidden` attribute on the element is
+  // enough, but we add a defensive rule too.
+  &__processing-example-input {
+    display: none;
+  }
+
+  @media (max-width: 720px) {
+    &__processing-example-actions {
+      // On narrow widths give each button its own row so wrap is
+      // clean and tap targets stay generous.
+      flex-direction: column;
+      align-items: stretch;
+      > * {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  }
+
   &__version-check {
     display: inline-flex;
     align-items: center;

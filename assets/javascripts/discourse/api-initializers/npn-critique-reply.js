@@ -91,7 +91,13 @@ export default apiInitializer((api) => {
   api.registerValueTransformer(
     "post-menu-buttons",
     ({ value: dag, context: { post, buttonKeys } }) => {
-      if (!post?.npn_visual_notes) {
+      // Show for posts carrying EITHER visual-notes metadata OR a
+      // processing-example payload — both flavours are
+      // plugin-created replies that should round-trip through the
+      // workspace modal. The label stays "Edit Visual Critique"
+      // (intentional naming continuity even though "visual" no
+      // longer strictly matches example-only posts).
+      if (!post?.npn_visual_notes && !post?.npn_processing_example) {
         return;
       }
       if (!post?.can_edit) {

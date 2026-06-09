@@ -39,6 +39,15 @@ import {
   uploadVisualNotesBlob,
 } from "../../lib/npn-critique-reply-visual-notes";
 import {
+  buildProcessingExamplePayload,
+  composeProcessingExampleRaw,
+  normalizeProcessingExampleFromServer,
+  processingExampleFilename,
+  processingExampleSourceFilename,
+  uploadProcessingExampleFile,
+  wrapProcessingExampleError,
+} from "../../lib/npn-critique-reply-processing-example";
+import {
   MAX_ATTENTION_PULL_COUNT,
   MAX_DIRECTION_ARROW_COUNT,
   MAX_EYE_PATH_COUNT,
@@ -328,6 +337,31 @@ export default class NpnCritiqueReplyModal extends Component {
   // matching fallback button only when this is set. Cleared on every
   // new action attempt and on success.
   @tracked visualNotesFailureContext = null;
+
+  // -- Processing Example state ----------------------------------------
+  //
+  // Workflow: critic downloads the reference image, processes it
+  // externally, uploads one example. Stored separately from visual
+  // notes — different lifecycle, different validation, no canvas
+  // baking. See npn-critique-reply-processing-example.js for the
+  // post-body composition + payload helpers.
+  //
+  //   processingExample          — flat client model:
+  //                                 { sourceImageVersionKey, sourceImageVersionLabel,
+  //                                   uploadId, url, shortUrl, filename }
+  //                                 or null when no example is attached.
+  //   processingExampleUploading — true while an upload request is in
+  //                                flight (disables the controls).
+  //   processingExampleError     — { stage, message } when the last
+  //                                upload failed; cleared on retry.
+  //   showProcessingExamplePanel — UI toggle for the collapsed/expanded
+  //                                state of the section. Expanded after
+  //                                upload, after restore, or after the
+  //                                user clicks "Add a processing example".
+  @tracked processingExample = null;
+  @tracked processingExampleUploading = false;
+  @tracked processingExampleError = null;
+  @tracked showProcessingExamplePanel = false;
 
   // Tracks component teardown so async tasks (canvas export, upload,
   // post creation) don't try to set tracked properties on a destroyed
@@ -1015,86 +1049,112 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
-  // Async path — used whenever pins OR crop exist. Exports the visual-
-  // notes image (with crop overlay if present, pins on top), uploads
-  // it through Discourse's standard endpoint, and composes the final
-  // reply body. Throws errors tagged with a `stage` field so the
-  // calling action can show a stage-specific friendly message.
+  // Async path — used whenever visual annotations OR a processing
+  // example are present. Runs the visual-notes export/upload pipeline
+  // when there are annotations (the canvas-baked JPEG), then assembles
+  // the final reply body in the canonical order:
   //
-  // `skipVisualNotes: true` short-circuits to the text-only path so the
+  //   visual notes block  → processing example block → critique text
+  //
+  // Throws errors tagged with a `stage` field so the calling action
+  // can show a stage-specific friendly message. The processing
+  // example upload happens earlier (on file pick), so this path no
+  // longer needs to re-upload — it just reads `this.processingExample`.
+  //
+  // `skipVisualNotes: true` short-circuits the canvas pipeline so the
   // "Post / Continue without visual notes" fallback button can reuse
-  // exactly the same plumbing without re-trying the failed pipeline.
+  // this same path without re-trying the failed pipeline. A
+  // processing example, if present, is still included in the body.
   async _prepareReplyText({ skipVisualNotes = false } = {}) {
-    if (skipVisualNotes || !this.hasVisualAnnotations) {
-      // Text-only path — no visual upload, no annotation payload.
-      return { raw: this._textOnlyRaw(), upload: null };
-    }
+    const hasVisual = !skipVisualNotes && this.hasVisualAnnotations;
+    const hasExample = this.hasProcessingExample;
 
-    const url = this.effectiveImageUrl;
-    if (!url) {
-      throw this._wrapVisualNotesError(
-        "load",
-        new Error("no image url available")
+    let visualUpload = null;
+    let visualBlock = "";
+
+    if (hasVisual) {
+      const url = this.effectiveImageUrl;
+      if (!url) {
+        throw this._wrapVisualNotesError(
+          "load",
+          new Error("no image url available")
+        );
+      }
+
+      this.statusMessage = i18n(
+        "npn_critique_reply.modal.preparing_visual_notes"
       );
+
+      let image;
+      try {
+        image = await loadImageForExport(url);
+      } catch (e) {
+        throw this._wrapVisualNotesError("load", e);
+      }
+
+      let blob;
+      try {
+        const canvas = buildVisualNotesCanvas({
+          image,
+          pins: this.notes,
+          crop: this.crop,
+          eyePaths: this.eyePaths,
+          attentionPulls: this.attentionPulls,
+          strongAreas: this.strongAreas,
+          directionArrows: this.directionArrows,
+          relationshipArrows: this.relationshipArrows,
+        });
+        blob = await exportCanvasToBlob(canvas);
+      } catch (e) {
+        throw this._wrapVisualNotesError("export", e);
+      }
+
+      this.statusMessage = i18n(
+        "npn_critique_reply.modal.uploading_visual_notes"
+      );
+
+      try {
+        visualUpload = await uploadVisualNotesBlob(
+          blob,
+          this._visualNotesFilename()
+        );
+      } catch (e) {
+        throw this._wrapVisualNotesError("upload", e);
+      }
+
+      visualBlock = this._composeVisualNotesBlock(visualUpload);
     }
 
-    this.statusMessage = i18n(
-      "npn_critique_reply.modal.preparing_visual_notes"
-    );
+    const exampleBlock = hasExample ? this._composeProcessingExampleBlock() : "";
 
-    let image;
-    try {
-      image = await loadImageForExport(url);
-    } catch (e) {
-      throw this._wrapVisualNotesError("load", e);
-    }
+    // Text section. The visual-notes heading + processing-example
+    // heading both name the selected image version, so the
+    // `_textOnlyRaw` revision prefix would be redundant when either
+    // headed block is present. Strip down to the bare textarea body
+    // in that case.
+    const trimmedText = this.critiqueText.trim();
+    const textSection = visualBlock || exampleBlock ? trimmedText : this._textOnlyRaw();
 
-    let blob;
-    try {
-      const canvas = buildVisualNotesCanvas({
-        image,
-        pins: this.notes,
-        crop: this.crop,
-        eyePaths: this.eyePaths,
-        attentionPulls: this.attentionPulls,
-        strongAreas: this.strongAreas,
-        directionArrows: this.directionArrows,
-        relationshipArrows: this.relationshipArrows,
-      });
-      blob = await exportCanvasToBlob(canvas);
-    } catch (e) {
-      throw this._wrapVisualNotesError("export", e);
-    }
+    const raw = [visualBlock, exampleBlock, textSection]
+      .filter((part) => part && part.length > 0)
+      .join("\n\n");
 
-    this.statusMessage = i18n(
-      "npn_critique_reply.modal.uploading_visual_notes"
-    );
-
-    let upload;
-    try {
-      upload = await uploadVisualNotesBlob(blob, this._visualNotesFilename());
-    } catch (e) {
-      throw this._wrapVisualNotesError("upload", e);
-    }
-
-    // Caller (Post Critique) needs the upload reference to build the
-    // structured visual-notes metadata persisted on the created post
-    // — the markdown alone is enough for Edit-in-Composer.
-    return { raw: this._composeVisualNotesRaw(upload), upload };
+    // Caller still needs `upload` (the visual-notes upload reference)
+    // separately so it can build the structured visual-notes metadata
+    // for the post custom field. The processing-example upload
+    // reference is already on `this.processingExample`.
+    return { raw, upload: visualUpload };
   }
 
-  // Compose: heading (already names the version, so we DON'T also emit
-  // "Regarding Revision N:") + image markdown + textarea body.
-  _composeVisualNotesRaw(upload) {
-    const text = this.critiqueText.trim();
+  // Just the heading + image-markdown lines for the visual-notes
+  // block. The full reply body is assembled by `_prepareReplyText`,
+  // which interleaves this with the processing-example block (if
+  // any) and the critique text.
+  _composeVisualNotesBlock(upload) {
     const heading = this._visualNotesHeading();
     const altText = i18n("npn_critique_reply.modal.visual_notes_alt");
     const shortUrl = upload?.short_url ?? upload?.url ?? "";
-    const imageMarkdown = `![${altText}](${shortUrl})`;
-
-    return text
-      ? `${heading}\n\n${imageMarkdown}\n\n${text}`
-      : `${heading}\n\n${imageMarkdown}`;
+    return `${heading}\n\n![${altText}](${shortUrl})`;
   }
 
   _visualNotesHeading() {
@@ -1127,6 +1187,184 @@ export default class NpnCritiqueReplyModal extends Component {
         export: i18n("npn_critique_reply.modal.visual_notes_export_failed"),
         upload: i18n("npn_critique_reply.modal.visual_notes_upload_failed"),
       }[stage] ?? i18n("npn_critique_reply.modal.visual_notes_generic_failure")
+    );
+  }
+
+  // ---- Processing Example ---------------------------------------------
+
+  // Feature gate. Three layers:
+  //
+  //   1. Master plugin setting (npn_critique_reply_enabled)
+  //   2. Feature-specific site setting
+  //      (npn_critique_reply_processing_examples_enabled)
+  //   3. Per-topic opt-out (npn_processing_examples_allowed): missing
+  //      → allowed; only an explicit-false closes the section.
+  //
+  // Also requires an image — without a reference image there's
+  // nothing meaningful to download or process.
+  get processingExampleAvailable() {
+    if (!this.siteSettings.npn_critique_reply_enabled) {
+      return false;
+    }
+    if (!this.siteSettings.npn_critique_reply_processing_examples_enabled) {
+      return false;
+    }
+    if (!this.hasImage) {
+      return false;
+    }
+    return this.processingExampleAllowedByTopic;
+  }
+
+  // Topic-level opt-out. Missing/null → true (backward compat with
+  // topics created before the submissions plugin grew the field).
+  // Explicit false → disabled.
+  get processingExampleAllowedByTopic() {
+    const allowed = this.metadata?.processing_examples_allowed;
+    return allowed !== false;
+  }
+
+  get hasProcessingExample() {
+    return !!this.processingExample;
+  }
+
+  // Resolved direct-download URL for the currently-selected reference
+  // image. Anchor with the `download` attribute points here; cross-
+  // origin downloads (Bunny CDN) may fall back to "open in new tab",
+  // which is the documented acceptable degradation per spec.
+  get processingExampleSourceUrl() {
+    return this.effectiveImageUrl ?? null;
+  }
+
+  get processingExampleSourceDownloadFilename() {
+    return processingExampleSourceFilename(
+      this.topic?.id,
+      this.selectedVersionKey,
+      this.processingExampleSourceUrl
+    );
+  }
+
+  // Compose the processing-example block (heading + image markdown)
+  // for inclusion in the final reply body. Empty string when there's
+  // no example, so callers can concatenate unconditionally.
+  _composeProcessingExampleBlock() {
+    return composeProcessingExampleRaw({
+      selectedVersion: this.selectedVersion,
+      processingExample: this.processingExample,
+    });
+  }
+
+  @action
+  toggleProcessingExamplePanel() {
+    this.showProcessingExamplePanel = !this.showProcessingExamplePanel;
+  }
+
+  // Opens the hidden file input. The handler below reads the selected
+  // file, uploads via Discourse's standard endpoint, and stores the
+  // resulting upload reference in `this.processingExample`.
+  @action
+  triggerProcessingExampleFilePicker() {
+    if (this.processingExampleUploading || this.isPosting) {
+      return;
+    }
+    this.processingExampleError = null;
+    const input = document.getElementById(
+      "npn-critique-reply-processing-example-input"
+    );
+    input?.click?.();
+  }
+
+  @action
+  async onProcessingExampleFileChange(event) {
+    const file = event?.target?.files?.[0];
+    // Reset the input so re-picking the same file fires `change` again.
+    if (event?.target) {
+      event.target.value = "";
+    }
+    if (!file) {
+      return;
+    }
+    await this._uploadProcessingExampleFile(file);
+  }
+
+  async _uploadProcessingExampleFile(file) {
+    if (!file) {
+      return;
+    }
+    this.processingExampleUploading = true;
+    this.processingExampleError = null;
+    try {
+      const filename = processingExampleFilename(
+        this.topic?.id,
+        this.selectedVersionKey,
+        file.name
+      );
+      const upload = await uploadProcessingExampleFile(file, filename);
+      if (this._destroyed) {
+        return;
+      }
+      this.processingExample = {
+        sourceImageVersionKey: this.selectedVersionKey ?? null,
+        sourceImageVersionLabel: this.selectedVersion?.label ?? null,
+        uploadId: upload?.upload_id ?? null,
+        url: upload?.url ?? null,
+        shortUrl: upload?.short_url ?? null,
+        filename:
+          upload?.original_filename ??
+          file.name ??
+          filename,
+      };
+      this.showProcessingExamplePanel = true;
+      this._scheduleDraftSaveAfterProcessingExampleChange();
+    } catch (e) {
+      if (this._destroyed) {
+        return;
+      }
+      const stage = e?.stage ?? "upload";
+      this.processingExampleError = {
+        stage,
+        message: this._processingExampleErrorMessage(stage),
+      };
+      if (this.siteSettings.npn_critique_reply_debug_enabled) {
+        // eslint-disable-next-line no-console
+        console.warn("[npn-critique-reply] processing-example upload failed", e);
+      }
+    } finally {
+      if (!this._destroyed) {
+        this.processingExampleUploading = false;
+      }
+    }
+  }
+
+  @action
+  removeProcessingExample() {
+    if (this.processingExampleUploading || this.isPosting) {
+      return;
+    }
+    this.processingExample = null;
+    this.processingExampleError = null;
+    this._scheduleDraftSaveAfterProcessingExampleChange();
+  }
+
+  // The draft autosaver listens for changes via the didUpdate
+  // modifier on `draftSignature`. We compose that signature from a
+  // subset of fields; manually scheduling here covers the case where
+  // an action mutates only processingExample (no other tracked field
+  // changes in the same tick).
+  _scheduleDraftSaveAfterProcessingExampleChange() {
+    if (this._restoringDraft) {
+      return;
+    }
+    this._autosaver?.schedule?.();
+  }
+
+  _processingExampleErrorMessage(stage) {
+    return (
+      {
+        upload: i18n(
+          "npn_critique_reply.modal.processing_example.upload_failed"
+        ),
+      }[stage] ??
+      i18n("npn_critique_reply.modal.processing_example.generic_failure")
     );
   }
 
@@ -2946,6 +3184,24 @@ export default class NpnCritiqueReplyModal extends Component {
             })
           : null;
 
+      // Processing-example metadata. Distinct from visual notes —
+      // independent eligibility, independent lifecycle, independent
+      // clear semantics. The block is already in `raw` (composed by
+      // `_prepareReplyText`); this payload is what the server stores
+      // as the `npn_processing_example` post custom field.
+      const processingExamplePayload = this.processingExample
+        ? buildProcessingExamplePayload({
+            topic: this.topic,
+            selectedVersion: this.selectedVersion,
+            exampleUpload: {
+              upload_id: this.processingExample.uploadId,
+              url: this.processingExample.url,
+              short_url: this.processingExample.shortUrl,
+              filename: this.processingExample.filename,
+            },
+          })
+        : null;
+
       // Edit mode → PUT /posts/:id/critique (PostRevisor + custom
       // field replace). New-critique mode → POST /topics/:id/replies.
       // Same payload shape; the server endpoint difference is the
@@ -2955,9 +3211,16 @@ export default class NpnCritiqueReplyModal extends Component {
             this.editingPost.id,
             raw,
             selectedKey,
-            visualNotes
+            visualNotes,
+            processingExamplePayload
           )
-        : await postCritiqueRequest(topicId, raw, selectedKey, visualNotes);
+        : await postCritiqueRequest(
+            topicId,
+            raw,
+            selectedKey,
+            visualNotes,
+            processingExamplePayload
+          );
       if (this._destroyed) {
         // Post was created server-side; modal is gone. MessageBus will
         // deliver the new reply to any open topic page.
@@ -3430,6 +3693,22 @@ export default class NpnCritiqueReplyModal extends Component {
       selected_image_version_key: this.selectedVersionKey ?? null,
       critique_text: this.critiqueText ?? "",
       annotations,
+      // Processing example draft entry — flat shape matching
+      // ProcessingExampleNormalizer.normalize_for_draft on the
+      // server. Null when no example is attached; restored on
+      // modal reopen via `_restoreDraft`.
+      processing_example: this.processingExample
+        ? {
+            source_image_version_key:
+              this.processingExample.sourceImageVersionKey ?? null,
+            source_image_version_label:
+              this.processingExample.sourceImageVersionLabel ?? null,
+            upload_id: this.processingExample.uploadId ?? null,
+            url: this.processingExample.url ?? null,
+            short_url: this.processingExample.shortUrl ?? null,
+            filename: this.processingExample.filename ?? null,
+          }
+        : null,
       // `prompts_expanded` is reused on the wire as the "More ideas
       // expanded" boolean — same field name (so the Ruby DraftNormalizer
       // UI_ALLOWED_KEYS whitelist doesn't need to change) but the new
@@ -3505,6 +3784,23 @@ export default class NpnCritiqueReplyModal extends Component {
       }
       this._restoreAnnotations(payload.annotations, versionKey);
     }
+
+    // Processing-example restore for the edit flow. Lives on the
+    // post serializer as `npn_processing_example` independently of
+    // visual notes; either, both, or neither may be present. Gated
+    // by current eligibility — if the topic has since opted out or
+    // the site setting flipped off, the existing field is dropped
+    // here client-side; a subsequent edit will then clear the
+    // server-side field via the explicit-null contract in the
+    // update endpoint.
+    const examplePayload = post.npn_processing_example;
+    if (examplePayload && this.processingExampleAvailable) {
+      const restored = normalizeProcessingExampleFromServer(examplePayload);
+      if (restored) {
+        this.processingExample = restored;
+        this.showProcessingExamplePanel = true;
+      }
+    }
   }
 
   // Async helper: fetch the post's raw markdown over the network
@@ -3545,23 +3841,33 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
-  // Helper for `_initializeFromPost`. Looks for the visual-notes
-  // image markdown line and returns everything after it. If the post
-  // doesn't have a visual-notes image (text-only critique that's
-  // somehow being reopened), or if the format has drifted, returns
-  // the raw unchanged so the user can hand-fix it.
+  // Helper for `_initializeFromPost`. Strips the heading + image
+  // blocks from the post body so the textarea reopens with just the
+  // critic's prose. A reply may carry up to TWO image blocks in the
+  // standard order — visual notes, then processing example — and we
+  // iteratively strip whichever ones are present. If the format has
+  // drifted (hand-edited post, text-only critique), returns the raw
+  // unchanged so the user can hand-fix it.
   _parseCritiqueTextFromRaw(raw) {
     if (!raw) {
       return "";
     }
-    // The image markdown is `![alt](upload://...)`. Match on the
-    // first occurrence of an upload-scheme image link.
-    const match = raw.match(/^!\[[^\]]*\]\(upload:\/\/[^\s)]+\)\s*$/m);
-    if (!match) {
+    // Each block is `![alt](upload://...)` on its own line; the
+    // heading lives 1-2 lines before it. Match the LAST occurrence
+    // of an image-only line by exec'ing in a loop with the `g` flag
+    // — `lastIndex` of the last match tells us where the prose
+    // begins. Tolerates either 1 or 2 leading blocks (or zero, when
+    // we fall through unchanged).
+    const re = /^!\[[^\]]*\]\(upload:\/\/[^\s)]+\)\s*$/gm;
+    let lastMatchEnd = -1;
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      lastMatchEnd = m.index + m[0].length;
+    }
+    if (lastMatchEnd < 0) {
       return raw;
     }
-    const afterImageIdx = (match.index ?? 0) + match[0].length;
-    return raw.slice(afterImageIdx).replace(/^\s+/, "");
+    return raw.slice(lastMatchEnd).replace(/^\s+/, "");
   }
 
   // `_restoringDraft` first so the didUpdate autosave hook ignores
@@ -3612,6 +3918,21 @@ export default class NpnCritiqueReplyModal extends Component {
         // longer collapses entirely.
         if (typeof draft.ui.prompts_expanded === "boolean") {
           this.moreIdeasExpanded = draft.ui.prompts_expanded;
+        }
+      }
+
+      // Processing-example restore. Gated by current eligibility so
+      // a draft saved when the feature was enabled doesn't surface
+      // an upload after the photographer opts out or the admin
+      // turns the setting off. The example is silently dropped
+      // rather than retained-but-hidden so it can't bleed into the
+      // next save.
+      if (draft.processing_example && this.processingExampleAvailable) {
+        this.processingExample = normalizeProcessingExampleFromServer(
+          draft.processing_example
+        );
+        if (this.processingExample) {
+          this.showProcessingExamplePanel = true;
         }
       }
     } finally {
@@ -3866,6 +4187,150 @@ export default class NpnCritiqueReplyModal extends Component {
                     </button>
                   {{/each}}
                 </div>
+              {{/if}}
+
+              {{! Processing Example section.
+                  Sits between the image controls (version selector) and
+                  the visual-tools toolbar by spec. Three view modes:
+                    1. Collapsed — single button: "Add a processing example"
+                    2. Expanded, no upload — helper text + Download +
+                       Upload buttons
+                    3. After upload — thumbnail + Replace / Remove
+                  Hidden entirely when the topic opts out, the site
+                  setting is off, or there's no reference image. }}
+              {{#if this.processingExampleAvailable}}
+                <section
+                  class="npn-critique-reply-modal__processing-example"
+                  aria-labelledby="npn-critique-reply-processing-example-heading"
+                >
+                  <h4
+                    id="npn-critique-reply-processing-example-heading"
+                    class="npn-critique-reply-modal__processing-example-heading"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.processing_example.section_title"
+                    }}
+                  </h4>
+
+                  {{#if this.hasProcessingExample}}
+                    <div
+                      class="npn-critique-reply-modal__processing-example-preview"
+                    >
+                      <img
+                        class="npn-critique-reply-modal__processing-example-thumb"
+                        src={{this.processingExample.url}}
+                        alt={{i18n
+                          "npn_critique_reply.modal.processing_example.preview_alt"
+                        }}
+                      />
+                      <div
+                        class="npn-critique-reply-modal__processing-example-status"
+                      >
+                        <p
+                          class="npn-critique-reply-modal__processing-example-status-text"
+                        >
+                          {{i18n
+                            "npn_critique_reply.modal.processing_example.uploaded"
+                          }}
+                        </p>
+                        {{#if this.processingExample.filename}}
+                          <p
+                            class="npn-critique-reply-modal__processing-example-filename"
+                            title={{this.processingExample.filename}}
+                          >
+                            {{this.processingExample.filename}}
+                          </p>
+                        {{/if}}
+                      </div>
+                    </div>
+                    <div
+                      class="npn-critique-reply-modal__processing-example-actions"
+                    >
+                      <DButton
+                        class="btn-default btn-small npn-critique-reply-modal__processing-example-replace"
+                        @action={{this.triggerProcessingExampleFilePicker}}
+                        @icon="rotate"
+                        @label="npn_critique_reply.modal.processing_example.replace"
+                        @disabled={{this.processingExampleUploading}}
+                      />
+                      <DButton
+                        class="btn-flat btn-small npn-critique-reply-modal__processing-example-remove"
+                        @action={{this.removeProcessingExample}}
+                        @icon="trash-can"
+                        @label="npn_critique_reply.modal.processing_example.remove"
+                        @disabled={{this.processingExampleUploading}}
+                      />
+                    </div>
+                  {{else if this.showProcessingExamplePanel}}
+                    <p
+                      class="npn-critique-reply-modal__processing-example-help"
+                    >
+                      {{i18n
+                        "npn_critique_reply.modal.processing_example.helper"
+                      }}
+                    </p>
+                    <div
+                      class="npn-critique-reply-modal__processing-example-actions"
+                    >
+                      {{! Direct anchor for the download. `download` attr
+                          is honoured for same-origin URLs; on cross-
+                          origin (Bunny CDN) the browser falls back to
+                          opening in a new tab, which is the documented
+                          acceptable degradation. }}
+                      <a
+                        class="btn btn-default btn-small npn-critique-reply-modal__processing-example-download"
+                        href={{this.processingExampleSourceUrl}}
+                        download={{this.processingExampleSourceDownloadFilename}}
+                        rel="noopener"
+                        target="_blank"
+                      >
+                        {{dIcon "download"}}
+                        <span>
+                          {{i18n
+                            "npn_critique_reply.modal.processing_example.download"
+                          }}
+                        </span>
+                      </a>
+                      <DButton
+                        class="btn-primary btn-small npn-critique-reply-modal__processing-example-upload"
+                        @action={{this.triggerProcessingExampleFilePicker}}
+                        @icon="upload"
+                        @label="npn_critique_reply.modal.processing_example.upload"
+                        @disabled={{this.processingExampleUploading}}
+                        @isLoading={{this.processingExampleUploading}}
+                      />
+                    </div>
+                  {{else}}
+                    <DButton
+                      class="btn-default btn-small npn-critique-reply-modal__processing-example-toggle"
+                      @action={{this.toggleProcessingExamplePanel}}
+                      @icon="plus"
+                      @label="npn_critique_reply.modal.processing_example.add"
+                      @disabled={{this.isPosting}}
+                    />
+                  {{/if}}
+
+                  {{#if this.processingExampleError}}
+                    <p
+                      class="npn-critique-reply-modal__processing-example-error"
+                      role="alert"
+                    >
+                      {{this.processingExampleError.message}}
+                    </p>
+                  {{/if}}
+
+                  {{! Hidden file input owned by the section, opened
+                      programmatically via the Upload / Replace
+                      buttons. Single-file, image MIME types only. }}
+                  <input
+                    id="npn-critique-reply-processing-example-input"
+                    class="npn-critique-reply-modal__processing-example-input"
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    {{on "change" this.onProcessingExampleFileChange}}
+                  />
+                </section>
               {{/if}}
 
               {{! Toolbar moved ABOVE the image so it's visible without
