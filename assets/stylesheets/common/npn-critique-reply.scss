@@ -286,23 +286,31 @@
   // -- Mobile-only disclosure buttons -----------------------------------
   //
   // Both the Visual tools panel and the Processing Example section
-  // get a tap-to-expand summary button on narrow viewports so the
-  // user reaches the writing area without scrolling past collapsed
-  // workflow surfaces. The default rule HIDES both buttons; the
-  // mobile media query above flips them visible and gates the
-  // adjacent `__*-content` blocks on `is-open`.
+  // get a tap-to-expand summary on narrow viewports so the user
+  // reaches the writing area without scrolling past collapsed
+  // workflow surfaces. Styled as a SECTION HEADING with an inline
+  // chevron — never as a boxed select-style control — because the
+  // boxed-with-far-right-chevron pattern reads as a <select>
+  // dropdown and misled users into expecting an options menu.
+  // The default rule HIDES both summaries; the mobile media query
+  // above flips them visible and gates the adjacent `__*-content`
+  // blocks on `is-open`.
   &__visual-tools-summary,
   &__processing-example-summary {
     display: none;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5em;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: 0.4em;
     width: 100%;
-    padding: 0.55em 0.7em;
-    background: var(--secondary);
-    color: var(--primary-high);
-    border: 1px solid var(--primary-low-mid);
-    border-radius: var(--d-border-radius, 4px);
+    padding: 0.5em 0 0.55em;
+    background: transparent;
+    color: var(--primary-medium);
+    border: none;
+    // Hairline bottom separator that the open state extends —
+    // gives the heading a clear vertical anchor without boxing it
+    // in like an input. Top hairline only when the section sits
+    // below a sibling; suppressed at the top of the modal layout.
+    border-bottom: 1px solid var(--primary-low);
     font: inherit;
     font-size: var(--font-down-1);
     font-weight: 600;
@@ -310,13 +318,10 @@
     letter-spacing: 0.04em;
     text-align: left;
     cursor: pointer;
-    transition:
-      background-color 0.12s ease,
-      border-color 0.12s ease;
+    transition: color 0.12s ease;
 
     &:hover {
-      background: var(--tertiary-low);
-      border-color: var(--tertiary);
+      color: var(--tertiary);
     }
     &:focus-visible {
       outline: 2px solid var(--tertiary);
@@ -326,10 +331,14 @@
 
   &__visual-tools-summary-label,
   &__processing-example-summary-label {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
   }
 
+  // The "uploaded" chip on the Processing Example summary — sits
+  // next to the title, not pushed to the right edge, so the
+  // collapsed state reads as a heading + status note rather than
+  // a select element with a placeholder.
   &__processing-example-summary-status {
     flex: 0 1 auto;
     font-weight: 400;
@@ -340,14 +349,29 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    // A small bullet separator visually divides the title from
+    // the status without needing extra markup.
+    &::before {
+      content: "·";
+      margin-right: 0.4em;
+      color: var(--primary-low-mid);
+    }
   }
 
+  // Chevron sits inline next to the label — not pushed to the far
+  // right where it would imitate a <select>. Small and quiet so the
+  // affordance reads as "expand this heading" rather than "open a
+  // menu of options".
   &__visual-tools-summary-chevron,
   &__processing-example-summary-chevron {
     display: inline-flex;
     align-items: center;
+    margin-left: 0.15em;
     color: var(--primary-medium);
     transition: transform 0.15s ease;
+    // Slightly smaller than the heading text so it reads as an
+    // indicator, not a primary control.
+    font-size: 0.85em;
   }
 
   // -- Processing Example section ---------------------------------------
