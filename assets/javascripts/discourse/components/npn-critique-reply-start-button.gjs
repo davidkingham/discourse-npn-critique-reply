@@ -158,8 +158,13 @@ export default class NpnCritiqueReplyStartButton extends Component {
 
   <template>
     {{#if this.eligible}}
+      {{! `create` is the topic-footer-specific tuning class Discourse
+          applies to the native Reply button (see core's
+          topic-footer-buttons.gjs). Without it, default DButton
+          sizing makes our button visibly taller than its peers in
+          the footer row; with it, height + padding match Reply. }}
       <DButton
-        class="btn-primary topic-footer-button npn-critique-reply-start"
+        class="btn-primary create topic-footer-button npn-critique-reply-start"
         @action={{this.start}}
         @icon="far-pen-to-square"
         @translatedLabel={{this.label}}
