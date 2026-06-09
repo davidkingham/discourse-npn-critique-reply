@@ -4790,8 +4790,8 @@ export default class NpnCritiqueReplyModal extends Component {
                       {{/if}}
                     {{/if}}
                 </div>
-                {{! Close the {{else}} branch of viewingProcessingExample
-                    — toolbar + secondary are the "reference view" path. }}
+                {{! Closes the else branch above: toolbar + secondary
+                    are the reference-view path. }}
                 {{/if}}
               {{/if}}
 

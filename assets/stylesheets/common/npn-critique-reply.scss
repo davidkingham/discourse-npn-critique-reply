@@ -123,8 +123,12 @@
       border-color 0.12s ease,
       color 0.12s ease;
 
-    &:hover,
-    &:focus {
+    // Hover-only preview (not :focus). Browsers keep focus on a
+    // clicked button until something else takes it, so adding :focus
+    // here used to make every non-active button look selected after
+    // a click. Keyboard focus is still visible via :focus-visible
+    // below — just as a ring, not a fill.
+    &:hover {
       background: var(--tertiary-low);
       border-color: var(--tertiary);
       color: var(--tertiary);
@@ -184,8 +188,9 @@
       border-color 0.12s ease,
       color 0.12s ease;
 
-    &:hover,
-    &:focus {
+    // Hover-only preview (see comment on __version-button for why
+    // :focus is excluded — same bug, same fix).
+    &:hover {
       background: var(--tertiary-low);
       border-color: var(--tertiary);
       color: var(--tertiary);
