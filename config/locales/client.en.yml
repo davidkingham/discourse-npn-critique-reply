@@ -53,6 +53,25 @@ en:
         recommended: "Recommended"
         your_critique: "Your critique"
         textarea_placeholder: "Write your critique here in your own voice."
+        # Quiet hint sitting next to the Insert-link button above the
+        # textarea — signals that the field behaves like the composer
+        # for the parts that matter (links, mentions, markdown).
+        markdown_supported: "Markdown, links, and @mentions are supported."
+        # Insert-link toolbar + sub-modal copy. The toolbar is a small
+        # affordance above the critique textarea; the sub-modal opens on
+        # top of the critique modal and writes Markdown link syntax at
+        # the caret via TextareaTextManipulation.
+        toolbar:
+          label: "Critique field formatting tools"
+          insert_link: "Insert link"
+          link_modal:
+            title: "Insert link"
+            url_label: "URL"
+            url_placeholder: "https://example.com"
+            text_label: "Link text (optional)"
+            insert: "Insert"
+            cancel: "Cancel"
+            markdown_note: "The link may look a little different while you’re editing, but it will appear as a normal clickable link in the preview and final post."
         reference_image: "Image & Visual Notes"
         image_alt: "Image being critiqued"
         image_alt_with_title: "Image being critiqued: %{title}"

@@ -454,6 +454,102 @@
     }
   }
 
+  // -- Insert-link toolbar + formatting hint -----------------------------
+  //
+  // Sits directly above the textarea. Button on the left (icon + visible
+  // text — not icon-only), hint string on the right. Stays quiet so the
+  // textarea remains the visual focus of the column.
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75em;
+    flex-wrap: wrap;
+    margin: 0;
+  }
+
+  &__toolbar-button.npn-critique-reply-modal__toolbar-button {
+    // .btn-flat already provides the quiet treatment; we just snug the
+    // icon to the label so the affordance reads as one unit.
+    .d-icon {
+      margin-right: 0.4em;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+  }
+
+  &__toolbar-hint {
+    font-size: var(--font-down-1);
+    color: var(--primary-medium);
+    line-height: 1.4;
+    // Let the hint wrap below the button on narrow widths instead of
+    // forcing horizontal scroll — the flex container is already wrapping.
+    flex: 1 1 auto;
+    text-align: left;
+    min-width: 0;
+  }
+
+  // -- Inline Insert-link form -------------------------------------------
+  //
+  // Replaces the toolbar row when the user clicks Insert link. Lives
+  // INSIDE this modal (not a DModal) — Discourse's modal service
+  // dismisses the active modal on `show`, so a sub-modal would close
+  // the critique workspace and any unflushed state with it. The form
+  // is a quiet panel with a hairline border so it reads as
+  // "temporarily expanded toolbar" rather than a competing surface.
+  &__link-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55em;
+    padding: 0.75em 0.85em 0.85em;
+    background: var(--primary-very-low);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+  }
+
+  &__link-form-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    font-size: var(--font-down-1);
+    color: var(--primary-high);
+  }
+
+  &__link-form-input {
+    width: 100%;
+    padding: 0.5em 0.65em;
+    background: var(--secondary);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+    color: var(--primary);
+    font: inherit;
+    box-sizing: border-box;
+
+    &:focus,
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: -1px;
+      border-color: var(--tertiary);
+    }
+  }
+
+  &__link-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.4em;
+    margin-top: 0.15em;
+  }
+
+  &__link-form-note {
+    margin: 0.1em 0 0;
+    font-size: var(--font-down-1);
+    color: var(--primary-medium);
+    line-height: 1.4;
+  }
+
   &__textarea {
     width: 100%;
     // Tall enough that it reads as a real writing surface rather than a
@@ -1386,3 +1482,4 @@
     box-shadow: none;
   }
 }
+

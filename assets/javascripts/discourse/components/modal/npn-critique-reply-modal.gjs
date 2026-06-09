@@ -4,13 +4,20 @@ import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { getOwner } from "@ember/owner";
+import didInsert from "@ember/render-modifiers/modifiers/did-insert";
 import { service } from "@ember/service";
 import { tracked } from "@glimmer/tracking";
+import UserAutocompleteResults from "discourse/components/user-autocomplete-results";
 import DButton from "discourse/ui-kit/d-button";
 import DModal from "discourse/ui-kit/d-modal";
 import { ajax } from "discourse/lib/ajax";
+import dAutocomplete from "discourse/ui-kit/modifiers/d-autocomplete";
 import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { getURLWithCDN } from "discourse/lib/get-url";
+import TextareaTextManipulation, {
+  TextareaAutocompleteHandler,
+} from "discourse/lib/textarea-text-manipulation";
+import userSearch from "discourse/lib/user-search";
 import Composer from "discourse/models/composer";
 import Draft from "discourse/models/draft";
 import { and, eq } from "discourse/truth-helpers";
@@ -147,6 +154,33 @@ export default class NpnCritiqueReplyModal extends Component {
   @service toasts;
   @service dialog;
   @service appEvents;
+
+  // Set by the Textarea's {{didInsert}} hook below. `#textManipulation`
+  // is the Discourse helper that owns cursor/selection logic for
+  // programmatic writes (link insertion); `#textarea` is just the DOM
+  // node so we can dispatch a synthetic `input` event after writes
+  // and so the autocomplete `afterComplete` callback can refocus.
+  #textarea = null;
+  #textManipulation = null;
+
+  // Inline Insert-link form state. The form lives INSIDE this modal
+  // (it replaces the toolbar row when open) instead of opening a
+  // DModal on top — Discourse's modal service replaces the active
+  // modal rather than stacking it, so a sub-modal would dismiss the
+  // critique workspace and any unflushed state. Keeping the helper
+  // inline avoids that entirely.
+  //   linkFormOpen     — toggles the form's visibility
+  //   linkFormUrl      — bound to the URL input
+  //   linkFormText     — bound to the optional link-text input; the
+  //                      currently-selected textarea text pre-fills it
+  //                      when the form opens
+  //   _linkPreservedSelection — { start, end } captured at open time
+  //                      so a re-focus of the URL input doesn't lose
+  //                      the textarea's selection range
+  @tracked linkFormOpen = false;
+  @tracked linkFormUrl = "";
+  @tracked linkFormText = "";
+  _linkPreservedSelection = null;
 
   // Draft state ----------------------------------------------------------
   @tracked critiqueText = "";
@@ -329,6 +363,198 @@ export default class NpnCritiqueReplyModal extends Component {
     this._destroyed = true;
     this._autosaver?.destroy?.();
     this._autosaver = null;
+    // Drop refs so the GC can clear the textarea and the
+    // TextareaTextManipulation helper. The dAutocomplete modifier
+    // wires its own teardown when the textarea is removed from the
+    // DOM (the modal unmounting handles that), so we don't need to
+    // manually deregister listeners here.
+    this.#textarea = null;
+    this.#textManipulation = null;
+  }
+
+  // -- Textarea wiring: @mention autocomplete + Insert link helper -------
+  //
+  // Mirrors the npn-submissions NpnField pattern so the two plugins'
+  // textareas behave the same way and future Discourse upgrades only
+  // need a single review pass.
+  //
+  //   @mention autocomplete uses dAutocomplete + userSearch, gated on
+  //   the site setting `enable_mentions` (silently skipped otherwise).
+  //   Setup is wrapped in try/catch so a future Discourse API change
+  //   cannot break the modal — the worst case is "no popup", typing
+  //   still works.
+  //
+  //   Insert link reveals an inline form panel (NOT a sub-modal —
+  //   Discourse's modal service can't stack), pre-filled with any
+  //   currently-selected textarea text. On Insert we write
+  //   `[text](url)` at the caret via TextareaTextManipulation, then
+  //   dispatch a synthetic bubbling `input` event so the existing
+  //   `clearValidationOnInput` handler and the draft autosaver see
+  //   the change.
+
+  @action
+  setupTextarea(element) {
+    this.#textarea = element;
+    try {
+      this.#textManipulation = new TextareaTextManipulation(getOwner(this), {
+        textarea: element,
+        eventPrefix: "npn-critique-reply",
+      });
+      if (this.siteSettings.enable_mentions) {
+        const handler = new TextareaAutocompleteHandler(element);
+        dAutocomplete.setupAutocomplete(
+          getOwner(this),
+          element,
+          handler,
+          this.#userAutocompleteOptions(element)
+        );
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[discourse-npn-critique-reply] mention autocomplete unavailable:",
+        e
+      );
+    }
+  }
+
+  @action
+  openLinkForm() {
+    // Capture the textarea's selection BEFORE the form's first input
+    // gets focus — moving focus to a different input collapses
+    // selectionStart/selectionEnd on the textarea, and we want the
+    // Insert action to write at the originally-selected range.
+    if (this.#textarea) {
+      this._linkPreservedSelection = {
+        start: this.#textarea.selectionStart,
+        end: this.#textarea.selectionEnd,
+      };
+    } else {
+      this._linkPreservedSelection = null;
+    }
+    let defaultText = "";
+    try {
+      defaultText = this.#textManipulation?.getSelected()?.value ?? "";
+    } catch {
+      defaultText = "";
+    }
+    this.linkFormText = defaultText;
+    this.linkFormUrl = "";
+    this.linkFormOpen = true;
+  }
+
+  @action
+  closeLinkForm() {
+    this.linkFormOpen = false;
+    this.linkFormUrl = "";
+    this.linkFormText = "";
+    this._linkPreservedSelection = null;
+    // Return focus to the textarea so keyboard users land back on the
+    // writing surface after dismissing the helper.
+    this.#textarea?.focus();
+  }
+
+  @action
+  updateLinkFormUrl(event) {
+    this.linkFormUrl = event.target.value;
+  }
+
+  @action
+  updateLinkFormText(event) {
+    this.linkFormText = event.target.value;
+  }
+
+  @action
+  submitLinkForm(event) {
+    event?.preventDefault();
+    const url = this.linkFormUrl.trim();
+    if (!url) {
+      return;
+    }
+    // Re-apply the captured selection so the insert lands at the
+    // original caret/selection range even though focus has been on
+    // the URL input. Safe to no-op if the textarea is missing.
+    if (this.#textarea && this._linkPreservedSelection) {
+      try {
+        this.#textarea.focus();
+        this.#textarea.setSelectionRange(
+          this._linkPreservedSelection.start,
+          this._linkPreservedSelection.end
+        );
+      } catch (_e) {
+        // setSelectionRange can throw on hidden/disabled inputs;
+        // fall through and let TextareaTextManipulation work from
+        // the textarea's current selection state.
+      }
+    }
+    this.#insertLink({ text: this.linkFormText, url });
+    // Close + reset only after a successful write so a thrown error
+    // (e.g. textManipulation unavailable) leaves the form open.
+    this.linkFormOpen = false;
+    this.linkFormUrl = "";
+    this.linkFormText = "";
+    this._linkPreservedSelection = null;
+  }
+
+  get linkFormInsertDisabled() {
+    return this.linkFormUrl.trim().length === 0;
+  }
+
+  // -- private -----------------------------------------------------------
+
+  #userAutocompleteOptions(textarea) {
+    return {
+      component: UserAutocompleteResults,
+      key: UserAutocompleteResults.TRIGGER_KEY,
+      width: "100%",
+      treatAsTextarea: true,
+      fixedTextareaPosition: true,
+      autoSelectFirstSuggestion: true,
+      transformComplete: (obj) => obj.username || obj.name,
+      dataSource: (term) => userSearch({ term, includeGroups: true }),
+      afterComplete: (text, event) => {
+        event.preventDefault();
+        textarea.value = text;
+        textarea.focus();
+        // Keep the parent's input handler in sync with the
+        // programmatic write — see comment on the dispatchEvent
+        // call in #insertLink below.
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      },
+    };
+  }
+
+  #insertLink({ text, url }) {
+    if (!this.#textManipulation || !url) {
+      return;
+    }
+    try {
+      const tm = this.#textManipulation;
+      const sel = tm.getSelected();
+      if (sel.start === sel.end) {
+        // Caret with no selection: synthesise [linkText](url) at the
+        // caret. Falls back to the bare URL when no link text was
+        // typed, matching the composer's behaviour.
+        const visible = (text || "").trim() || url;
+        tm.insertText(`[${visible}](${url})`);
+      } else {
+        // With a selection: wrap it as the link text.
+        tm.applySurround(sel, "[", `](${url})`, "link_description");
+      }
+      // `critiqueText` is bound through Ember's two-way Textarea
+      // component, which listens to the native `input` event. The
+      // helper writes directly to .value, so without this dispatch
+      // the tracked property would diverge from the DOM until the
+      // user next typed a character.
+      this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+      this.#textarea?.focus();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[discourse-npn-critique-reply] insert link failed:",
+        e
+      );
+    }
   }
 
   constructor() {
@@ -4574,6 +4800,91 @@ export default class NpnCritiqueReplyModal extends Component {
                 </p>
               {{/if}}
 
+              {{! Insert-link toolbar OR inline form. Both sit directly
+                  above the textarea so the affordance is adjacent to
+                  the field it acts on. We render one or the other —
+                  never both — so the layout doesn't jump while the
+                  form is open. The form is INLINE (not a sub-modal):
+                  Discourse's modal service swaps the active modal
+                  instead of stacking, which would dismiss the
+                  critique workspace if we used DModal here. }}
+              {{#if this.linkFormOpen}}
+                <form
+                  class="npn-critique-reply-modal__link-form"
+                  aria-label={{i18n
+                    "npn_critique_reply.modal.toolbar.link_modal.title"
+                  }}
+                  {{on "submit" this.submitLinkForm}}
+                >
+                  <label class="npn-critique-reply-modal__link-form-label">
+                    <span>{{i18n
+                        "npn_critique_reply.modal.toolbar.link_modal.url_label"
+                      }}</span>
+                    <input
+                      class="npn-critique-reply-modal__link-form-input"
+                      type="url"
+                      autocomplete="off"
+                      placeholder={{i18n
+                        "npn_critique_reply.modal.toolbar.link_modal.url_placeholder"
+                      }}
+                      value={{this.linkFormUrl}}
+                      {{on "input" this.updateLinkFormUrl}}
+                      required
+                      autofocus
+                    />
+                  </label>
+                  <label class="npn-critique-reply-modal__link-form-label">
+                    <span>{{i18n
+                        "npn_critique_reply.modal.toolbar.link_modal.text_label"
+                      }}</span>
+                    <input
+                      class="npn-critique-reply-modal__link-form-input"
+                      type="text"
+                      value={{this.linkFormText}}
+                      {{on "input" this.updateLinkFormText}}
+                    />
+                  </label>
+                  <div class="npn-critique-reply-modal__link-form-actions">
+                    <DButton
+                      @label="npn_critique_reply.modal.toolbar.link_modal.cancel"
+                      @action={{this.closeLinkForm}}
+                      @disabled={{this.isPosting}}
+                      class="btn-flat npn-critique-reply-modal__link-form-cancel"
+                    />
+                    <DButton
+                      @label="npn_critique_reply.modal.toolbar.link_modal.insert"
+                      @action={{this.submitLinkForm}}
+                      @disabled={{this.linkFormInsertDisabled}}
+                      class="btn-primary npn-critique-reply-modal__link-form-submit"
+                    />
+                  </div>
+                  <p class="npn-critique-reply-modal__link-form-note">
+                    {{i18n
+                      "npn_critique_reply.modal.toolbar.link_modal.markdown_note"
+                    }}
+                  </p>
+                </form>
+              {{else}}
+                <div
+                  class="npn-critique-reply-modal__toolbar"
+                  role="toolbar"
+                  aria-label={{i18n
+                    "npn_critique_reply.modal.toolbar.label"
+                  }}
+                >
+                  <span class="npn-critique-reply-modal__toolbar-hint">
+                    {{i18n "npn_critique_reply.modal.markdown_supported"}}
+                  </span>
+                  <DButton
+                    @icon="link"
+                    @label="npn_critique_reply.modal.toolbar.insert_link"
+                    @action={{this.openLinkForm}}
+                    @disabled={{this.isPosting}}
+                    class="btn-flat btn-small npn-critique-reply-modal__toolbar-button"
+                  />
+                </div>
+              {{/if}}
+
               <Textarea
                 id="npn-critique-reply-textarea"
                 class="npn-critique-reply-modal__textarea"
@@ -4583,6 +4894,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 }}
                 disabled={{this.isPosting}}
                 {{on "input" this.clearValidationOnInput}}
+                {{didInsert this.setupTextarea}}
               />
             </section>
           </div>
