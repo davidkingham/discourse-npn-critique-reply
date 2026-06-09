@@ -1066,12 +1066,14 @@ export function exportCanvasToBlob(
 
 // Goes through Discourse's standard upload endpoint. `synchronous=true`
 // makes the response carry the upload record directly instead of
-// requiring a MessageBus subscription. `type=composer` selects the
-// composer-style extension whitelist + size limits.
+// requiring a MessageBus subscription. `upload_type=composer` selects
+// the composer-style extension whitelist + size limits. The form
+// param was renamed from `type` to `upload_type` in Discourse 3.4
+// (the old name is removed in 3.5) — see UploadsController#create.
 export function uploadVisualNotesBlob(blob, filename) {
   const formData = new FormData();
   formData.append("file", blob, filename);
-  formData.append("type", "composer");
+  formData.append("upload_type", "composer");
   formData.append("synchronous", "true");
 
   return ajax("/uploads.json", {
