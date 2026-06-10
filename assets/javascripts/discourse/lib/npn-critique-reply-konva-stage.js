@@ -485,6 +485,7 @@ export async function createAnnotationStage({
   onSelectCrop,
   onUpdateCrop,
   onAddEyePathPoint,
+  onCommitEyePath,
   onSelectEyePath,
   onMoveEyePathPoint,
   onAddAttentionPull,
@@ -598,6 +599,27 @@ export async function createAnnotationStage({
   // Drag-to-crop in-flight state. Set when the user starts dragging
   // on empty stage in crop mode; cleared on pointerup.
   let cropDrag = null;
+
+  // Drag-to-trace Eye Path in-flight state. Per beta feedback the
+  // tool should feel like drawing a path, not dropping discrete
+  // pins. mousedown in eye_path mode begins a drag; mousemove
+  // samples points by distance threshold; mouseup commits the
+  // accumulated points as a single path via onCommitEyePath. A
+  // short pointer press that never crosses the distance threshold
+  // falls through to the existing click-to-drop behaviour.
+  let eyePathDrag = null;
+  // Pixel distance the pointer must travel between sample points
+  // before another one is recorded. Lower values trace finer
+  // detail; higher values produce smoother paths with fewer
+  // points. 14 px hits a comfortable balance at typical stage
+  // sizes — paths render smooth without burning the 40-point cap
+  // on tiny pen tremors.
+  const EYE_PATH_SAMPLE_MIN_PX = 14;
+  // Pointer must move at least this far from mousedown for the
+  // gesture to count as a "drag". Anything shorter falls back to
+  // single-point click behaviour so users who just want to tap
+  // get the existing pin-style point.
+  const EYE_PATH_DRAG_THRESHOLD_PX = 8;
 
   // References kept across renders so dim rects can be moved/resized
   // live during drag/transform (without tearing down the whole layer).
@@ -2984,7 +3006,7 @@ export async function createAnnotationStage({
   function renderPreview(x1, y1, x2, y2) {
     previewLayer.destroyChildren();
     // Drag-to-create preview colour follows the active tool so the
-    // in-flight rect reads as a draft of the kind being placed.
+    // in-flight shape reads as a draft of the kind being placed.
     let tertiary = ANNOTATION_BLUE;
     if (state.visualMode === "attention_pull") {
       tertiary = ATTENTION_PULL_OCHRE;
@@ -2995,16 +3017,73 @@ export async function createAnnotationStage({
     const ry = Math.min(y1, y2);
     const rw = Math.abs(x2 - x1);
     const rh = Math.abs(y2 - y1);
+
+    // Attention / Strong Area finalize as ellipses, so the preview
+    // also draws an ellipse — previously the rect preview gave
+    // users a "drew a rectangle, got an oval" surprise on release.
+    // Crop_suggestion stays as a rectangle (final crop IS a rect).
+    const isAreaTool =
+      state.visualMode === "attention_pull" ||
+      state.visualMode === "strong_area";
+
+    if (isAreaTool) {
+      previewLayer.add(
+        new Konva.Ellipse({
+          x: rx + rw / 2,
+          y: ry + rh / 2,
+          radiusX: Math.max(0, rw / 2),
+          radiusY: Math.max(0, rh / 2),
+          stroke: tertiary,
+          strokeWidth: 2,
+          dash: [4, 3],
+          fill: "rgba(0, 0, 0, 0.12)",
+          listening: false,
+        })
+      );
+    } else {
+      previewLayer.add(
+        new Konva.Rect({
+          x: rx,
+          y: ry,
+          width: rw,
+          height: rh,
+          stroke: tertiary,
+          strokeWidth: 2,
+          dash: [4, 3],
+          fill: "rgba(0, 0, 0, 0.15)",
+          listening: false,
+        })
+      );
+    }
+    previewLayer.batchDraw();
+  }
+
+  // Drag-to-trace Eye Path preview. Renders the accumulated sampled
+  // points PLUS the current live pointer position as a Konva.Line
+  // with the same tension the finished path uses, so the in-flight
+  // shape matches what the user will see on release. Colour matches
+  // EYE_PATH_PALE_CYAN. Skipping the dashed treatment (other
+  // drag-previews use dashes) because the user is literally drawing
+  // and a solid in-flight line reads more like a pencil.
+  function renderEyePathPreview(sampledPoints, liveX, liveY) {
+    previewLayer.destroyChildren();
+    if (!sampledPoints || sampledPoints.length === 0) {
+      previewLayer.batchDraw();
+      return;
+    }
+    const flat = [];
+    for (const p of sampledPoints) {
+      flat.push(p.x, p.y);
+    }
+    flat.push(liveX, liveY);
     previewLayer.add(
-      new Konva.Rect({
-        x: rx,
-        y: ry,
-        width: rw,
-        height: rh,
-        stroke: tertiary,
-        strokeWidth: 2,
-        dash: [4, 3],
-        fill: "rgba(0, 0, 0, 0.15)",
+      new Konva.Line({
+        points: flat,
+        stroke: EYE_PATH_PALE_CYAN,
+        strokeWidth: 3,
+        lineCap: "round",
+        lineJoin: "round",
+        tension: EYE_PATH_SMOOTH ? EYE_PATH_SMOOTH_TENSION : 0,
         listening: false,
       })
     );
@@ -3038,12 +3117,15 @@ export async function createAnnotationStage({
     previewLayer.batchDraw();
   }
 
-  // Click / tap on empty area handler. Behavior depends on mode:
+  // Click / tap on empty area handler.
   //   • numbered_notes → add pin
   //   • crop_suggestion → no-op on click (handled by drag below)
+  //   • eye_path → handled by mousedown/move/up below (drag-to-trace).
+  //                A tap that doesn't cross EYE_PATH_DRAG_THRESHOLD_PX
+  //                falls through to single-point behaviour inside the
+  //                mouseup handler — we deliberately don't double-fire
+  //                via this click event.
   //   • null → no-op (canvas is read-only)
-  // Pin / crop clicks set cancelBubble in their own handlers, so the
-  // stage handler only fires for clicks on truly empty area.
   stage.on("click tap", (e) => {
     if (e.target !== stage) {
       return;
@@ -3061,19 +3143,6 @@ export async function createAnnotationStage({
       const xPct = Math.max(0, Math.min(100, (pos.x / sw) * 100));
       const yPct = Math.max(0, Math.min(100, (pos.y / sh) * 100));
       onAddPin?.(xPct, yPct);
-    } else if (state.visualMode === "eye_path") {
-      const pos = stage.getPointerPosition();
-      if (!pos) {
-        return;
-      }
-      const sw = stage.width();
-      const sh = stage.height();
-      if (sw === 0 || sh === 0) {
-        return;
-      }
-      const xPct = Math.max(0, Math.min(100, (pos.x / sw) * 100));
-      const yPct = Math.max(0, Math.min(100, (pos.y / sh) * 100));
-      onAddEyePathPoint?.(xPct, yPct);
     }
   });
 
@@ -3106,6 +3175,20 @@ export async function createAnnotationStage({
     }
     if (state.visualMode === "relationship_arrow") {
       relationshipArrowDrag = { startX: pos.x, startY: pos.y };
+      return;
+    }
+    if (state.visualMode === "eye_path") {
+      eyePathDrag = {
+        startX: pos.x,
+        startY: pos.y,
+        // Sampled pixel-space points. The first sample is the
+        // pointer-down position. Subsequent samples are added in
+        // the mousemove handler when the pointer travels more
+        // than EYE_PATH_SAMPLE_MIN_PX from the previous sample.
+        points: [{ x: pos.x, y: pos.y }],
+        lastSampleX: pos.x,
+        lastSampleY: pos.y,
+      };
       return;
     }
   });
@@ -3153,6 +3236,28 @@ export async function createAnnotationStage({
         pos.y,
         { dashed: true, tertiary: RELATIONSHIP_TAUPE }
       );
+      return;
+    }
+    if (eyePathDrag) {
+      const dx = pos.x - eyePathDrag.lastSampleX;
+      const dy = pos.y - eyePathDrag.lastSampleY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      // Sample-by-distance: drop tiny moves so the path doesn't
+      // burn its 40-point cap on pen tremor at the start of a
+      // drag. Also enforce the upper cap defensively here even
+      // though the modal action also truncates.
+      if (
+        dist >= EYE_PATH_SAMPLE_MIN_PX &&
+        eyePathDrag.points.length < 40
+      ) {
+        eyePathDrag.points.push({ x: pos.x, y: pos.y });
+        eyePathDrag.lastSampleX = pos.x;
+        eyePathDrag.lastSampleY = pos.y;
+      }
+      // Always redraw the preview against the live pointer
+      // position so the line "draws" smoothly under the cursor
+      // even between sample points.
+      renderEyePathPreview(eyePathDrag.points, pos.x, pos.y);
     }
   });
 
@@ -3301,6 +3406,46 @@ export async function createAnnotationStage({
         return;
       }
       onAddRelationshipArrow?.(x1Pct, y1Pct, x2Pct, y2Pct);
+      return;
+    }
+
+    if (eyePathDrag) {
+      const drag = eyePathDrag;
+      eyePathDrag = null;
+      clearPreview();
+      if (!pos || sw === 0 || sh === 0) {
+        return;
+      }
+      // Distance from mousedown to pointerup. Below the drag
+      // threshold, treat as a click → single point via the
+      // existing addEyePathPoint flow so click-to-drop still
+      // works for users who prefer dropping individual points.
+      const dx = pos.x - drag.startX;
+      const dy = pos.y - drag.startY;
+      const totalDist = Math.sqrt(dx * dx + dy * dy);
+      if (
+        totalDist < EYE_PATH_DRAG_THRESHOLD_PX ||
+        drag.points.length < 2
+      ) {
+        const xPct = Math.max(0, Math.min(100, (drag.startX / sw) * 100));
+        const yPct = Math.max(0, Math.min(100, (drag.startY / sh) * 100));
+        onAddEyePathPoint?.(xPct, yPct);
+        return;
+      }
+      // Make sure the very last pointer position is captured so
+      // the path ends exactly where the user released, not at the
+      // last sampled point.
+      const lastSample = drag.points[drag.points.length - 1];
+      if (
+        Math.hypot(pos.x - lastSample.x, pos.y - lastSample.y) > 1
+      ) {
+        drag.points.push({ x: pos.x, y: pos.y });
+      }
+      const asPct = drag.points.map((p) => ({
+        xPct: Math.max(0, Math.min(100, (p.x / sw) * 100)),
+        yPct: Math.max(0, Math.min(100, (p.y / sh) * 100)),
+      }));
+      onCommitEyePath?.(asPct);
     }
   });
 

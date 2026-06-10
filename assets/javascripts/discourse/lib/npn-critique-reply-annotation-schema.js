@@ -126,7 +126,12 @@ export const MIN_CROP_DIMENSION_PCT = 3;
 // points (so there's a direction); the schema accepts 1-point paths
 // so an in-progress save round-trips without dropping the user's
 // first click. The modal renders a hint to add a second.
-export const MAX_EYE_PATH_POINTS = 10;
+// Eye Path supports drag-to-trace as well as click-to-drop, so a
+// single path can be a continuous freehand-style line. 40 points
+// is enough for smooth-looking curves at typical image sizes while
+// keeping the per-annotation payload small (≈600 bytes uncompressed
+// for a full 40-point path).
+export const MAX_EYE_PATH_POINTS = 40;
 export const MAX_EYE_PATH_COUNT = 4;
 export const MIN_EYE_PATH_POINTS_FOR_EXPORT = 2;
 

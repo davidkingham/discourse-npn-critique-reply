@@ -2291,6 +2291,66 @@ export default class NpnCritiqueReplyModal extends Component {
   // session append points to that path. Re-entering eye_path mode
   // resets the session so the next click creates another new path
   // rather than extending the previous one.
+  // Commit a multi-point eye-path in one state mutation. Used by the
+  // drag-to-trace gesture in the Konva stage: the stage samples
+  // many points during a single pointer drag and hands them all to
+  // this action on pointerup. Calling addEyePathPoint N times would
+  // also work but would trigger N tracked-state reflows; this path
+  // is one update for the whole shape.
+  //
+  // Caps + dedup happen here so the stage stays dumb:
+  //   • bail when at MAX_EYE_PATH_COUNT (no more paths allowed)
+  //   • truncate to MAX_EYE_PATH_POINTS (40, per schema)
+  //   • require ≥ 2 points (a single-point "drag" falls back to
+  //     a regular click via addEyePathPoint instead)
+  @action
+  commitEyePath(points) {
+    if (this.visualMode !== "eye_path") {
+      return;
+    }
+    if (!Array.isArray(points) || points.length < 2) {
+      return;
+    }
+    if (this.eyePathsAtMax) {
+      return;
+    }
+
+    const trimmed = points.slice(0, MAX_EYE_PATH_POINTS).map((p, i) => ({
+      number: i + 1,
+      xPct: p.xPct,
+      yPct: p.yPct,
+    }));
+
+    const newId = nextEyePathId(this.eyePaths.map((p) => p.id));
+    const newLabel = nextEyePathLabel(this.eyePaths.map((p) => p.label));
+    const newPath = { id: newId, label: newLabel, points: trimmed };
+
+    this.eyePaths = [...this.eyePaths, newPath];
+    this._activeEyePathId = newId;
+    this.selectedEyePathId = newId;
+
+    // Same description popover trigger the click flow uses — opens
+    // once per eye_path mode session at the end of the just-drawn
+    // path.
+    if (!this._eyePathStarterInserted) {
+      this._eyePathStarterInserted = true;
+      const last = trimmed[trimmed.length - 1];
+      this.pendingEyePathPopover = {
+        anchorXPct: last.xPct,
+        anchorYPct: last.yPct,
+      };
+      this.pendingEyePathPopoverText = "";
+    }
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] commit-eye-path", {
+        topicId: this.topic?.id,
+        pathId: newId,
+        pointCount: trimmed.length,
+      });
+    }
+  }
+
   @action
   addEyePathPoint(xPct, yPct) {
     if (this.visualMode !== "eye_path") {
@@ -5442,6 +5502,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @eyePaths={{this.eyePaths}}
                 @selectedEyePathId={{this.selectedEyePathId}}
                 @onAddEyePathPoint={{this.addEyePathPoint}}
+                @onCommitEyePath={{this.commitEyePath}}
                 @onSelectEyePath={{this.selectEyePath}}
                 @onMoveEyePathPoint={{this.moveEyePathPoint}}
                 @attentionPulls={{this.attentionPulls}}

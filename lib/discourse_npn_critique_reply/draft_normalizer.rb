@@ -20,7 +20,10 @@ module DiscourseNpnCritiqueReply
     MAX_PIN_COUNT = 50
     MAX_CROP_COUNT = 1
     MAX_EYE_PATH_COUNT = 4
-    MAX_EYE_PATH_POINTS = 10
+    # Bumped from 10 → 40 so drag-to-trace Eye Path captures a
+    # smooth-looking curve. Old client payloads stayed under 10, so
+    # the bump is compatible in both directions.
+    MAX_EYE_PATH_POINTS = 40
     MAX_ATTENTION_PULL_COUNT = 8
     MAX_STRONG_AREA_COUNT = 8
     MAX_DIRECTION_ARROW_COUNT = 8

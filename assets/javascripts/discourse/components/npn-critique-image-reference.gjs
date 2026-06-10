@@ -173,6 +173,8 @@ export default class NpnCritiqueImageReference extends Component {
           this.args.onUpdateCrop?.(xPct, yPct, widthPct, heightPct),
         onAddEyePathPoint: (xPct, yPct) =>
           this.args.onAddEyePathPoint?.(xPct, yPct),
+        onCommitEyePath: (points) =>
+          this.args.onCommitEyePath?.(points),
         onSelectEyePath: (pathId) => this.args.onSelectEyePath?.(pathId),
         onMoveEyePathPoint: (pathId, number, xPct, yPct) =>
           this.args.onMoveEyePathPoint?.(pathId, number, xPct, yPct),
