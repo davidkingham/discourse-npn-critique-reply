@@ -4548,14 +4548,6 @@ export default class NpnCritiqueReplyModal extends Component {
                                 "npn_critique_reply.modal.processing_example.uploaded"
                               }}
                             </p>
-                            {{#if this.processingExample.filename}}
-                              <p
-                                class="npn-critique-reply-modal__processing-example-menu-filename"
-                                title={{this.processingExample.filename}}
-                              >
-                                {{this.processingExample.filename}}
-                              </p>
-                            {{/if}}
                             <div
                               class="npn-critique-reply-modal__processing-example-menu-actions"
                             >
@@ -4744,6 +4736,30 @@ export default class NpnCritiqueReplyModal extends Component {
                       }}
                     </span>
                   </button>
+
+                  {{! Replace / Remove anchored to the view-toggle row so
+                      they're always visible without scrolling or
+                      opening the popover. Acts on the same Processing
+                      Example as the popover and the below-image
+                      section. }}
+                  <div
+                    class="npn-critique-reply-modal__large-image-view-actions"
+                  >
+                    <DButton
+                      class="btn-flat btn-small"
+                      @action={{this.triggerProcessingExampleFilePicker}}
+                      @icon="rotate"
+                      @label="npn_critique_reply.modal.processing_example.replace"
+                      @disabled={{this.processingExampleUploading}}
+                    />
+                    <DButton
+                      class="btn-flat btn-small"
+                      @action={{this.removeProcessingExample}}
+                      @icon="trash-can"
+                      @label="npn_critique_reply.modal.processing_example.remove"
+                      @disabled={{this.processingExampleUploading}}
+                    />
+                  </div>
                 </div>
               {{/if}}
 
@@ -5629,54 +5645,19 @@ export default class NpnCritiqueReplyModal extends Component {
                   class="npn-critique-reply-modal__processing-example-content"
                 >
                   {{#if this.hasProcessingExample}}
-                    <div
-                      class="npn-critique-reply-modal__processing-example-preview"
+                    {{! Uploaded state: thumbnail + filename were
+                        dropped per beta feedback — they weren't
+                        useful. Replace / Remove live in the view-
+                        toggle row above the image so they're always
+                        visible without scrolling here. This section
+                        just confirms the upload exists. }}
+                    <p
+                      class="npn-critique-reply-modal__processing-example-status-text"
                     >
-                      <img
-                        class="npn-critique-reply-modal__processing-example-thumb"
-                        src={{this.processingExample.url}}
-                        alt={{i18n
-                          "npn_critique_reply.modal.processing_example.preview_alt"
-                        }}
-                      />
-                      <div
-                        class="npn-critique-reply-modal__processing-example-status"
-                      >
-                        <p
-                          class="npn-critique-reply-modal__processing-example-status-text"
-                        >
-                          {{i18n
-                            "npn_critique_reply.modal.processing_example.uploaded"
-                          }}
-                        </p>
-                        {{#if this.processingExample.filename}}
-                          <p
-                            class="npn-critique-reply-modal__processing-example-filename"
-                            title={{this.processingExample.filename}}
-                          >
-                            {{this.processingExample.filename}}
-                          </p>
-                        {{/if}}
-                      </div>
-                    </div>
-                    <div
-                      class="npn-critique-reply-modal__processing-example-actions"
-                    >
-                      <DButton
-                        class="btn-default btn-small npn-critique-reply-modal__processing-example-replace"
-                        @action={{this.triggerProcessingExampleFilePicker}}
-                        @icon="rotate"
-                        @label="npn_critique_reply.modal.processing_example.replace"
-                        @disabled={{this.processingExampleUploading}}
-                      />
-                      <DButton
-                        class="btn-flat btn-small npn-critique-reply-modal__processing-example-remove"
-                        @action={{this.removeProcessingExample}}
-                        @icon="trash-can"
-                        @label="npn_critique_reply.modal.processing_example.remove"
-                        @disabled={{this.processingExampleUploading}}
-                      />
-                    </div>
+                      {{i18n
+                        "npn_critique_reply.modal.processing_example.uploaded"
+                      }}
+                    </p>
                   {{else}}
                     <p
                       class="npn-critique-reply-modal__processing-example-help"

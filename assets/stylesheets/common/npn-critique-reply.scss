@@ -374,8 +374,25 @@
   &__large-image-view {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 0.35em;
     margin-bottom: 0.6em;
+  }
+
+  // Replace / Remove actions live inside the view-toggle row so they
+  // sit immediately after the Reference / Processing Example pills.
+  // `margin-left: auto` pushes them to the right edge of the row,
+  // and they wrap below the pills on narrow columns via the parent's
+  // `flex-wrap: wrap`.
+  &__large-image-view-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.2em;
+    margin-left: auto;
+    flex: 0 0 auto;
+    .d-icon {
+      margin-right: 0.3em;
+    }
   }
 
   &__large-image-view-button {
