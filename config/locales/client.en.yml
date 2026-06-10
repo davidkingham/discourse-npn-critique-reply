@@ -30,6 +30,15 @@ en:
         title: "Start a Critique"
         intro: "Use the image and suggested prompts as a starting point. You can edit or delete anything before posting."
         request_heading: "Photographer’s request"
+        # Collapsed-by-default disclosure between Photographer's Request
+        # and Questions to Consider. Surfaces the cooked OP content so
+        # critics can refer back to what the photographer wrote without
+        # leaving the workspace. Lazy-loaded on first expand.
+        photographers_notes:
+          title: "Photographer’s Notes"
+          hint: "View the photographer’s description, questions, and details."
+          loading: "Loading the photographer’s post…"
+          failed: "Couldn’t load the photographer’s post. You can close and reopen the original topic in a new tab if needed."
         critique_style: "Style"
         feedback_focus: "Focus"
         weekly_challenge: "Weekly Challenge"

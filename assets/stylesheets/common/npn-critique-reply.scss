@@ -778,6 +778,109 @@
     border-radius: var(--d-border-radius, 4px);
   }
 
+  // -- Photographer's Notes panel -----------------------------------------
+  //
+  // Collapsed-by-default disclosure sitting between Photographer's
+  // Request and Questions to Consider. Card styling matches __request
+  // (same tinted background, hairline border, left accent) so the
+  // two cards read as a paired "what the photographer said" cluster.
+  &__photographers-notes {
+    margin: 0;
+    background: var(--primary-very-low);
+    border: 1px solid var(--primary-low);
+    border-left: 3px solid var(--primary-low-mid);
+    border-radius: var(--d-border-radius, 4px);
+    overflow: hidden;
+  }
+
+  &__photographers-notes-summary {
+    padding: 0.65em 0.85em 0.75em;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15em;
+    list-style: none;
+    // Hide the default details-summary marker; the title's own
+    // typography + the hint underneath read as a clickable header.
+    &::-webkit-details-marker {
+      display: none;
+    }
+    &:hover {
+      background: rgba(var(--tertiary-rgb, 0, 136, 204), 0.04);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+  }
+
+  &__photographers-notes-title {
+    @extend %npn-critique-section-heading;
+    margin: 0;
+    // Chevron via ::after — rotates when the details element is open.
+    &::after {
+      content: "▾";
+      margin-left: 0.4em;
+      color: var(--primary-medium);
+      font-size: 0.85em;
+      transition: transform 0.15s ease;
+      display: inline-block;
+    }
+  }
+
+  &__photographers-notes[open] &__photographers-notes-title::after {
+    transform: rotate(180deg);
+  }
+
+  &__photographers-notes-hint {
+    margin: 0;
+    color: var(--primary-medium);
+    font-size: var(--font-down-1);
+    line-height: 1.4;
+  }
+
+  &__photographers-notes-content {
+    border-top: 1px solid var(--primary-low);
+    padding: 0.7em 0.85em 0.85em;
+    background: var(--secondary);
+    // Cap the expanded panel so a long photographer description
+    // doesn't dominate the writing area. Scrolls internally on
+    // overflow.
+    max-height: 28vh;
+    overflow-y: auto;
+  }
+
+  &__photographers-notes-body {
+    // Lighter line-height than the textarea since the body uses
+    // Discourse's standard `.cooked` styling underneath. Tighten
+    // vertical rhythm so the panel feels compact even on rich posts.
+    > * {
+      margin-top: 0;
+      margin-bottom: 0.5em;
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+    // Compact images so a photo embedded in the post body doesn't
+    // re-introduce the reference image at large size.
+    img {
+      max-width: 100%;
+      height: auto;
+      max-height: 18vh;
+      object-fit: contain;
+    }
+  }
+
+  &__photographers-notes-status {
+    margin: 0;
+    color: var(--primary-medium);
+    font-size: var(--font-down-1);
+    line-height: 1.4;
+    &.--error {
+      color: var(--danger, var(--primary-high));
+    }
+  }
+
   &__request-heading {
     @extend %npn-critique-section-heading;
     margin: 0 0 0.5em;

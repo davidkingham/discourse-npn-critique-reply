@@ -6,6 +6,7 @@ import { action } from "@ember/object";
 import { getOwner } from "@ember/owner";
 import didInsert from "@ember/render-modifiers/modifiers/did-insert";
 import { service } from "@ember/service";
+import { htmlSafe } from "@ember/template";
 import { tracked } from "@glimmer/tracking";
 import UserAutocompleteResults from "discourse/components/user-autocomplete-results";
 import DButton from "discourse/ui-kit/d-button";
@@ -405,6 +406,26 @@ export default class NpnCritiqueReplyModal extends Component {
   // automatically resizes the stage and re-positions every
   // percent-based annotation. No explicit refit call needed.
   @tracked visualFocusMode = false;
+
+  // -- Photographer's Notes panel state --------------------------------
+  //
+  // A collapsed-by-default panel between Photographer's Request and
+  // Questions to Consider, showing the cooked OP content so critics
+  // can refer back to what the photographer wrote without leaving
+  // the modal. Fetched lazily on first expand to keep the modal
+  // open-cost low; cached in component state for the rest of the
+  // session.
+  //
+  //   _opCookedFetched — true once the GET has resolved (success or
+  //                      failure), so we don't refetch on each open.
+  //   _opCookedLoading — true while the request is in flight.
+  //   _opCookedHtml    — cached cooked HTML or null.
+  //   _opCookedError   — true when the fetch failed, so the panel
+  //                      can show a fallback instead of nothing.
+  @tracked _opCookedLoading = false;
+  @tracked _opCookedHtml = null;
+  @tracked _opCookedError = false;
+  _opCookedFetched = false;
 
   // -- Processing Example header popover -------------------------------
   //
@@ -1455,6 +1476,81 @@ export default class NpnCritiqueReplyModal extends Component {
       return false;
     }
     return true;
+  }
+
+  // ---- Photographer's Notes lazy-load -----------------------------------
+
+  get opCookedSafe() {
+    if (!this._opCookedHtml) {
+      return null;
+    }
+    return htmlSafe(this._opCookedHtml);
+  }
+
+  // Fires when the `<details>` for Photographer's Notes opens. First
+  // open triggers a single GET to /posts/<op>.json; subsequent opens
+  // reuse the cached cooked HTML. The OP's first post id comes from
+  // either the topic model's `first_post_id` or the post stream — we
+  // tolerate both shapes so a future Discourse upgrade that reshapes
+  // the topic JSON still resolves.
+  @action
+  onPhotographersNotesToggle(event) {
+    if (!event?.target?.open) {
+      return;
+    }
+    if (this._opCookedFetched || this._opCookedLoading) {
+      return;
+    }
+    this._loadOpCooked();
+  }
+
+  async _loadOpCooked() {
+    const topic = this.topic;
+    if (!topic) {
+      return;
+    }
+    const firstPostId =
+      topic.first_post_id ??
+      topic.get?.("first_post_id") ??
+      topic.postStream?.posts?.[0]?.id ??
+      topic.post_stream?.posts?.[0]?.id ??
+      null;
+    if (!firstPostId) {
+      this._opCookedError = true;
+      this._opCookedFetched = true;
+      return;
+    }
+
+    this._opCookedLoading = true;
+    try {
+      const json = await ajax(`/posts/${firstPostId}.json`);
+      if (this._destroyed) {
+        return;
+      }
+      const cooked = json?.cooked ?? null;
+      if (cooked) {
+        this._opCookedHtml = cooked;
+      } else {
+        this._opCookedError = true;
+      }
+    } catch (e) {
+      if (this._destroyed) {
+        return;
+      }
+      this._opCookedError = true;
+      if (this.siteSettings.npn_critique_reply_debug_enabled) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[npn-critique-reply] failed to load OP cooked for Photographer's Notes",
+          { topicId: topic?.id, error: e }
+        );
+      }
+    } finally {
+      if (!this._destroyed) {
+        this._opCookedLoading = false;
+        this._opCookedFetched = true;
+      }
+    }
   }
 
   @action
@@ -5810,6 +5906,66 @@ export default class NpnCritiqueReplyModal extends Component {
                 {{i18n "npn_critique_reply.modal.no_request_found"}}
               </p>
             {{/if}}
+
+            {{! Photographer's Notes — collapsed-by-default disclosure
+                showing the cooked OP content. Lazy-fetched on first
+                expand via `onPhotographersNotesToggle`; cached in
+                state for the rest of the session. Permissions are
+                inherited from the standard /posts/:id.json endpoint
+                — the user only sees content they can already see in
+                the topic. }}
+            <details
+              class="npn-critique-reply-modal__photographers-notes"
+              {{on "toggle" this.onPhotographersNotesToggle}}
+            >
+              <summary
+                class="npn-critique-reply-modal__photographers-notes-summary"
+              >
+                <span
+                  class="npn-critique-reply-modal__photographers-notes-title"
+                >
+                  {{i18n
+                    "npn_critique_reply.modal.photographers_notes.title"
+                  }}
+                </span>
+                <span
+                  class="npn-critique-reply-modal__photographers-notes-hint"
+                >
+                  {{i18n
+                    "npn_critique_reply.modal.photographers_notes.hint"
+                  }}
+                </span>
+              </summary>
+              <div
+                class="npn-critique-reply-modal__photographers-notes-content"
+              >
+                {{#if this._opCookedLoading}}
+                  <p
+                    class="npn-critique-reply-modal__photographers-notes-status"
+                    aria-live="polite"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.photographers_notes.loading"
+                    }}
+                  </p>
+                {{else if this.opCookedSafe}}
+                  <div
+                    class="npn-critique-reply-modal__photographers-notes-body cooked"
+                  >
+                    {{this.opCookedSafe}}
+                  </div>
+                {{else if this._opCookedError}}
+                  <p
+                    class="npn-critique-reply-modal__photographers-notes-status --error"
+                    role="alert"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.photographers_notes.failed"
+                    }}
+                  </p>
+                {{/if}}
+              </div>
+            </details>
 
             <section
               class="npn-critique-reply-modal__questions"
