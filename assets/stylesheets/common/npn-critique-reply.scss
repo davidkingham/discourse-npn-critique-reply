@@ -40,8 +40,14 @@
   // Nearly full viewport. The variable Discourse actually reads is
   // `--modal-max-width` (no `d-` prefix); the doubled selector beats
   // `.d-modal`'s media-query default (600px) at desktop widths.
+  // We also expand max-height so the image-col can use much more of
+  // the viewport — by default `.d-modal` caps height around 75-80vh,
+  // leaving big wasted strips above and below the image on tall
+  // monitors.
   &.--workspace.--workspace {
     --modal-max-width: calc(100vw - 2em);
+    --modal-max-height: calc(100vh - 2em);
+    max-height: calc(100vh - 2em);
   }
 
   &__layout {
@@ -145,17 +151,16 @@
     // user is in the writing scroll.
     //
     // Both percentage and pixel ceilings via `min()`. The percentage
-    // tracks reasonable viewport heights; the pixel cap prevents
-    // image-col from outgrowing the modal body on very large
-    // displays (where 75vh = 1300px+ and would bleed behind the
-    // sticky Processing Example row). 720px keeps the image
-    // comfortable for casual viewing without competing with the
-    // sticky-bottom row; users who want a truly large image toggle
-    // Visual Focus Mode.
+    // tracks reasonable viewport heights; the pixel cap stops
+    // image-col from outgrowing what the modal body can hold (the
+    // sticky Processing Example row at the bottom takes ~22vh, and
+    // the modal title/footer chrome eats another ~6vh). Pixel
+    // ceiling is generous enough that on tall monitors the image
+    // is genuinely large; Visual Focus Mode still grows it further.
     position: sticky;
     top: 0;
     align-self: start;
-    max-height: min(calc(75vh - 4em), 720px);
+    max-height: min(calc(78vh - 4em), 980px);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -1404,13 +1409,14 @@
   &__img {
     display: block;
     max-width: 100%;
-    // Match the image-col cap pattern — pixel ceiling so the image
-    // doesn't outgrow the column on very large screens (where the
-    // vh-only cap previously let the IMG render ~1000px tall,
-    // which then bled behind the modal's sticky-bottom workflow
-    // row). The Visual Focus Mode rule overrides this with a
-    // higher cap when the writing pane is hidden.
-    max-height: min(calc(80vh - 4em), 600px);
+    // Pixel ceiling matched to image-col's cap minus the column's
+    // chrome (header row, visual tools toolbar + secondary, a11y
+    // list, "Showing X" caption, gaps, padding ≈ 200px). On tall
+    // monitors the IMG can render up to ~780px now (vs ~600px
+    // before) — about 30% larger without bleeding past the modal
+    // body. Visual Focus Mode overrides this with a higher cap
+    // when the writing pane is hidden.
+    max-height: min(calc(70vh - 4em), 780px);
     width: auto;
     height: auto;
     margin: 0 auto;
