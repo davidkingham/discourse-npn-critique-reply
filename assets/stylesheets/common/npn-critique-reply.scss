@@ -843,13 +843,17 @@
     border-top: 1px solid var(--primary-low);
     padding: 0.7em 0.85em 0.85em;
     background: var(--secondary);
-    // No internal scroll cap. The parent __write-col already
-    // scrolls, so a nested scroll context inside this panel only
-    // creates a confusing "scroll within scroll" that can swallow
-    // wheel events at the inner boundary. Letting the panel grow
-    // to fit its content means the user scrolls the writing
-    // column normally to read through long notes — same gesture
-    // they'd use to reach the textarea.
+    // Internal scroll so a long photographer description doesn't
+    // push the textarea below the fold while leaving the panel
+    // partially visible. `overscroll-behavior: contain` keeps the
+    // wheel event from chaining back to __write-col at the panel
+    // edges — without it, hitting the panel's top/bottom would
+    // immediately scroll the writing pane and feel jumpy.
+    // 50vh is generous enough that most posts fit without
+    // scrolling; long-form posts scroll cleanly inside.
+    max-height: 50vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   &__photographers-notes-body {
