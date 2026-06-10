@@ -1254,6 +1254,26 @@
       // other buttons.
       margin-left: 0;
     }
+
+    // Hide the "Larger Image" / "Return to Writing" toggle on mobile.
+    // The single-column stack already gives the image full modal
+    // width, so the affordance has no effect — and showing it could
+    // mislead a user into expecting a fullscreen image view.
+    &__visual-focus-toggle.npn-critique-reply-modal__visual-focus-toggle {
+      display: none;
+    }
+
+    // Belt-and-braces: if a user entered Visual Focus Mode on a wider
+    // viewport and then resized down past the breakpoint, the
+    // modifier class stays on the modal until they re-enter the
+    // mode. Without these overrides the write pane + processing
+    // example row would remain hidden on mobile, stranding the
+    // critique textarea entirely. Force them back to visible so the
+    // mobile stack always shows every section.
+    &.npn-critique-reply-modal--visual-focus &__write-col,
+    &.npn-critique-reply-modal--visual-focus &__processing-example-row {
+      display: revert;
+    }
   }
 
   @media (forced-colors: active) {
