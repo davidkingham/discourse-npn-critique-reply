@@ -1427,6 +1427,32 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
+  // Wraps the modal's @closeModal so the X (and Escape) act as a
+  // "step back" while Visual Focus Mode is active rather than
+  // closing the whole modal. The beta report: a user entered focus
+  // mode, added annotations, and clicked X expecting to return to
+  // the normal layout — the entire workspace closed and they
+  // restarted from scratch.
+  //
+  // First click while focus mode is on → exits focus mode.
+  // Subsequent click (now in normal mode) → closes the modal.
+  // Toggling focus off preserves every piece of state (text,
+  // annotations, version, processing example, draft).
+  @action
+  handleModalClose() {
+    if (this.visualFocusMode) {
+      this.visualFocusMode = false;
+      if (this.siteSettings.npn_critique_reply_debug_enabled) {
+        // eslint-disable-next-line no-console
+        console.info("[npn-critique-reply] visual-focus-mode exited via X", {
+          topicId: this.topic?.id,
+        });
+      }
+      return;
+    }
+    this.args.closeModal?.();
+  }
+
   @action
   toggleProcessingExampleMenu() {
     if (this.processingExampleMenuOpen) {
@@ -4423,7 +4449,7 @@ export default class NpnCritiqueReplyModal extends Component {
   <template>
     <DModal
       @title={{i18n "npn_critique_reply.modal.title"}}
-      @closeModal={{@closeModal}}
+      @closeModal={{this.handleModalClose}}
       class="npn-critique-reply-modal --workspace
         {{unless this.hasImage 'npn-critique-reply-modal--no-image'}}
         {{if this.visualFocusMode 'npn-critique-reply-modal--visual-focus'}}"

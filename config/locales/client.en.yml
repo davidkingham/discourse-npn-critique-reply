@@ -169,8 +169,12 @@ en:
         visual_focus:
           enter: "Larger Image"
           enter_title: "Hide the writing area and view the image at full modal width"
-          exit: "Return to Writing"
-          exit_title: "Return to the normal two-pane layout"
+          # "Return to Critique" reads more accurately than "Return to
+          # Writing" because the normal workspace surfaces image, tools,
+          # questions, and writing — not just the textarea. Beta
+          # feedback flagged "Back to Writing" as confusing.
+          exit: "Return to Critique"
+          exit_title: "Exit Larger Image and return to the full critique workspace"
 
         # Visual notes — async export + upload pipeline ----------------
         preparing_visual_notes: "Preparing visual notes…"
