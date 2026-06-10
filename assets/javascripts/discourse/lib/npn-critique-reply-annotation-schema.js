@@ -133,6 +133,15 @@ export const MIN_CROP_DIMENSION_PCT = 3;
 // for a full 40-point path).
 export const MAX_EYE_PATH_POINTS = 40;
 export const MAX_EYE_PATH_COUNT = 4;
+
+// Closed-area "Draw Area" path variant for Attention / Strong Area.
+// Client samples the drag, runs Douglas-Peucker simplification on
+// release, and submits a trimmed polyline (typically 6-12 control
+// points). MAX caps a defensive hard ceiling; MIN enforces enough
+// structure to render a shape; MIN_DIM filters accidental taps.
+export const MAX_AREA_PATH_POINTS = 50;
+export const MIN_AREA_PATH_POINTS = 4;
+export const MIN_AREA_PATH_DIMENSION_PCT = 3;
 export const MIN_EYE_PATH_POINTS_FOR_EXPORT = 2;
 
 // Eye-path label pattern + default. Each path gets a stable "E<N>"
@@ -560,9 +569,68 @@ export function annotationToEyePath(annotation) {
 //   • Width and height must each be ≥ MIN_ATTENTION_PULL_DIMENSION_PCT
 //     after clamping.
 //   • `shape` defaults to "ellipse" — the only shape we render for v1.
+// Closed-area "Draw Area" path normalizer. Shared by both
+// attention_pull and strong_area — only the kind + label pattern
+// differ between the two callers.
+function normalizeAreaPathAnnotation(raw, kind, labelPattern) {
+  const rawPoints = Array.isArray(raw.points) ? raw.points : null;
+  if (!rawPoints) {
+    return null;
+  }
+  const points = [];
+  for (const p of rawPoints) {
+    if (points.length >= MAX_AREA_PATH_POINTS) {
+      break;
+    }
+    if (!p || typeof p !== "object") {
+      continue;
+    }
+    const xPct = clampPct(p.x_pct ?? p.xPct);
+    const yPct = clampPct(p.y_pct ?? p.yPct);
+    if (xPct == null || yPct == null) {
+      continue;
+    }
+    points.push({ x_pct: xPct, y_pct: yPct });
+  }
+  if (points.length < MIN_AREA_PATH_POINTS) {
+    return null;
+  }
+  // Bounding-box check: filter accidental taps.
+  const xs = points.map((pt) => pt.x_pct);
+  const ys = points.map((pt) => pt.y_pct);
+  const widthPct = Math.max(...xs) - Math.min(...xs);
+  const heightPct = Math.max(...ys) - Math.min(...ys);
+  if (
+    widthPct < MIN_AREA_PATH_DIMENSION_PCT &&
+    heightPct < MIN_AREA_PATH_DIMENSION_PCT
+  ) {
+    return null;
+  }
+  const id = isNonEmptyString(raw.id) ? raw.id : null;
+  const rawLabel = raw.label;
+  const label =
+    typeof rawLabel === "string" && labelPattern.test(rawLabel)
+      ? rawLabel
+      : null;
+  return {
+    id,
+    kind,
+    shape: "path",
+    label,
+    points,
+  };
+}
+
 export function normalizeAttentionPullAnnotation(raw) {
   if (!raw || typeof raw !== "object") {
     return null;
+  }
+  if (raw.shape === "path") {
+    return normalizeAreaPathAnnotation(
+      raw,
+      ANNOTATION_KINDS.ATTENTION_PULL,
+      ATTENTION_PULL_LABEL_PATTERN
+    );
   }
   const xPct = clampPct(raw.x_pct ?? raw.xPct);
   const yPct = clampPct(raw.y_pct ?? raw.yPct);
@@ -617,14 +685,29 @@ export function attentionPullsToAnnotations(pulls) {
     if (out.length >= MAX_ATTENTION_PULL_COUNT) {
       break;
     }
-    const normalized = normalizeAttentionPullAnnotation({
-      id: pull.id ?? `attention_pull_${idCounter}`,
-      label: pull.label,
-      x_pct: pull.xPct,
-      y_pct: pull.yPct,
-      width_pct: pull.widthPct,
-      height_pct: pull.heightPct,
-    });
+    // Build the raw payload to pass into the normalizer. Path-shape
+    // pulls (the Draw Area variant) carry a `points` array instead
+    // of x/y/width/height; route those through the shape: "path"
+    // branch of the normalizer.
+    const raw =
+      pull.shape === "path"
+        ? {
+            id: pull.id ?? `attention_pull_${idCounter}`,
+            label: pull.label,
+            shape: "path",
+            points: Array.isArray(pull.points)
+              ? pull.points.map((p) => ({ x_pct: p.xPct, y_pct: p.yPct }))
+              : [],
+          }
+        : {
+            id: pull.id ?? `attention_pull_${idCounter}`,
+            label: pull.label,
+            x_pct: pull.xPct,
+            y_pct: pull.yPct,
+            width_pct: pull.widthPct,
+            height_pct: pull.heightPct,
+          };
+    const normalized = normalizeAttentionPullAnnotation(raw);
     if (normalized) {
       if (!normalized.id) {
         normalized.id = `attention_pull_${idCounter}`;
@@ -651,14 +734,25 @@ export function annotationsToAttentionPulls(payload) {
     if (a?.kind !== ANNOTATION_KINDS.ATTENTION_PULL) {
       continue;
     }
-    out.push({
-      id: a.id,
-      label: a.label,
-      xPct: a.x_pct,
-      yPct: a.y_pct,
-      widthPct: a.width_pct,
-      heightPct: a.height_pct,
-    });
+    if (a.shape === "path") {
+      out.push({
+        id: a.id,
+        label: a.label,
+        shape: "path",
+        points: Array.isArray(a.points)
+          ? a.points.map((p) => ({ xPct: p.x_pct, yPct: p.y_pct }))
+          : [],
+      });
+    } else {
+      out.push({
+        id: a.id,
+        label: a.label,
+        xPct: a.x_pct,
+        yPct: a.y_pct,
+        widthPct: a.width_pct,
+        heightPct: a.height_pct,
+      });
+    }
   }
   return out;
 }
@@ -690,6 +784,13 @@ export function nextStrongAreaLabel(existingLabels) {
 export function normalizeStrongAreaAnnotation(raw) {
   if (!raw || typeof raw !== "object") {
     return null;
+  }
+  if (raw.shape === "path") {
+    return normalizeAreaPathAnnotation(
+      raw,
+      ANNOTATION_KINDS.STRONG_AREA,
+      STRONG_AREA_LABEL_PATTERN
+    );
   }
   const xPct = clampPct(raw.x_pct ?? raw.xPct);
   const yPct = clampPct(raw.y_pct ?? raw.yPct);
@@ -735,14 +836,25 @@ export function strongAreasToAnnotations(areas) {
     if (out.length >= MAX_STRONG_AREA_COUNT) {
       break;
     }
-    const normalized = normalizeStrongAreaAnnotation({
-      id: area.id ?? `strong_area_${idCounter}`,
-      label: area.label,
-      x_pct: area.xPct,
-      y_pct: area.yPct,
-      width_pct: area.widthPct,
-      height_pct: area.heightPct,
-    });
+    const raw =
+      area.shape === "path"
+        ? {
+            id: area.id ?? `strong_area_${idCounter}`,
+            label: area.label,
+            shape: "path",
+            points: Array.isArray(area.points)
+              ? area.points.map((p) => ({ x_pct: p.xPct, y_pct: p.yPct }))
+              : [],
+          }
+        : {
+            id: area.id ?? `strong_area_${idCounter}`,
+            label: area.label,
+            x_pct: area.xPct,
+            y_pct: area.yPct,
+            width_pct: area.widthPct,
+            height_pct: area.heightPct,
+          };
+    const normalized = normalizeStrongAreaAnnotation(raw);
     if (normalized) {
       if (!normalized.id) {
         normalized.id = `strong_area_${idCounter}`;
@@ -767,14 +879,25 @@ export function annotationsToStrongAreas(payload) {
     if (a?.kind !== ANNOTATION_KINDS.STRONG_AREA) {
       continue;
     }
-    out.push({
-      id: a.id,
-      label: a.label,
-      xPct: a.x_pct,
-      yPct: a.y_pct,
-      widthPct: a.width_pct,
-      heightPct: a.height_pct,
-    });
+    if (a.shape === "path") {
+      out.push({
+        id: a.id,
+        label: a.label,
+        shape: "path",
+        points: Array.isArray(a.points)
+          ? a.points.map((p) => ({ xPct: p.x_pct, yPct: p.y_pct }))
+          : [],
+      });
+    } else {
+      out.push({
+        id: a.id,
+        label: a.label,
+        xPct: a.x_pct,
+        yPct: a.y_pct,
+        widthPct: a.width_pct,
+        heightPct: a.height_pct,
+      });
+    }
   }
   return out;
 }

@@ -478,6 +478,9 @@ export async function createAnnotationStage({
   pinMoveEnabled = true,
   attentionPullEditEnabled = true,
   strongAreaEditEnabled = true,
+  // "oval" (default) or "path". When "path" + visualMode is
+  // attention_pull or strong_area, drag-to-draw is active.
+  areaShapeMode = "oval",
   onAddPin,
   onSelectPin,
   onMovePin,
@@ -489,9 +492,11 @@ export async function createAnnotationStage({
   onSelectEyePath,
   onMoveEyePathPoint,
   onAddAttentionPull,
+  onAddAttentionPullPath,
   onSelectAttentionPull,
   onUpdateAttentionPull,
   onAddStrongArea,
+  onAddStrongAreaPath,
   onSelectStrongArea,
   onUpdateStrongArea,
   onAddDirectionArrow,
@@ -583,6 +588,7 @@ export async function createAnnotationStage({
     pinMoveEnabled,
     attentionPullEditEnabled,
     strongAreaEditEnabled,
+    areaShapeMode,
   };
 
   // Drag-to-create attention-pull state — set on mousedown over empty
@@ -599,6 +605,29 @@ export async function createAnnotationStage({
   // Drag-to-crop in-flight state. Set when the user starts dragging
   // on empty stage in crop mode; cleared on pointerup.
   let cropDrag = null;
+
+  // Draw Area in-flight state for the path-shape variant of
+  // Attention / Strong Area. Mirrors `eyePathDrag` in structure:
+  // sampled pixel points + last-sample anchor for distance-based
+  // sampling. Mousedown begins the drag; mousemove samples + redraws
+  // an OPEN preview line; mouseup applies Douglas-Peucker simplifi-
+  // cation, validates min size, and commits via the per-kind path
+  // callback. Drag is only started when state.areaShapeMode === "path".
+  let attentionPathDrag = null;
+  let strongPathDrag = null;
+  // Sampling + threshold values tuned for closed-area shapes. Looser
+  // than eye_path's 24px because area paths are typically smaller
+  // and need a few samples to define a shape; finer than eye_path's
+  // smoothing so corners survive simplification.
+  const AREA_PATH_SAMPLE_MIN_PX = 12;
+  const AREA_PATH_DRAG_THRESHOLD_PX = 10;
+  const AREA_PATH_SIMPLIFY_TOLERANCE_PCT = 0.012;
+  const AREA_PATH_HARD_CAP = 24;
+  // Raw sampling cap during the drag — set above the schema cap so
+  // Douglas-Peucker has enough variety to simplify from. The
+  // simplification step trims down to AREA_PATH_HARD_CAP / schema
+  // cap, whichever is smaller.
+  const MAX_AREA_PATH_POINTS_RAW = 60;
 
   // Drag-to-trace Eye Path in-flight state. Per beta feedback the
   // tool should feel like drawing a path, not dropping discrete
@@ -880,6 +909,147 @@ export async function createAnnotationStage({
     return group;
   }
 
+  // Shared path-shape area renderer used by both attention_pull and
+  // strong_area's Draw Area variant. Builds the same three-layer
+  // stack the ellipse renderer uses (halo / fill / stroke) but with
+  // Konva.Line(closed: true) instead of Konva.Ellipse. Label badge
+  // anchors at the bounding box's top-left, matching the ellipse
+  // marker convention. Editing is select+remove only — no drag /
+  // transform — per spec ("Optional if straightforward").
+  function renderAreaPath(layer, model, opts) {
+    const {
+      isSelected,
+      tertiary,
+      haloColor,
+      stageWidth,
+      stageHeight,
+      shortEdge,
+      onSelect,
+      modeMatches,
+    } = opts;
+    const points = Array.isArray(model.points) ? model.points : null;
+    if (!points || points.length < 2) {
+      return;
+    }
+    const flat = [];
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of points) {
+      const x = (p.xPct / 100) * stageWidth;
+      const y = (p.yPct / 100) * stageHeight;
+      flat.push(x, y);
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+
+    // Stroke / halo widths follow the same percent-of-short-edge
+    // formulas as the ellipse variant so paths and ovals read at the
+    // same visual weight when both are present in the same image.
+    const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
+    const strokeWidth = isSelected
+      ? Math.max(3, Math.round(shortEdge * 0.005))
+      : Math.max(2, Math.round(shortEdge * 0.0035));
+    const dashOn = Math.max(8, Math.round(shortEdge * 0.013));
+    const dashOff = Math.max(7, Math.round(shortEdge * 0.011));
+    // Smooth interpolation through the simplified control points —
+    // matches the eye-path treatment so the closed curve reads as
+    // intentional, not jagged. Konva closes the line via
+    // `closed: true`, drawing a final segment from the last point
+    // back to the first.
+    const tension = 0.4;
+
+    const halo = new Konva.Line({
+      points: flat,
+      closed: true,
+      stroke: haloColor,
+      strokeWidth: haloWidth,
+      fillEnabled: false,
+      tension,
+      opacity: 0.85,
+      listening: false,
+    });
+    layer.add(halo);
+
+    const fillBody = new Konva.Line({
+      points: flat,
+      closed: true,
+      fill: tertiary,
+      tension,
+      opacity: isSelected
+        ? AREA_FILL_OPACITY_SELECTED
+        : AREA_FILL_OPACITY_UNSELECTED,
+      strokeEnabled: false,
+      listening: true,
+      name: `area-path-${model.id}`,
+    });
+    fillBody.on("click tap", (e) => {
+      e.cancelBubble = true;
+      onSelect?.();
+    });
+    fillBody.on("mouseenter", () => {
+      container.style.cursor = "pointer";
+    });
+    fillBody.on("mouseleave", () => {
+      applyContainerCursor();
+    });
+    layer.add(fillBody);
+
+    const stroke = new Konva.Line({
+      points: flat,
+      closed: true,
+      stroke: tertiary,
+      strokeWidth,
+      dash: isSelected ? [] : [dashOn, dashOff],
+      tension,
+      fillEnabled: false,
+      listening: false,
+    });
+    layer.add(stroke);
+
+    if (model.label) {
+      const badgeOffset = Math.max(3, Math.round(shortEdge * 0.004));
+      const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+      const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+      const badge = new Konva.Label({
+        x: minX + badgeOffset,
+        y: minY + badgeOffset,
+        listening: false,
+      });
+      badge.add(
+        new Konva.Tag({
+          fill: tertiary,
+          cornerRadius: 3,
+          stroke: haloColor,
+          strokeWidth: 1.5,
+          opacity: isSelected ? 1 : 0.95,
+        })
+      );
+      badge.add(
+        new Konva.Text({
+          text: model.label,
+          fontSize: badgeFontSize,
+          fontStyle: "600",
+          fill: "#ffffff",
+          padding: badgePadding,
+          listening: false,
+        })
+      );
+      layer.add(badge);
+    }
+
+    // Ignore unused params from the destructure so linters stay quiet
+    // — they're part of the shared signature with the ellipse path
+    // and may be wired up later for transform handles.
+    void stageWidth;
+    void stageHeight;
+    void modeMatches;
+    return { minX, maxX, minY, maxY };
+  }
+
   // Attention-pull renderer. Each marker is a soft ellipse:
   //   • white halo ellipse underneath for contrast over any image
   //   • warm amber fill at low opacity (~12%)
@@ -913,6 +1083,23 @@ export async function createAnnotationStage({
     );
 
     for (const pull of pulls) {
+      // Draw Area variant — closed polyline marker instead of an
+      // ellipse. Same colour family, same label badge; just a
+      // different shape primitive. We continue past the ellipse
+      // code after rendering so the two paths don't collide.
+      if (pull.shape === "path") {
+        renderAreaPath(attentionPullLayer, pull, {
+          isSelected: pull.id === state.selectedAttentionPullId,
+          tertiary: ATTENTION_PULL_OCHRE,
+          haloColor: secondary,
+          stageWidth: sw,
+          stageHeight: sh,
+          shortEdge,
+          onSelect: () => onSelectAttentionPull?.(pull.id),
+          modeMatches: state.visualMode === "attention_pull",
+        });
+        continue;
+      }
       const cx = ((pull.xPct + pull.widthPct / 2) / 100) * sw;
       const cy = ((pull.yPct + pull.heightPct / 2) / 100) * sh;
       const rx = (pull.widthPct / 200) * sw;
@@ -1214,6 +1401,19 @@ export async function createAnnotationStage({
     );
 
     for (const area of areas) {
+      if (area.shape === "path") {
+        renderAreaPath(strongAreaLayer, area, {
+          isSelected: area.id === state.selectedStrongAreaId,
+          tertiary: STRONG_AREA_SAGE,
+          haloColor: secondary,
+          stageWidth: sw,
+          stageHeight: sh,
+          shortEdge,
+          onSelect: () => onSelectStrongArea?.(area.id),
+          modeMatches: state.visualMode === "strong_area",
+        });
+        continue;
+      }
       const cx = ((area.xPct + area.widthPct / 2) / 100) * sw;
       const cy = ((area.yPct + area.heightPct / 2) / 100) * sh;
       const rx = (area.widthPct / 200) * sw;
@@ -3118,6 +3318,112 @@ export async function createAnnotationStage({
     previewLayer.batchDraw();
   }
 
+  // Area-path drag helpers. Sampling + preview render + commit
+  // share the same pattern as eye_path; the differences are: (1)
+  // the in-flight line is CLOSED for visual feedback (looks like
+  // the final shape during the drag), (2) Douglas-Peucker tolerance
+  // is tighter so the closed corners survive simplification, and
+  // (3) the bounding-box minimum-size gate filters accidental taps.
+  function sampleAreaPathPoint(drag, pos) {
+    const dx = pos.x - drag.lastSampleX;
+    const dy = pos.y - drag.lastSampleY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (
+      dist >= AREA_PATH_SAMPLE_MIN_PX &&
+      drag.points.length < MAX_AREA_PATH_POINTS_RAW
+    ) {
+      drag.points.push({ x: pos.x, y: pos.y });
+      drag.lastSampleX = pos.x;
+      drag.lastSampleY = pos.y;
+    }
+  }
+
+  function renderAreaPathPreview(sampledPoints, liveX, liveY, tertiary) {
+    previewLayer.destroyChildren();
+    if (!sampledPoints || sampledPoints.length === 0) {
+      previewLayer.batchDraw();
+      return;
+    }
+    const flat = [];
+    for (const p of sampledPoints) {
+      flat.push(p.x, p.y);
+    }
+    flat.push(liveX, liveY);
+    // Closed: true so the user sees the final-shape footprint
+    // forming under the cursor — including the auto-close segment
+    // from the live pointer back to the start.
+    previewLayer.add(
+      new Konva.Line({
+        points: flat,
+        closed: true,
+        stroke: tertiary,
+        strokeWidth: 2.5,
+        dash: [5, 4],
+        fill: "rgba(0, 0, 0, 0.10)",
+        tension: 0.35,
+        listening: false,
+      })
+    );
+    previewLayer.batchDraw();
+  }
+
+  function finishAreaPathDrag(drag, pos, sw, sh, commit) {
+    if (!pos || sw === 0 || sh === 0 || !commit) {
+      return;
+    }
+    const dx = pos.x - drag.startX;
+    const dy = pos.y - drag.startY;
+    const totalDist = Math.sqrt(dx * dx + dy * dy);
+    // Accidental tap or too-tiny scribble — drop the drag, do
+    // nothing. We deliberately do NOT fall back to a rect-shape
+    // commit (the user explicitly chose Draw Area).
+    if (
+      totalDist < AREA_PATH_DRAG_THRESHOLD_PX ||
+      drag.points.length < 3
+    ) {
+      return;
+    }
+    // Capture the final pointer position so the path actually
+    // closes at the user's release point, not at the last sample.
+    const lastSample = drag.points[drag.points.length - 1];
+    if (Math.hypot(pos.x - lastSample.x, pos.y - lastSample.y) > 1) {
+      drag.points.push({ x: pos.x, y: pos.y });
+    }
+    // Douglas-Peucker (reused from eye_path) — tighter tolerance
+    // so the corner samples survive. The hard cap then
+    // walk-and-drops alternates if the result is still too dense.
+    const stageMin = Math.min(sw, sh);
+    const tolerance = stageMin * AREA_PATH_SIMPLIFY_TOLERANCE_PCT;
+    let simplified = douglasPeucker(drag.points, tolerance);
+    if (simplified.length > AREA_PATH_HARD_CAP) {
+      while (simplified.length > AREA_PATH_HARD_CAP) {
+        const out = [simplified[0]];
+        for (let i = 1; i < simplified.length - 1; i += 2) {
+          out.push(simplified[i]);
+        }
+        out.push(simplified[simplified.length - 1]);
+        simplified = out;
+      }
+    }
+    if (simplified.length < 4) {
+      return;
+    }
+    // Bounding-box check against percent threshold — matches what
+    // the server normalizer enforces.
+    const xs = simplified.map((p) => p.x);
+    const ys = simplified.map((p) => p.y);
+    const widthPct = ((Math.max(...xs) - Math.min(...xs)) / sw) * 100;
+    const heightPct = ((Math.max(...ys) - Math.min(...ys)) / sh) * 100;
+    if (widthPct < 3 && heightPct < 3) {
+      return;
+    }
+    const asPct = simplified.map((p) => ({
+      xPct: Math.max(0, Math.min(100, (p.x / sw) * 100)),
+      yPct: Math.max(0, Math.min(100, (p.y / sh) * 100)),
+    }));
+    commit(asPct);
+  }
+
   // Drag-to-trace Eye Path preview. Renders the accumulated sampled
   // points PLUS the current live pointer position as a Konva.Line
   // with the same tension the finished path uses, so the in-flight
@@ -3222,11 +3528,31 @@ export async function createAnnotationStage({
       return;
     }
     if (state.visualMode === "attention_pull") {
-      attentionDrag = { startX: pos.x, startY: pos.y };
+      if (state.areaShapeMode === "path") {
+        attentionPathDrag = {
+          startX: pos.x,
+          startY: pos.y,
+          points: [{ x: pos.x, y: pos.y }],
+          lastSampleX: pos.x,
+          lastSampleY: pos.y,
+        };
+      } else {
+        attentionDrag = { startX: pos.x, startY: pos.y };
+      }
       return;
     }
     if (state.visualMode === "strong_area") {
-      strongDrag = { startX: pos.x, startY: pos.y };
+      if (state.areaShapeMode === "path") {
+        strongPathDrag = {
+          startX: pos.x,
+          startY: pos.y,
+          points: [{ x: pos.x, y: pos.y }],
+          lastSampleX: pos.x,
+          lastSampleY: pos.y,
+        };
+      } else {
+        strongDrag = { startX: pos.x, startY: pos.y };
+      }
       return;
     }
     if (state.visualMode === "direction_arrow") {
@@ -3295,6 +3621,26 @@ export async function createAnnotationStage({
         pos.x,
         pos.y,
         { dashed: true, tertiary: RELATIONSHIP_TAUPE }
+      );
+      return;
+    }
+    if (attentionPathDrag) {
+      sampleAreaPathPoint(attentionPathDrag, pos);
+      renderAreaPathPreview(
+        attentionPathDrag.points,
+        pos.x,
+        pos.y,
+        ATTENTION_PULL_OCHRE
+      );
+      return;
+    }
+    if (strongPathDrag) {
+      sampleAreaPathPoint(strongPathDrag, pos);
+      renderAreaPathPreview(
+        strongPathDrag.points,
+        pos.x,
+        pos.y,
+        STRONG_AREA_SAGE
       );
       return;
     }
@@ -3469,6 +3815,21 @@ export async function createAnnotationStage({
       return;
     }
 
+    if (attentionPathDrag) {
+      const drag = attentionPathDrag;
+      attentionPathDrag = null;
+      clearPreview();
+      finishAreaPathDrag(drag, pos, sw, sh, onAddAttentionPullPath);
+      return;
+    }
+    if (strongPathDrag) {
+      const drag = strongPathDrag;
+      strongPathDrag = null;
+      clearPreview();
+      finishAreaPathDrag(drag, pos, sw, sh, onAddStrongAreaPath);
+      return;
+    }
+
     if (eyePathDrag) {
       const drag = eyePathDrag;
       eyePathDrag = null;
@@ -3598,6 +3959,7 @@ export async function createAnnotationStage({
       pinMoveEnabled,
       attentionPullEditEnabled,
       strongAreaEditEnabled,
+      areaShapeMode,
     } = {}) {
       let pinsChanged = false;
       let cropChanged = false;
@@ -3692,6 +4054,21 @@ export async function createAnnotationStage({
       ) {
         state.strongAreaEditEnabled = strongAreaEditEnabled;
         strongAreasChanged = true;
+      }
+      if (
+        areaShapeMode !== undefined &&
+        areaShapeMode !== state.areaShapeMode
+      ) {
+        state.areaShapeMode = areaShapeMode;
+        // A mid-drag sub-mode swap shouldn't leave a stale shape on
+        // the preview layer.
+        if (attentionDrag || strongDrag || attentionPathDrag || strongPathDrag) {
+          attentionDrag = null;
+          strongDrag = null;
+          attentionPathDrag = null;
+          strongPathDrag = null;
+          clearPreview();
+        }
       }
       if (
         directionArrows !== undefined &&

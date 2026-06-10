@@ -258,6 +258,81 @@ function drawCropOnCanvas(ctx, crop, width, height) {
 //   • dashed amber stroke for an observational, non-corrective feel
 // Selected markers aren't styled differently in export (selection is
 // a UI concept that doesn't persist past flatten).
+// Shared path-shape area renderer for the export canvas. Mirrors
+// the Konva renderer's three-layer stack (halo / fill / stroke)
+// with Konva-matching tension smoothing via `traceEyePath` (which
+// already implements the chord-length Catmull-Rom formula). The
+// final `closePath` segment is a straight line from last point
+// back to first — a small visual diff from the modal's Konva.Line
+// with closed:true and tension, but on simplified 6-12 point
+// shapes the diff is imperceptible at typical sizes.
+function drawAreaPathOnCanvas(ctx, marker, width, height, style) {
+  const rawPoints = Array.isArray(marker.points) ? marker.points : null;
+  if (!rawPoints || rawPoints.length < 3) {
+    return;
+  }
+  const points = rawPoints.map((p) => ({
+    x: (p.xPct / 100) * width,
+    y: (p.yPct / 100) * height,
+  }));
+
+  // Halo (closed path, no dash).
+  traceEyePath(ctx, points);
+  ctx.closePath();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = style.halo;
+  ctx.lineWidth = style.haloWidth;
+  ctx.globalAlpha = 0.85;
+  ctx.stroke();
+
+  // Translucent fill.
+  traceEyePath(ctx, points);
+  ctx.closePath();
+  ctx.fillStyle = style.tertiary;
+  ctx.globalAlpha = AREA_FILL_OPACITY_UNSELECTED;
+  ctx.fill();
+
+  // Outline stroke (dashed or solid depending on caller).
+  traceEyePath(ctx, points);
+  ctx.closePath();
+  if (style.dashOn > 0) {
+    ctx.setLineDash([style.dashOn, style.dashOff]);
+  } else {
+    ctx.setLineDash([]);
+  }
+  ctx.strokeStyle = style.tertiary;
+  ctx.lineWidth = style.strokeWidth;
+  ctx.globalAlpha = 1;
+  ctx.stroke();
+
+  // Label badge at bounding-box top-left.
+  if (marker.label) {
+    let minX = Infinity;
+    let minY = Infinity;
+    for (const p of points) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+    }
+    ctx.setLineDash([]);
+    ctx.font = `bold ${style.badgeFontSize}px sans-serif`;
+    ctx.textBaseline = "top";
+    const metrics = ctx.measureText(marker.label);
+    const badgeWidth = Math.ceil(metrics.width) + style.badgePadding * 2;
+    const badgeHeight = style.badgeFontSize + style.badgePadding * 2;
+    const bx = minX + style.badgeOffset;
+    const by = minY + style.badgeOffset;
+    tracePillRect(ctx, bx, by, badgeWidth, badgeHeight, style.badgeCornerRadius);
+    ctx.fillStyle = style.tertiary;
+    ctx.globalAlpha = 1;
+    ctx.fill();
+    ctx.strokeStyle = style.halo;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = style.halo;
+    ctx.fillText(marker.label, bx + style.badgePadding, by + style.badgePadding);
+  }
+}
+
 function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
   if (!Array.isArray(pulls) || pulls.length === 0) {
     return;
@@ -284,6 +359,21 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
 
   ctx.save();
   for (const pull of pulls) {
+    if (pull.shape === "path") {
+      drawAreaPathOnCanvas(ctx, pull, width, height, {
+        tertiary: amber,
+        halo: secondary,
+        haloWidth,
+        strokeWidth,
+        dashOn,
+        dashOff,
+        badgeFontSize,
+        badgePadding,
+        badgeOffset,
+        badgeCornerRadius,
+      });
+      continue;
+    }
     const cx = ((pull.xPct + pull.widthPct / 2) / 100) * width;
     const cy = ((pull.yPct + pull.heightPct / 2) / 100) * height;
     const rx = (pull.widthPct / 200) * width;
@@ -376,6 +466,24 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
 
   ctx.save();
   for (const area of areas) {
+    if (area.shape === "path") {
+      drawAreaPathOnCanvas(ctx, area, width, height, {
+        tertiary: green,
+        halo: secondary,
+        haloWidth,
+        strokeWidth,
+        // Strong Area uses a SOLID stroke (no dashes) in the editor
+        // — same here. drawAreaPathOnCanvas accepts `dashOn = 0`
+        // to mean "no dash".
+        dashOn: 0,
+        dashOff: 0,
+        badgeFontSize,
+        badgePadding,
+        badgeOffset,
+        badgeCornerRadius,
+      });
+      continue;
+    }
     const cx = ((area.xPct + area.widthPct / 2) / 100) * width;
     const cy = ((area.yPct + area.heightPct / 2) / 100) * height;
     const rx = (area.widthPct / 200) * width;

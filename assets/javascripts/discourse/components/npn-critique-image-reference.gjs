@@ -160,6 +160,7 @@ export default class NpnCritiqueImageReference extends Component {
         cropSelected: this.args.cropSelected,
         selectedEyePathId: this.args.selectedEyePathId,
         visualMode: this.args.visualMode,
+        areaShapeMode: this.args.areaShapeMode,
         aspectRatio: this.args.cropAspectRatio,
         pinMoveEnabled: this.args.pinMoveEnabled,
         onAddPin: (xPct, yPct) => this.args.onImageClick?.(xPct, yPct),
@@ -183,6 +184,8 @@ export default class NpnCritiqueImageReference extends Component {
         attentionPullEditEnabled: this.args.attentionPullEditEnabled,
         onAddAttentionPull: (xPct, yPct, widthPct, heightPct) =>
           this.args.onAddAttentionPull?.(xPct, yPct, widthPct, heightPct),
+        onAddAttentionPullPath: (points) =>
+          this.args.onAddAttentionPullPath?.(points),
         onSelectAttentionPull: (id) =>
           this.args.onSelectAttentionPull?.(id),
         onUpdateAttentionPull: (id, xPct, yPct, widthPct, heightPct) =>
@@ -198,6 +201,8 @@ export default class NpnCritiqueImageReference extends Component {
         strongAreaEditEnabled: this.args.strongAreaEditEnabled,
         onAddStrongArea: (xPct, yPct, widthPct, heightPct) =>
           this.args.onAddStrongArea?.(xPct, yPct, widthPct, heightPct),
+        onAddStrongAreaPath: (points) =>
+          this.args.onAddStrongAreaPath?.(points),
         onSelectStrongArea: (id) => this.args.onSelectStrongArea?.(id),
         onUpdateStrongArea: (id, xPct, yPct, widthPct, heightPct) =>
           this.args.onUpdateStrongArea?.(

@@ -2005,6 +2005,51 @@
   min-height: 2.4em;
 }
 
+// Oval / Draw Area sub-toggle for Attention + Strong Area. Pill
+// buttons matching the existing version-selector / view-toggle
+// visual language so the workspace reads consistently.
+.npn-critique-reply-modal__area-shape-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  padding: 0.15em 0.3em 0.15em 0.45em;
+  border-radius: 999px;
+  background: var(--primary-very-low);
+  border: 1px solid var(--primary-low);
+  flex: 0 0 auto;
+}
+
+.npn-critique-reply-modal__area-shape-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25em 0.7em;
+  background: transparent;
+  color: var(--primary-medium);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+
+  &:hover {
+    color: var(--tertiary);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--tertiary);
+    outline-offset: 2px;
+  }
+  &.is-selected {
+    background: var(--secondary);
+    color: var(--tertiary);
+    border-color: var(--primary-low-mid);
+    font-weight: 600;
+  }
+}
+
 // Empty-state hint shown in the secondary toolbar before the user
 // creates the first annotation of the active tool. Reads as a
 // quiet caption (muted, italic) so it doesn't compete with the

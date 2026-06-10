@@ -275,6 +275,14 @@ en:
       visual_notes:
         # Toolbar group + numbered-notes (pins)
         toolbar_label: "Visual annotation tools"
+        # Area-shape sub-toggle. Shown only while Attention or Strong
+        # Area is the active tool. Default "Oval" preserves the
+        # long-standing behaviour; "Draw Area" is the experimental
+        # closed-polyline variant.
+        area_shape:
+          label: "Area shape"
+          oval: "Oval"
+          draw_area: "Draw Area"
         add: "Add visual notes"
         # User-facing toolbar label shortened to "Notes" (the toolbar
         # is growing — 7 tools — so the longer "Numbered notes" only

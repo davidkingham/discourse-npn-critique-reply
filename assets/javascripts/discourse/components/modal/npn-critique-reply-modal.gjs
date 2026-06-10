@@ -21,7 +21,7 @@ import TextareaTextManipulation, {
 import userSearch from "discourse/lib/user-search";
 import Composer from "discourse/models/composer";
 import Draft from "discourse/models/draft";
-import { and, eq } from "discourse/truth-helpers";
+import { and, eq, or } from "discourse/truth-helpers";
 import { i18n } from "discourse-i18n";
 import NpnCritiqueImageReference from "../npn-critique-image-reference";
 import {
@@ -406,6 +406,17 @@ export default class NpnCritiqueReplyModal extends Component {
   // automatically resizes the stage and re-positions every
   // percent-based annotation. No explicit refit call needed.
   @tracked visualFocusMode = false;
+
+  // -- Area shape sub-mode (Oval vs Draw Area) -------------------------
+  //
+  // Experimental "Draw Area" variant for Attention and Strong Area:
+  // instead of drag-rectangle → ellipse, the user loosely outlines
+  // the region and the system smooths/closes the shape. Shared sub-
+  // mode applies to BOTH tools — picking Draw Area while in
+  // Attention keeps it selected when the user toggles to Strong
+  // Area and vice versa. Default "oval" matches the existing
+  // behaviour, so existing users see no change unless they opt in.
+  @tracked areaShapeMode = "oval";
 
   // -- Photographer's Notes panel state --------------------------------
   //
@@ -2659,6 +2670,80 @@ export default class NpnCritiqueReplyModal extends Component {
   // attention pull of the session, inserts a single textarea starter
   // — never re-inserted for additional markers.
   @action
+  setAreaShapeMode(mode) {
+    if (mode !== "oval" && mode !== "path") {
+      return;
+    }
+    this.areaShapeMode = mode;
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] area-shape-mode", { mode });
+    }
+  }
+
+  // Path-shape commit for Attention. The Konva stage samples + DP-
+  // simplifies during drag and hands us the trimmed point array on
+  // release. Geometry stored alongside the existing ellipse pulls;
+  // a `shape: "path"` discriminator marks the new variant so the
+  // renderer + exporter + server normalizer can branch correctly.
+  @action
+  addAttentionPullPath(points) {
+    if (this.visualMode !== "attention_pull") {
+      return;
+    }
+    if (this.attentionPullsAtMax) {
+      return;
+    }
+    if (!Array.isArray(points) || points.length < 4) {
+      return;
+    }
+    if (this.pendingAttentionPullPopover) {
+      this.pendingAttentionPullPopover = null;
+      this.pendingAttentionPullPopoverText = "";
+    }
+    this._attentionPullIdCounter += 1;
+    const id = `attention_pull_${this._attentionPullIdCounter}`;
+    const label = nextAttentionPullLabel(
+      this.attentionPulls.map((p) => p.label)
+    );
+    // Bounding box for popover anchoring + note placement
+    const xs = points.map((p) => p.xPct);
+    const ys = points.map((p) => p.yPct);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    const newPull = {
+      id,
+      label,
+      shape: "path",
+      points: points.map((p) => ({ xPct: p.xPct, yPct: p.yPct })),
+    };
+    this.attentionPulls = [...this.attentionPulls, newPull];
+    this.selectedAttentionPullId = id;
+    this.selectedPinNumber = null;
+    this.cropSelected = false;
+    this.selectedEyePathId = null;
+
+    this.pendingAttentionPullPopover = {
+      id,
+      anchorXPct: (minX + maxX) / 2,
+      anchorYPct: (minY + maxY) / 2,
+    };
+    this.pendingAttentionPullPopoverText = "";
+
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] add-attention-pull-path", {
+        topicId: this.topic?.id,
+        id,
+        pointCount: newPull.points.length,
+      });
+    }
+  }
+
+  @action
   addAttentionPull(xPct, yPct, widthPct, heightPct) {
     if (this.visualMode !== "attention_pull") {
       return;
@@ -2876,6 +2961,62 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   // ---- Strong Area ----------------------------------------------------
+
+  // Twin of addAttentionPullPath — same shape, different kind/label.
+  @action
+  addStrongAreaPath(points) {
+    if (this.visualMode !== "strong_area") {
+      return;
+    }
+    if (this.strongAreasAtMax) {
+      return;
+    }
+    if (!Array.isArray(points) || points.length < 4) {
+      return;
+    }
+    if (this.pendingStrongAreaPopover) {
+      this.pendingStrongAreaPopover = null;
+      this.pendingStrongAreaPopoverText = "";
+    }
+    this._strongAreaIdCounter += 1;
+    const id = `strong_area_${this._strongAreaIdCounter}`;
+    const label = nextStrongAreaLabel(this.strongAreas.map((s) => s.label));
+    const xs = points.map((p) => p.xPct);
+    const ys = points.map((p) => p.yPct);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    const newArea = {
+      id,
+      label,
+      shape: "path",
+      points: points.map((p) => ({ xPct: p.xPct, yPct: p.yPct })),
+    };
+    this.strongAreas = [...this.strongAreas, newArea];
+    this.selectedStrongAreaId = id;
+    this.selectedPinNumber = null;
+    this.cropSelected = false;
+    this.selectedEyePathId = null;
+    this.selectedAttentionPullId = null;
+
+    this.pendingStrongAreaPopover = {
+      id,
+      anchorXPct: (minX + maxX) / 2,
+      anchorYPct: (minY + maxY) / 2,
+    };
+    this.pendingStrongAreaPopoverText = "";
+
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] add-strong-area-path", {
+        topicId: this.topic?.id,
+        id,
+        pointCount: newArea.points.length,
+      });
+    }
+  }
 
   // Twin of addAttentionPull — same shape, different kind/label
   // prefix/starter copy.
@@ -5347,6 +5488,52 @@ export default class NpnCritiqueReplyModal extends Component {
                       {{/if}}
                     {{/if}}
 
+                    {{! Oval / Draw Area shape sub-toggle. Visible
+                        whenever Attention or Strong Area is the
+                        active tool. State is shared across both
+                        tools (areaShapeMode). Default "oval"
+                        matches the long-standing behaviour. }}
+                    {{#if (or this.attentionPullMode this.strongAreaMode)}}
+                      <div
+                        class="npn-critique-reply-modal__area-shape-toggle"
+                        role="group"
+                        aria-label={{i18n
+                          "npn_critique_reply.visual_notes.area_shape.label"
+                        }}
+                      >
+                        <button
+                          type="button"
+                          class="npn-critique-reply-modal__area-shape-toggle-button
+                            {{if (eq this.areaShapeMode 'oval') 'is-selected'}}"
+                          aria-pressed={{if
+                            (eq this.areaShapeMode "oval")
+                            "true"
+                            "false"
+                          }}
+                          {{on "click" (fn this.setAreaShapeMode "oval")}}
+                        >
+                          {{i18n
+                            "npn_critique_reply.visual_notes.area_shape.oval"
+                          }}
+                        </button>
+                        <button
+                          type="button"
+                          class="npn-critique-reply-modal__area-shape-toggle-button
+                            {{if (eq this.areaShapeMode 'path') 'is-selected'}}"
+                          aria-pressed={{if
+                            (eq this.areaShapeMode "path")
+                            "true"
+                            "false"
+                          }}
+                          {{on "click" (fn this.setAreaShapeMode "path")}}
+                        >
+                          {{i18n
+                            "npn_critique_reply.visual_notes.area_shape.draw_area"
+                          }}
+                        </button>
+                      </div>
+                    {{/if}}
+
                     {{! Attention-pull mode. }}
                     {{#if this.attentionPullMode}}
                       {{#if this.attentionPulls.length}}
@@ -5485,6 +5672,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @pins={{this.notes}}
                 @crop={{this.crop}}
                 @visualMode={{this.visualMode}}
+                @areaShapeMode={{this.areaShapeMode}}
                 @selectedNumber={{this.selectedPinNumber}}
                 @cropSelected={{this.cropSelected}}
                 @onImageClick={{this.addPin}}
@@ -5509,6 +5697,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @selectedAttentionPullId={{this.selectedAttentionPullId}}
                 @attentionPullEditEnabled={{this.attentionPullEditEnabled}}
                 @onAddAttentionPull={{this.addAttentionPull}}
+                @onAddAttentionPullPath={{this.addAttentionPullPath}}
                 @onSelectAttentionPull={{this.selectAttentionPull}}
                 @onUpdateAttentionPull={{this.updateAttentionPull}}
                 @pendingAttentionPullPopover={{this.pendingAttentionPullPopover}}
@@ -5520,6 +5709,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @selectedStrongAreaId={{this.selectedStrongAreaId}}
                 @strongAreaEditEnabled={{this.strongAreaEditEnabled}}
                 @onAddStrongArea={{this.addStrongArea}}
+                @onAddStrongAreaPath={{this.addStrongAreaPath}}
                 @onSelectStrongArea={{this.selectStrongArea}}
                 @onUpdateStrongArea={{this.updateStrongArea}}
                 @pendingStrongAreaPopover={{this.pendingStrongAreaPopover}}

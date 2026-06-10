@@ -24,6 +24,17 @@ module DiscourseNpnCritiqueReply
     # smooth-looking curve. Old client payloads stayed under 10, so
     # the bump is compatible in both directions.
     MAX_EYE_PATH_POINTS = 40
+    # Closed-area "Draw Area" path variant for attention_pull /
+    # strong_area. Client samples + simplifies (Douglas-Peucker) so
+    # paths arrive trimmed; this cap is a defensive backstop. Min
+    # points enforces enough structure to render a shape (4 points
+    # = a triangle that auto-closes to a quad-ish blob).
+    MAX_AREA_PATH_POINTS = 50
+    MIN_AREA_PATH_POINTS = 4
+    # Minimum bounding-box dimension for a path-shape area marker.
+    # If a drag's bounding box is below this threshold along BOTH
+    # axes, treat it as an accidental tap rather than a real shape.
+    MIN_AREA_PATH_DIM_PCT = 3.0
     MAX_ATTENTION_PULL_COUNT = 8
     MAX_STRONG_AREA_COUNT = 8
     MAX_DIRECTION_ARROW_COUNT = 8
@@ -146,12 +157,12 @@ module DiscourseNpnCritiqueReply
             normalize_eye_path(entry).tap { |n| eye_path_count += 1 if n }
           when "attention_pull"
             next if attention_pull_count >= MAX_ATTENTION_PULL_COUNT
-            normalize_shape(entry, kind: "attention_pull").tap do |n|
+            normalize_area(entry, kind: "attention_pull").tap do |n|
               attention_pull_count += 1 if n
             end
           when "strong_area"
             next if strong_area_count >= MAX_STRONG_AREA_COUNT
-            normalize_shape(entry, kind: "strong_area").tap do |n|
+            normalize_area(entry, kind: "strong_area").tap do |n|
               strong_area_count += 1 if n
             end
           when "direction_arrow"
@@ -199,6 +210,63 @@ module DiscourseNpnCritiqueReply
       return nil if x.nil? || y.nil? || w.nil? || h.nil?
       return nil if w <= 0 || h <= 0
       { "id" => id, "kind" => kind, "x_pct" => x, "y_pct" => y, "width_pct" => w, "height_pct" => h }
+    end
+
+    # Branch on the `shape` field — "path" routes to the Draw Area
+    # variant (a closed polyline marker), anything else falls back to
+    # the rect-based ellipse normalizer that's existed since v1.
+    # Existing ellipse annotations (with or without an explicit
+    # `shape: "ellipse"`) remain untouched.
+    def normalize_area(entry, kind:)
+      shape = (entry["shape"] || entry[:shape]).to_s
+      if shape == "path"
+        normalize_path_area(entry, kind: kind)
+      else
+        normalize_shape(entry, kind: kind)
+      end
+    end
+
+    # Closed-area path marker for Attention / Strong Area. Points
+    # array is sampled+simplified client-side; we re-validate here
+    # because nothing from a network payload is trustworthy.
+    def normalize_path_area(entry, kind:)
+      raw_points = entry["points"] || entry[:points]
+      return nil unless raw_points.is_a?(Array)
+
+      points = []
+      raw_points.each do |p|
+        break if points.length >= MAX_AREA_PATH_POINTS
+        next unless p.is_a?(Hash)
+        x = clamp_pct(p["x_pct"] || p[:x_pct])
+        y = clamp_pct(p["y_pct"] || p[:y_pct])
+        next if x.nil? || y.nil?
+        points << { "x_pct" => x, "y_pct" => y }
+      end
+      return nil if points.length < MIN_AREA_PATH_POINTS
+
+      # Bounding-box sanity check. If the box is below threshold on
+      # BOTH axes, the user probably tapped/jittered rather than
+      # drew a real shape — drop it.
+      xs = points.map { |pt| pt["x_pct"] }
+      ys = points.map { |pt| pt["y_pct"] }
+      width_pct = xs.max - xs.min
+      height_pct = ys.max - ys.min
+      if width_pct < MIN_AREA_PATH_DIM_PCT && height_pct < MIN_AREA_PATH_DIM_PCT
+        return nil
+      end
+
+      id = normalize_string(entry["id"] || entry[:id]) || "#{kind}_#{rand(1_000_000)}"
+      out = {
+        "id" => id,
+        "kind" => kind,
+        "shape" => "path",
+        "points" => points,
+      }
+      label = normalize_string(entry["label"] || entry[:label])
+      out["label"] = label if label
+      note = normalize_string(entry["note"] || entry[:note])
+      out["note"] = note if note
+      out
     end
 
     def normalize_shape(entry, kind:)
