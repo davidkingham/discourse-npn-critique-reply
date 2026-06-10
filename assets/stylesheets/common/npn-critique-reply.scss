@@ -621,26 +621,18 @@
     gap: 1.5em;
   }
 
-  // Processing Example row — sticky at the bottom of the viewport
-  // so it stays anchored to the left-side workflow as the writing
-  // column scrolls. `align-self: end` keeps it visually at the
-  // bottom of its grid cell; sticky-bottom keeps it pinned to the
-  // viewport edge while the modal body scrolls. Solid background
-  // so write-col text doesn't show through.
+  // Processing Example row — natural flow below image-col in grid
+  // row 2. It scrolls with the modal body, so as the user scrolls
+  // down past the image the PE section comes into view normally.
+  //
+  // Earlier iterations made it sticky-bottom so it would stay
+  // pinned to the viewport edge, but that created an edge case
+  // where the sticky panel covered the bottom of the (also-sticky)
+  // image. Letting PE flow naturally is the simpler model: the
+  // image stays at top (still sticky), PE shows up when the user
+  // scrolls to find it.
   &__processing-example-row {
     min-width: 0;
-    position: sticky;
-    bottom: 0;
-    align-self: end;
-    max-height: 22vh;
-    overflow-y: auto;
-    background: var(--secondary);
-    padding: 0.4em 0.6em;
-    border: 1px solid var(--primary-low);
-    border-radius: var(--d-border-radius, 4px);
-    // Above write-col so its prose doesn't bleed through the
-    // padded edges while scrolling.
-    z-index: 1;
   }
 
   &__intro {
