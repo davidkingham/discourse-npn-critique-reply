@@ -1327,17 +1327,29 @@
     overflow: hidden;
   }
 
-  // In-flow IMG so the frame's height tracks the image exactly.
-  // `width: 100%; height: auto` preserves the natural aspect ratio
-  // for landscapes. The `max-height` cap protects portraits from
-  // dominating the column; `object-fit: contain` letterboxes
-  // INSIDE the IMG box only in that capped portrait case.
+  // In-flow IMG sized purely by max-width / max-height caps. With
+  // both width and height set to `auto`, the IMG element renders
+  // at its natural aspect ratio scaled to fit the smaller of
+  // (column width, viewport-height cap) — so the IMG ELEMENT box
+  // ALWAYS matches the visible pixel image exactly, with no
+  // letterboxing inside the element.
+  //
+  // This matters for annotation alignment: the absolutely-
+  // positioned Konva overlay covers the frame, which hugs the
+  // IMG element, which (with this rule) equals the pixel image.
+  // Percent-based annotation coordinates therefore land where the
+  // user clicked — not in an empty letterbox strip.
+  //
+  // Centered horizontally so a natural-size image (smaller than
+  // the column, e.g. in Visual Focus Mode on a wide modal) sits
+  // in the middle of the image column rather than pinned left.
   &__img {
     display: block;
-    width: 100%;
-    height: auto;
+    max-width: 100%;
     max-height: calc(80vh - 4em);
-    object-fit: contain;
+    width: auto;
+    height: auto;
+    margin: 0 auto;
     background: var(--secondary);
   }
 
