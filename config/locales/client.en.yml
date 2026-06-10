@@ -105,6 +105,11 @@ en:
         # "Revision" is reserved for the photographer's own next image.
         processing_example:
           section_title: "Processing Example"
+          # Compact label for the header quick-access trigger that opens
+          # the popover. Two variants so the action subtly reflects
+          # whether an example has been uploaded without being loud.
+          menu_trigger: "Processing Example"
+          menu_trigger_uploaded: "Processing Example ✓"
           helper: "Download the reference image if you want to demonstrate a processing idea."
           download: "Download Reference Image"
           upload: "Upload Processing Example"

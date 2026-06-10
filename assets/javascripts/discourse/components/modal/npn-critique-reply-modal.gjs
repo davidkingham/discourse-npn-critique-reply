@@ -406,6 +406,16 @@ export default class NpnCritiqueReplyModal extends Component {
   // percent-based annotation. No explicit refit call needed.
   @tracked visualFocusMode = false;
 
+  // -- Processing Example header popover -------------------------------
+  //
+  // A small dropdown anchored to the "Processing Example" action in
+  // the image-col header. Opens to show Download Reference Image +
+  // Upload Processing Example (or Replace/Remove when an upload
+  // exists) so the user can reach those actions without scrolling
+  // past the image to the section below.
+  @tracked processingExampleMenuOpen = false;
+  _processingExampleMenuOutsideHandler = null;
+
   // Which image the LARGE image-area shows. Independent of the
   // visual-annotation selectedVersionKey — switching the large view
   // to "processing_example" doesn't change which reference-image
@@ -461,6 +471,16 @@ export default class NpnCritiqueReplyModal extends Component {
     // manually deregister listeners here.
     this.#textarea = null;
     this.#textManipulation = null;
+    // Drop the Processing Example menu click-outside listener if it
+    // happens to still be attached when the modal closes.
+    if (this._processingExampleMenuOutsideHandler) {
+      document.removeEventListener(
+        "mousedown",
+        this._processingExampleMenuOutsideHandler,
+        true
+      );
+      this._processingExampleMenuOutsideHandler = null;
+    }
   }
 
   // -- Textarea wiring: @mention autocomplete + Insert link helper -------
@@ -1407,6 +1427,76 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
+  @action
+  toggleProcessingExampleMenu() {
+    if (this.processingExampleMenuOpen) {
+      this._closeProcessingExampleMenu();
+    } else {
+      this._openProcessingExampleMenu();
+    }
+  }
+
+  _openProcessingExampleMenu() {
+    this.processingExampleMenuOpen = true;
+    // Defer wiring the click-outside listener so the same click that
+    // opened the menu doesn't immediately re-close it.
+    requestAnimationFrame(() => {
+      if (this._destroyed || !this.processingExampleMenuOpen) {
+        return;
+      }
+      this._processingExampleMenuOutsideHandler = (event) => {
+        const root = document.getElementById(
+          "npn-critique-reply-processing-example-menu"
+        );
+        const trigger = document.getElementById(
+          "npn-critique-reply-processing-example-trigger"
+        );
+        if (!root) {
+          return;
+        }
+        if (root.contains(event.target) || trigger?.contains(event.target)) {
+          return;
+        }
+        this._closeProcessingExampleMenu();
+      };
+      document.addEventListener(
+        "mousedown",
+        this._processingExampleMenuOutsideHandler,
+        true
+      );
+    });
+  }
+
+  _closeProcessingExampleMenu() {
+    this.processingExampleMenuOpen = false;
+    if (this._processingExampleMenuOutsideHandler) {
+      document.removeEventListener(
+        "mousedown",
+        this._processingExampleMenuOutsideHandler,
+        true
+      );
+      this._processingExampleMenuOutsideHandler = null;
+    }
+  }
+
+  @action
+  closeProcessingExampleMenu() {
+    this._closeProcessingExampleMenu();
+  }
+
+  @action
+  onProcessingExampleMenuKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      this._closeProcessingExampleMenu();
+      // Return focus to the trigger button so keyboard users land
+      // back on the control that opened the menu.
+      document
+        .getElementById("npn-critique-reply-processing-example-trigger")
+        ?.focus?.();
+    }
+  }
+
   // Opens the hidden file input. The handler below reads the selected
   // file, uploads via Discourse's standard endpoint, and stores the
   // resulting upload reference in `this.processingExample`.
@@ -1471,6 +1561,11 @@ export default class NpnCritiqueReplyModal extends Component {
       // a fresh / replacement upload so the Replace and Remove
       // actions are reachable without another tap.
       this.mobileProcessingExampleOpen = true;
+      // Close the header quick-access menu so the user immediately
+      // sees the just-uploaded example at large size instead of the
+      // menu covering it. The below-image section still surfaces
+      // the uploaded state.
+      this._closeProcessingExampleMenu();
       this._scheduleDraftSaveAfterProcessingExampleChange();
     } catch (e) {
       if (this._destroyed) {
@@ -1502,6 +1597,9 @@ export default class NpnCritiqueReplyModal extends Component {
     // Switch the large area back to the reference image — there's
     // nothing else to show, and visual tools become relevant again.
     this.largeImageView = LARGE_IMAGE_VIEW_REFERENCE;
+    // Close the header menu so the user immediately sees the
+    // restored reference image.
+    this._closeProcessingExampleMenu();
     this._scheduleDraftSaveAfterProcessingExampleChange();
   }
 
@@ -4390,26 +4488,153 @@ export default class NpnCritiqueReplyModal extends Component {
                 >
                   {{i18n "npn_critique_reply.modal.reference_image"}}
                 </h3>
-                <DButton
-                  class="btn-flat btn-small npn-critique-reply-modal__visual-focus-toggle"
-                  @action={{this.toggleVisualFocusMode}}
-                  @icon={{if
-                    this.visualFocusMode
-                    "down-left-and-up-right-to-center"
-                    "up-right-and-down-left-from-center"
-                  }}
-                  @label={{if
-                    this.visualFocusMode
-                    "npn_critique_reply.modal.visual_focus.exit"
-                    "npn_critique_reply.modal.visual_focus.enter"
-                  }}
-                  @title={{if
-                    this.visualFocusMode
-                    "npn_critique_reply.modal.visual_focus.exit_title"
-                    "npn_critique_reply.modal.visual_focus.enter_title"
-                  }}
-                  aria-pressed={{if this.visualFocusMode "true" "false"}}
-                />
+
+                <div
+                  class="npn-critique-reply-modal__image-col-header-actions"
+                >
+                  {{! Processing Example quick-access. Same affordance
+                      lives in the below-image panel; this trigger
+                      lets the user reach Download / Upload (or
+                      Replace / Remove) without scrolling past the
+                      image on tall viewports. Gated by the same
+                      eligibility getter the below-image section
+                      uses. }}
+                  {{#if this.processingExampleAvailable}}
+                    <div
+                      class="npn-critique-reply-modal__processing-example-menu-wrapper"
+                    >
+                      <DButton
+                        @id="npn-critique-reply-processing-example-trigger"
+                        class="btn-flat btn-small npn-critique-reply-modal__processing-example-trigger
+                          {{if this.processingExampleMenuOpen 'is-open'}}"
+                        @action={{this.toggleProcessingExampleMenu}}
+                        @icon="image"
+                        @label={{if
+                          this.hasProcessingExample
+                          "npn_critique_reply.modal.processing_example.menu_trigger_uploaded"
+                          "npn_critique_reply.modal.processing_example.menu_trigger"
+                        }}
+                        aria-haspopup="true"
+                        aria-expanded={{if
+                          this.processingExampleMenuOpen
+                          "true"
+                          "false"
+                        }}
+                        aria-controls="npn-critique-reply-processing-example-menu"
+                      />
+
+                      {{#if this.processingExampleMenuOpen}}
+                        <div
+                          id="npn-critique-reply-processing-example-menu"
+                          class="npn-critique-reply-modal__processing-example-menu"
+                          role="dialog"
+                          aria-labelledby="npn-critique-reply-processing-example-menu-title"
+                          {{on "keydown" this.onProcessingExampleMenuKeydown}}
+                        >
+                          <h4
+                            id="npn-critique-reply-processing-example-menu-title"
+                            class="npn-critique-reply-modal__processing-example-menu-title"
+                          >
+                            {{i18n
+                              "npn_critique_reply.modal.processing_example.section_title"
+                            }}
+                          </h4>
+
+                          {{#if this.hasProcessingExample}}
+                            <p
+                              class="npn-critique-reply-modal__processing-example-menu-status"
+                            >
+                              {{i18n
+                                "npn_critique_reply.modal.processing_example.uploaded"
+                              }}
+                            </p>
+                            {{#if this.processingExample.filename}}
+                              <p
+                                class="npn-critique-reply-modal__processing-example-menu-filename"
+                                title={{this.processingExample.filename}}
+                              >
+                                {{this.processingExample.filename}}
+                              </p>
+                            {{/if}}
+                            <div
+                              class="npn-critique-reply-modal__processing-example-menu-actions"
+                            >
+                              <DButton
+                                class="btn-default btn-small"
+                                @action={{this.triggerProcessingExampleFilePicker}}
+                                @icon="rotate"
+                                @label="npn_critique_reply.modal.processing_example.replace"
+                                @disabled={{this.processingExampleUploading}}
+                              />
+                              <DButton
+                                class="btn-flat btn-small"
+                                @action={{this.removeProcessingExample}}
+                                @icon="trash-can"
+                                @label="npn_critique_reply.modal.processing_example.remove"
+                                @disabled={{this.processingExampleUploading}}
+                              />
+                            </div>
+                          {{else}}
+                            <p
+                              class="npn-critique-reply-modal__processing-example-menu-help"
+                            >
+                              {{i18n
+                                "npn_critique_reply.modal.processing_example.helper"
+                              }}
+                            </p>
+                            <div
+                              class="npn-critique-reply-modal__processing-example-menu-actions"
+                            >
+                              <a
+                                class="btn btn-default btn-small"
+                                href={{this.processingExampleSourceUrl}}
+                                download={{this.processingExampleSourceDownloadFilename}}
+                                rel="noopener"
+                                target="_blank"
+                              >
+                                {{dIcon "download"}}
+                                <span>
+                                  {{i18n
+                                    "npn_critique_reply.modal.processing_example.download"
+                                  }}
+                                </span>
+                              </a>
+                              <DButton
+                                class="btn-default btn-small"
+                                @action={{this.triggerProcessingExampleFilePicker}}
+                                @icon="upload"
+                                @label="npn_critique_reply.modal.processing_example.upload"
+                                @disabled={{this.processingExampleUploading}}
+                                @isLoading={{this.processingExampleUploading}}
+                              />
+                            </div>
+                          {{/if}}
+                        </div>
+                      {{/if}}
+                    </div>
+                  {{/if}}
+
+                  <DButton
+                    class="btn-flat btn-small npn-critique-reply-modal__visual-focus-toggle"
+                    @action={{this.toggleVisualFocusMode}}
+                    @icon={{if
+                      this.visualFocusMode
+                      "down-left-and-up-right-to-center"
+                      "up-right-and-down-left-from-center"
+                    }}
+                    @label={{if
+                      this.visualFocusMode
+                      "npn_critique_reply.modal.visual_focus.exit"
+                      "npn_critique_reply.modal.visual_focus.enter"
+                    }}
+                    @title={{if
+                      this.visualFocusMode
+                      "npn_critique_reply.modal.visual_focus.exit_title"
+                      "npn_critique_reply.modal.visual_focus.enter_title"
+                    }}
+                    aria-pressed={{if this.visualFocusMode "true" "false"}}
+                  />
+                </div>
               </div>
 
               {{#if this.hasMultipleVersions}}

@@ -165,15 +165,138 @@
     min-width: 0;
   }
 
-  // The "Larger Image" / "Return to Writing" button. Quiet button
-  // (btn-flat) so it reads as a layout affordance rather than a
-  // peer of the visual annotation tools. aria-pressed mirrors the
-  // active state for screen readers.
+  // Right-side action group: Processing Example quick-access menu
+  // trigger + the Larger Image / Return to Writing toggle. Both are
+  // quiet `btn-flat` buttons so they read as layout affordances,
+  // not peers of the visual annotation tools.
+  &__image-col-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25em;
+    flex: 0 0 auto;
+  }
+
+  // The "Larger Image" / "Return to Writing" button. aria-pressed
+  // mirrors the active state for screen readers.
   &__visual-focus-toggle.npn-critique-reply-modal__visual-focus-toggle {
     flex: 0 0 auto;
     white-space: nowrap;
     .d-icon {
       margin-right: 0.4em;
+    }
+  }
+
+  // -- Processing Example header popover --------------------------------
+  //
+  // Quick-access trigger + anchored popover. The wrapper holds the
+  // trigger button (always visible) and the popover (conditionally
+  // rendered). Popover positions absolutely below the trigger,
+  // right-aligned so it stays inside the modal viewport on narrow
+  // image columns. The below-image Processing Example section is
+  // retained as the detailed status surface — this popover is for
+  // quick reach without scrolling.
+  &__processing-example-menu-wrapper {
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  &__processing-example-trigger.npn-critique-reply-modal__processing-example-trigger {
+    white-space: nowrap;
+    .d-icon {
+      margin-right: 0.4em;
+    }
+    &.is-open {
+      background: var(--tertiary-low);
+      color: var(--tertiary);
+    }
+  }
+
+  &__processing-example-menu {
+    position: absolute;
+    top: calc(100% + 0.3em);
+    right: 0;
+    z-index: 5;
+    min-width: 16em;
+    max-width: 22em;
+    padding: 0.85em 1em 0.95em;
+    background: var(--secondary);
+    color: var(--primary);
+    border: 1px solid var(--primary-low-mid);
+    border-radius: var(--d-border-radius, 4px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55em;
+    text-align: left;
+    // Small triangular caret pointing at the trigger. Drawn with
+    // border tricks so it stays a single solid color matching the
+    // popover background, with the matching border edge handled by
+    // a second pseudo-element.
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      bottom: 100%;
+      right: 1em;
+      width: 0;
+      height: 0;
+      border-style: solid;
+    }
+    &::before {
+      border-width: 0 7px 7px 7px;
+      border-color: transparent transparent var(--primary-low-mid) transparent;
+    }
+    &::after {
+      border-width: 0 6px 6px 6px;
+      border-color: transparent transparent var(--secondary) transparent;
+      margin-bottom: -1px;
+      right: calc(1em + 1px);
+    }
+  }
+
+  &__processing-example-menu-title {
+    margin: 0;
+    font-size: var(--font-down-1);
+    font-weight: 600;
+    color: var(--primary-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  &__processing-example-menu-help,
+  &__processing-example-menu-status {
+    margin: 0;
+    color: var(--primary-medium);
+    font-size: var(--font-down-1);
+    line-height: 1.45;
+  }
+
+  &__processing-example-menu-status {
+    font-weight: 500;
+    color: var(--primary-high);
+  }
+
+  &__processing-example-menu-filename {
+    margin: 0;
+    font-size: var(--font-down-2, var(--font-down-1));
+    color: var(--primary-medium);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__processing-example-menu-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4em;
+    margin-top: 0.15em;
+    // Download anchor matches the adjacent DButton spacing
+    a.btn {
+      text-decoration: none;
+      .d-icon {
+        margin-right: 0.4em;
+      }
     }
   }
 
