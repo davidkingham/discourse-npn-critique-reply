@@ -52,43 +52,34 @@
 
   &__layout {
     display: grid;
-    // Image column gets a little more room since the photo is the
-    // anchor; the write column still has plenty of width for prose.
+    // Two panes: left holds image-col + processing-example-row
+    // (wrapped in __left-pane), right is the writing column.
+    // Each pane owns its scroll context so the writing area
+    // scrolls independently from the image/PE side. A fixed
+    // height makes that possible — without it, the modal body
+    // would scroll as one and PE would slide under the (sticky)
+    // image as the user scrolled long writing content.
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-    // Named areas so a third sibling (Processing Example) can sit
-    // BELOW the image column on desktop while staying part of the
-    // visually-secondary left side. On mobile, the same three
-    // siblings stack naturally in source order (image → write →
-    // example) and the user reaches the writing area without
-    // scrolling past the Processing Example workflow.
-    grid-template-areas:
-      "image write"
-      "example write";
     gap: 1.5em;
-    align-items: start;
-    // No fixed height: the modal body owns the scrollbar as it did
-    // before. Independent feel between columns is achieved by
-    // position-sticky on image-col (top) and on the Processing
-    // Example row (bottom) — see those rules below. A fixed height
-    // here forced the layout taller than the modal body on mid-size
-    // viewports, hiding the bottom row entirely.
+    align-items: stretch;
+    height: calc(85vh - 4em);
+    overflow: hidden;
   }
 
-  &__image-col {
-    grid-area: image;
-  }
-  &__write-col {
-    grid-area: write;
-  }
-  &__processing-example-row {
-    grid-area: example;
+  // Left pane wraps image-col + processing-example-row in a single
+  // scroll context. The wrapper itself is the scroll container; the
+  // children below are natural-flow content inside.
+  &__left-pane {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1em;
+    overflow-y: auto;
+    max-height: 100%;
   }
 
   &.npn-critique-reply-modal--no-image &__layout {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "write"
-      "example";
   }
 
   // -- Visual Focus Mode --------------------------------------------------
@@ -108,7 +99,6 @@
   // `.npn-critique-reply-modal--no-image` above.
   &.npn-critique-reply-modal--visual-focus &__layout {
     grid-template-columns: 1fr;
-    grid-template-areas: "image";
   }
 
   &.npn-critique-reply-modal--visual-focus &__write-col,
@@ -116,11 +106,11 @@
     display: none;
   }
 
-  // The image column is the entire workspace now — drop the sticky
-  // / max-height behavior tuned for the two-pane split.
-  &.npn-critique-reply-modal--visual-focus &__image-col {
-    position: static;
-    max-height: none;
+  // Image-col + left-pane fill the layout in focus mode. The
+  // wrapper drops its own scroll constraint so the image can
+  // breathe at the bigger max-height (see below).
+  &.npn-critique-reply-modal--visual-focus &__left-pane {
+    max-height: 100%;
   }
 
   // Let the image grow into the freed vertical space. With the
@@ -144,27 +134,16 @@
     border: 1px solid var(--primary-low);
     border-radius: var(--d-border-radius, 4px);
 
-    // Sticky top so the image stays anchored at the top of the modal
-    // viewport while the user scrolls the writing area on the right.
-    // The Processing Example row uses sticky-bottom (see below) so the
-    // left-side workflow elements remain visible no matter where the
-    // user is in the writing scroll.
-    //
-    // Both percentage and pixel ceilings via `min()`. The percentage
-    // tracks reasonable viewport heights; the pixel cap stops
-    // image-col from outgrowing what the modal body can hold (the
-    // sticky Processing Example row at the bottom takes ~22vh, and
-    // the modal title/footer chrome eats another ~6vh). Pixel
-    // ceiling is generous enough that on tall monitors the image
-    // is genuinely large; Visual Focus Mode still grows it further.
-    position: sticky;
-    top: 0;
-    align-self: start;
-    max-height: min(calc(78vh - 4em), 980px);
-    overflow-y: auto;
+    // Natural flow inside the __left-pane scroll container. No
+    // sticky positioning — the pane itself owns the scroll, so when
+    // the user scrolls down past the image, processing-example
+    // naturally comes into view below. The pane's
+    // `overflow-y: auto` keeps the scroll separate from the
+    // writing column on the right.
     display: flex;
     flex-direction: column;
     gap: 0.5em;
+    flex: 0 0 auto;
   }
 
   // Header row across the top of the image column — the section
@@ -619,20 +598,20 @@
     // surfaces (intro / request / prompts / textarea) rather than a
     // worksheet of stacked rows.
     gap: 1.5em;
+    // Own scroll context — independent from the left pane. The
+    // writing area scrolls without dragging the image/PE along.
+    overflow-y: auto;
+    max-height: 100%;
+    padding-right: 0.25em;
   }
 
-  // Processing Example row — natural flow below image-col in grid
-  // row 2. It scrolls with the modal body, so as the user scrolls
-  // down past the image the PE section comes into view normally.
-  //
-  // Earlier iterations made it sticky-bottom so it would stay
-  // pinned to the viewport edge, but that created an edge case
-  // where the sticky panel covered the bottom of the (also-sticky)
-  // image. Letting PE flow naturally is the simpler model: the
-  // image stays at top (still sticky), PE shows up when the user
-  // scrolls to find it.
+  // Processing Example sits inside __left-pane below image-col.
+  // Natural flow content; the left-pane's overflow handles
+  // scrolling so the user scrolls down within the left pane to
+  // reach it.
   &__processing-example-row {
     min-width: 0;
+    flex: 0 0 auto;
   }
 
   &__intro {
@@ -1179,39 +1158,41 @@
   @media (max-width: 720px) {
     &__layout {
       grid-template-columns: 1fr;
-      // Three rows now — image / write / example — stacked in source
-      // order. The user lands on the image, scrolls to the writing
-      // area without crossing the Processing Example workflow.
-      grid-template-areas:
-        "image"
-        "write"
-        "example";
       gap: 1.25em;
+      // Mobile stack scrolls as one modal body. Undo the desktop
+      // fixed-height + per-pane overflow so column heights flow
+      // naturally and the modal body owns the scrollbar.
+      height: auto;
+      overflow: visible;
     }
 
-    &__image-col,
-    &__write-col,
-    &__processing-example-row {
+    &__left-pane,
+    &__write-col {
       overflow: visible;
       max-height: none;
+      padding-right: 0;
     }
 
-    // Undo the desktop sticky positioning on mobile — the stacked
-    // layout doesn't have a sibling to stick within, and a sticky
-    // bottom on the Processing Example row would float above the
-    // critique footer.
-    &__image-col,
-    &__processing-example-row {
-      position: static;
-      align-self: stretch;
+    &__left-pane {
+      // The left pane was a single scroll container on desktop;
+      // on mobile its children just stack inline with the rest of
+      // the modal body. Reordering pushes processing-example to the
+      // END of the modal so the user reaches the writing area
+      // first.
+      display: contents;
     }
 
     &__processing-example-row {
-      background: transparent;
-      padding: 0;
-      border: none;
-      border-radius: 0;
-      z-index: auto;
+      // After write-col in the mobile stack — the left-pane
+      // `display: contents` flattens the wrapper, and we use
+      // `order: 99` on PE to push it past write-col.
+      order: 99;
+    }
+    &__image-col {
+      order: 0;
+    }
+    &__write-col {
+      order: 50;
     }
 
     &__image-col {

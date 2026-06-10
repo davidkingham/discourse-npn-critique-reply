@@ -4362,11 +4362,21 @@ export default class NpnCritiqueReplyModal extends Component {
         {{/if}}
 
         <div class="npn-critique-reply-modal__layout">
+          {{! Left pane wraps the image column AND the Processing
+              Example row so they share a single scroll context,
+              independent from the writing pane on the right.
+              Without this wrapper, the modal-body scroll would tie
+              the two columns together: scrolling long write-col
+              content would shift the Processing Example up under
+              the (sticky) image. With the wrapper, the left and
+              right panes each get overflow:auto and scroll
+              independently. }}
           {{#if this.hasImage}}
-            <aside
-              class="npn-critique-reply-modal__image-col"
-              aria-labelledby="npn-critique-reply-image-heading"
-            >
+            <div class="npn-critique-reply-modal__left-pane">
+              <aside
+                class="npn-critique-reply-modal__image-col"
+                aria-labelledby="npn-critique-reply-image-heading"
+              >
               {{! Header row: section heading on the left, Larger
                   Image / Return to Writing toggle on the right.
                   The toggle is the entry point for Visual Focus
@@ -5329,6 +5339,177 @@ export default class NpnCritiqueReplyModal extends Component {
               {{/if}}
 
             </aside>
+
+            {{! Processing Example sits inside the left pane wrapper
+                so it shares the single scroll context with image-col
+                rather than the writing pane. The actual section
+                markup is rendered once further down (after the
+                __layout closes) and moved here via SCSS… NO — we
+                actually render it here. The conditional gate keeps
+                it out of the DOM when not eligible. The section
+                content begins below. }}
+            {{#if this.processingExampleAvailable}}
+              <section
+                class="npn-critique-reply-modal__processing-example-row
+                  npn-critique-reply-modal__processing-example
+                  {{if this.mobileProcessingExampleOpen 'is-open'}}"
+                aria-labelledby="npn-critique-reply-processing-example-heading"
+              >
+                <button
+                  type="button"
+                  class="npn-critique-reply-modal__processing-example-summary"
+                  aria-expanded={{if
+                    this.mobileProcessingExampleOpen
+                    "true"
+                    "false"
+                  }}
+                  aria-controls="npn-critique-reply-processing-example-content"
+                  {{on "click" this.toggleMobileProcessingExample}}
+                >
+                  <span
+                    class="npn-critique-reply-modal__processing-example-summary-label"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.processing_example.section_title"
+                    }}
+                  </span>
+                  {{#if this.hasProcessingExample}}
+                    <span
+                      class="npn-critique-reply-modal__processing-example-summary-status"
+                    >
+                      {{i18n
+                        "npn_critique_reply.modal.processing_example.uploaded"
+                      }}
+                    </span>
+                  {{/if}}
+                  <span
+                    class="npn-critique-reply-modal__processing-example-summary-chevron"
+                    aria-hidden="true"
+                  >
+                    {{dIcon "chevron-down"}}
+                  </span>
+                </button>
+
+                <h4
+                  id="npn-critique-reply-processing-example-heading"
+                  class="npn-critique-reply-modal__processing-example-heading"
+                >
+                  {{i18n
+                    "npn_critique_reply.modal.processing_example.section_title"
+                  }}
+                </h4>
+
+                <div
+                  id="npn-critique-reply-processing-example-content"
+                  class="npn-critique-reply-modal__processing-example-content"
+                >
+                  {{#if this.hasProcessingExample}}
+                    <div
+                      class="npn-critique-reply-modal__processing-example-preview"
+                    >
+                      <img
+                        class="npn-critique-reply-modal__processing-example-thumb"
+                        src={{this.processingExample.url}}
+                        alt={{i18n
+                          "npn_critique_reply.modal.processing_example.preview_alt"
+                        }}
+                      />
+                      <div
+                        class="npn-critique-reply-modal__processing-example-status"
+                      >
+                        <p
+                          class="npn-critique-reply-modal__processing-example-status-text"
+                        >
+                          {{i18n
+                            "npn_critique_reply.modal.processing_example.uploaded"
+                          }}
+                        </p>
+                        {{#if this.processingExample.filename}}
+                          <p
+                            class="npn-critique-reply-modal__processing-example-filename"
+                            title={{this.processingExample.filename}}
+                          >
+                            {{this.processingExample.filename}}
+                          </p>
+                        {{/if}}
+                      </div>
+                    </div>
+                    <div
+                      class="npn-critique-reply-modal__processing-example-actions"
+                    >
+                      <DButton
+                        class="btn-default btn-small npn-critique-reply-modal__processing-example-replace"
+                        @action={{this.triggerProcessingExampleFilePicker}}
+                        @icon="rotate"
+                        @label="npn_critique_reply.modal.processing_example.replace"
+                        @disabled={{this.processingExampleUploading}}
+                      />
+                      <DButton
+                        class="btn-flat btn-small npn-critique-reply-modal__processing-example-remove"
+                        @action={{this.removeProcessingExample}}
+                        @icon="trash-can"
+                        @label="npn_critique_reply.modal.processing_example.remove"
+                        @disabled={{this.processingExampleUploading}}
+                      />
+                    </div>
+                  {{else}}
+                    <p
+                      class="npn-critique-reply-modal__processing-example-help"
+                    >
+                      {{i18n
+                        "npn_critique_reply.modal.processing_example.helper"
+                      }}
+                    </p>
+                    <div
+                      class="npn-critique-reply-modal__processing-example-actions"
+                    >
+                      <a
+                        class="btn btn-default btn-small npn-critique-reply-modal__processing-example-download"
+                        href={{this.processingExampleSourceUrl}}
+                        download={{this.processingExampleSourceDownloadFilename}}
+                        rel="noopener"
+                        target="_blank"
+                      >
+                        {{dIcon "download"}}
+                        <span>
+                          {{i18n
+                            "npn_critique_reply.modal.processing_example.download"
+                          }}
+                        </span>
+                      </a>
+                      <DButton
+                        class="btn-default btn-small npn-critique-reply-modal__processing-example-upload"
+                        @action={{this.triggerProcessingExampleFilePicker}}
+                        @icon="upload"
+                        @label="npn_critique_reply.modal.processing_example.upload"
+                        @disabled={{this.processingExampleUploading}}
+                        @isLoading={{this.processingExampleUploading}}
+                      />
+                    </div>
+                  {{/if}}
+
+                  {{#if this.processingExampleError}}
+                    <p
+                      class="npn-critique-reply-modal__processing-example-error"
+                      role="alert"
+                    >
+                      {{this.processingExampleError.message}}
+                    </p>
+                  {{/if}}
+
+                  <input
+                    id="npn-critique-reply-processing-example-input"
+                    class="npn-critique-reply-modal__processing-example-input"
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    {{on "change" this.onProcessingExampleFileChange}}
+                  />
+                </div>
+              </section>
+            {{/if}}
+
+            </div>{{! end __left-pane }}
           {{/if}}
 
           <div class="npn-critique-reply-modal__write-col">
@@ -5619,181 +5800,6 @@ export default class NpnCritiqueReplyModal extends Component {
             </section>
           </div>
 
-          {{! Processing Example section. Third sibling in __layout so
-              CSS Grid places it under image-col on desktop and natural
-              source order puts it BELOW the writing area on mobile.
-              The whole section is wrapped in a mobile-only disclosure:
-              a tappable summary button is rendered always but hidden
-              on desktop via CSS, and the content underneath is gated
-              by `is-open` only at the mobile breakpoint.
-              Two content states:
-                1. No upload — helper + Download + Upload
-                2. After upload — thumbnail + Replace / Remove
-              Hidden entirely when the topic opts out, the site
-              setting is off, or there's no reference image. }}
-          {{#if this.processingExampleAvailable}}
-            <section
-              class="npn-critique-reply-modal__processing-example-row
-                npn-critique-reply-modal__processing-example
-                {{if this.mobileProcessingExampleOpen 'is-open'}}"
-              aria-labelledby="npn-critique-reply-processing-example-heading"
-            >
-              <button
-                type="button"
-                class="npn-critique-reply-modal__processing-example-summary"
-                aria-expanded={{if
-                  this.mobileProcessingExampleOpen
-                  "true"
-                  "false"
-                }}
-                aria-controls="npn-critique-reply-processing-example-content"
-                {{on "click" this.toggleMobileProcessingExample}}
-              >
-                <span
-                  class="npn-critique-reply-modal__processing-example-summary-label"
-                >
-                  {{i18n
-                    "npn_critique_reply.modal.processing_example.section_title"
-                  }}
-                </span>
-                {{#if this.hasProcessingExample}}
-                  <span
-                    class="npn-critique-reply-modal__processing-example-summary-status"
-                  >
-                    {{i18n
-                      "npn_critique_reply.modal.processing_example.uploaded"
-                    }}
-                  </span>
-                {{/if}}
-                <span
-                  class="npn-critique-reply-modal__processing-example-summary-chevron"
-                  aria-hidden="true"
-                >
-                  {{dIcon "chevron-down"}}
-                </span>
-              </button>
-
-              <h4
-                id="npn-critique-reply-processing-example-heading"
-                class="npn-critique-reply-modal__processing-example-heading"
-              >
-                {{i18n
-                  "npn_critique_reply.modal.processing_example.section_title"
-                }}
-              </h4>
-
-              <div
-                id="npn-critique-reply-processing-example-content"
-                class="npn-critique-reply-modal__processing-example-content"
-              >
-                {{#if this.hasProcessingExample}}
-                  <div
-                    class="npn-critique-reply-modal__processing-example-preview"
-                  >
-                    <img
-                      class="npn-critique-reply-modal__processing-example-thumb"
-                      src={{this.processingExample.url}}
-                      alt={{i18n
-                        "npn_critique_reply.modal.processing_example.preview_alt"
-                      }}
-                    />
-                    <div
-                      class="npn-critique-reply-modal__processing-example-status"
-                    >
-                      <p
-                        class="npn-critique-reply-modal__processing-example-status-text"
-                      >
-                        {{i18n
-                          "npn_critique_reply.modal.processing_example.uploaded"
-                        }}
-                      </p>
-                      {{#if this.processingExample.filename}}
-                        <p
-                          class="npn-critique-reply-modal__processing-example-filename"
-                          title={{this.processingExample.filename}}
-                        >
-                          {{this.processingExample.filename}}
-                        </p>
-                      {{/if}}
-                    </div>
-                  </div>
-                  <div
-                    class="npn-critique-reply-modal__processing-example-actions"
-                  >
-                    <DButton
-                      class="btn-default btn-small npn-critique-reply-modal__processing-example-replace"
-                      @action={{this.triggerProcessingExampleFilePicker}}
-                      @icon="rotate"
-                      @label="npn_critique_reply.modal.processing_example.replace"
-                      @disabled={{this.processingExampleUploading}}
-                    />
-                    <DButton
-                      class="btn-flat btn-small npn-critique-reply-modal__processing-example-remove"
-                      @action={{this.removeProcessingExample}}
-                      @icon="trash-can"
-                      @label="npn_critique_reply.modal.processing_example.remove"
-                      @disabled={{this.processingExampleUploading}}
-                    />
-                  </div>
-                {{else}}
-                  <p
-                    class="npn-critique-reply-modal__processing-example-help"
-                  >
-                    {{i18n
-                      "npn_critique_reply.modal.processing_example.helper"
-                    }}
-                  </p>
-                  <div
-                    class="npn-critique-reply-modal__processing-example-actions"
-                  >
-                    <a
-                      class="btn btn-default btn-small npn-critique-reply-modal__processing-example-download"
-                      href={{this.processingExampleSourceUrl}}
-                      download={{this.processingExampleSourceDownloadFilename}}
-                      rel="noopener"
-                      target="_blank"
-                    >
-                      {{dIcon "download"}}
-                      <span>
-                        {{i18n
-                          "npn_critique_reply.modal.processing_example.download"
-                        }}
-                      </span>
-                    </a>
-                    <DButton
-                      class="btn-default btn-small npn-critique-reply-modal__processing-example-upload"
-                      @action={{this.triggerProcessingExampleFilePicker}}
-                      @icon="upload"
-                      @label="npn_critique_reply.modal.processing_example.upload"
-                      @disabled={{this.processingExampleUploading}}
-                      @isLoading={{this.processingExampleUploading}}
-                    />
-                  </div>
-                {{/if}}
-
-                {{#if this.processingExampleError}}
-                  <p
-                    class="npn-critique-reply-modal__processing-example-error"
-                    role="alert"
-                  >
-                    {{this.processingExampleError.message}}
-                  </p>
-                {{/if}}
-
-                {{! Hidden file input owned by the section, opened
-                    programmatically via the Upload / Replace
-                    buttons. Single-file, image MIME types only. }}
-                <input
-                  id="npn-critique-reply-processing-example-input"
-                  class="npn-critique-reply-modal__processing-example-input"
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  {{on "change" this.onProcessingExampleFileChange}}
-                />
-              </div>
-            </section>
-          {{/if}}
         </div>
       </:body>
 
