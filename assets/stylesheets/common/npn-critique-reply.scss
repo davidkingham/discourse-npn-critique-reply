@@ -88,32 +88,36 @@
   // stage tracks its image element via ResizeObserver, so flipping
   // these CSS rules automatically resizes the stage and re-flows
   // every percent-based annotation.
-  &.npn-critique-reply-modal--visual-focus {
-    &__layout {
-      grid-template-columns: 1fr;
-      grid-template-areas: "image";
-    }
+  //
+  // Each rule uses the explicit ANCESTOR.modifier DESCENDANT.target
+  // pattern (with a space between selectors) because BEM nesting
+  // via `&__layout` inside `&.--modifier` would concatenate into a
+  // single mashed class — see the matching pattern on
+  // `.npn-critique-reply-modal--no-image` above.
+  &.npn-critique-reply-modal--visual-focus &__layout {
+    grid-template-columns: 1fr;
+    grid-template-areas: "image";
+  }
 
-    &__write-col,
-    &__processing-example-row {
-      display: none;
-    }
+  &.npn-critique-reply-modal--visual-focus &__write-col,
+  &.npn-critique-reply-modal--visual-focus &__processing-example-row {
+    display: none;
+  }
 
-    // The image column is the entire workspace now — drop the
-    // sticky / max-height behavior tuned for the two-pane split.
-    &__image-col {
-      position: static;
-      max-height: none;
-    }
+  // The image column is the entire workspace now — drop the sticky
+  // / max-height behavior tuned for the two-pane split.
+  &.npn-critique-reply-modal--visual-focus &__image-col {
+    position: static;
+    max-height: none;
+  }
 
-    // Let the image grow into the freed vertical space. With the
-    // write pane hidden the modal has the same height available,
-    // but the image-col is the only consumer — bump the IMG cap
-    // so it actually uses the room.
-    .npn-critique-image-reference__img,
-    &__processing-example-large {
-      max-height: calc(85vh - 6em);
-    }
+  // Let the image grow into the freed vertical space. With the
+  // write pane hidden the modal has the same height available, but
+  // the image-col is the only consumer — bump the IMG cap so it
+  // actually uses the room.
+  &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
+  &.npn-critique-reply-modal--visual-focus &__processing-example-large {
+    max-height: calc(85vh - 6em);
   }
 
   // -- Image column ------------------------------------------------------
