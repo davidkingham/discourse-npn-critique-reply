@@ -1478,6 +1478,20 @@ export default class NpnCritiqueReplyModal extends Component {
     return true;
   }
 
+  // Footer Cancel button. Calls `closeModal` directly (it doesn't
+  // route through DModal's `beforeClose` because the button isn't
+  // a DModal close trigger). Mirrors the same first-press-exits-
+  // focus-mode behaviour as the X so the two close paths behave
+  // consistently.
+  @action
+  cancelOrExitFocus() {
+    if (this.visualFocusMode) {
+      this.visualFocusMode = false;
+      return;
+    }
+    this.args.closeModal?.();
+  }
+
   // ---- Photographer's Notes lazy-load -----------------------------------
 
   get opCookedSafe() {
@@ -1584,6 +1598,22 @@ export default class NpnCritiqueReplyModal extends Component {
         ".npn-critique-guidance",
       ].join(",");
       doc.body.querySelectorAll(selector).forEach((el) => el.remove());
+      // After the strip, the wrapping paragraphs/divs that USED to
+      // hold the lightbox image are often left empty. They contribute
+      // visible whitespace above the first real heading — the empty
+      // gap where the photo used to be. Walk the body and drop any
+      // node whose normalized text content is empty AND has no
+      // remaining element children.
+      doc.body
+        .querySelectorAll("p, div, figure")
+        .forEach((el) => {
+          if (
+            el.textContent.trim() === "" &&
+            el.children.length === 0
+          ) {
+            el.remove();
+          }
+        });
       return doc.body.innerHTML;
     } catch (_e) {
       // If parsing fails for any reason, fall back to the original
@@ -6282,10 +6312,13 @@ export default class NpnCritiqueReplyModal extends Component {
           {{/if}}
         {{/if}}
 
-        {{! Quiet — pushed to the far right via flex on the footer. }}
+        {{! Quiet — pushed to the far right via flex on the footer.
+            Goes through `cancelOrExitFocus` so first press exits
+            Visual Focus Mode rather than closing the modal — the
+            X button has the same behaviour via DModal's beforeClose. }}
         <DButton
           class="btn-flat npn-critique-reply-modal__cancel"
-          @action={{@closeModal}}
+          @action={{this.cancelOrExitFocus}}
           @label="npn_critique_reply.modal.cancel"
           @disabled={{this.isPosting}}
         />
