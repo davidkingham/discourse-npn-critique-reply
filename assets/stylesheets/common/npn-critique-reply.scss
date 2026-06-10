@@ -1339,6 +1339,58 @@
     }
   }
 
+  // -- Short-viewport refinements --------------------------------------
+  //
+  // On wide-but-short screens (e.g. Nest Hub at 1024×600, some Chromebook
+  // landscape modes) the desktop two-pane layout still applies, but the
+  // 7-tool visual-tools toolbar wraps onto two rows and the sticky
+  // Processing Example bottom row eats another ~22vh, leaving the image
+  // squeezed into a strip. Two compact tweaks recover the space:
+  //
+  //   1. Collapse the visual-tools toolbar behind the same disclosure
+  //      summary mobile uses. State (`mobileVisualToolsOpen`) is
+  //      shared — auto-opens when annotations exist on restore.
+  //
+  //   2. Drop the sticky-bottom positioning on Processing Example so
+  //      it sits naturally in grid row 2 instead of pinning to the
+  //      viewport edge. Users still find it by scrolling.
+  //
+  // The width-based mobile media query (above) covers narrow screens;
+  // this one covers short ones. They can both fire on a phone in
+  // landscape — the rules are compatible.
+  @media (max-height: 700px) {
+    // Show the disclosure summary; gate the content on .is-open.
+    &__visual-tools-summary {
+      display: flex;
+    }
+    &__visual-tools-disclosure:not(.is-open)
+      > .npn-critique-reply-modal__visual-tools-content {
+      display: none;
+    }
+    // Open-state chevron rotation. Match the same rule the mobile
+    // block uses so the visual feedback is identical.
+    &__visual-tools-disclosure.is-open
+      > .npn-critique-reply-modal__visual-tools-summary
+      > .npn-critique-reply-modal__visual-tools-summary-chevron {
+      transform: rotate(180deg);
+    }
+
+    // Strip the sticky-bottom panel styling off Processing Example so
+    // it flows naturally in grid row 2 instead of pinning to the
+    // viewport bottom. Border / padding / background were the
+    // sticky-bar dress — they don't belong on a normal-flow section.
+    &__processing-example-row {
+      position: static;
+      align-self: stretch;
+      max-height: none;
+      background: transparent;
+      padding: 0;
+      border: none;
+      border-radius: 0;
+      z-index: auto;
+    }
+  }
+
   @media (forced-colors: active) {
     &__image-col {
       border-color: ButtonText;
