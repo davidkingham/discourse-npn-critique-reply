@@ -1529,7 +1529,7 @@ export default class NpnCritiqueReplyModal extends Component {
       }
       const cooked = json?.cooked ?? null;
       if (cooked) {
-        this._opCookedHtml = this._stripImagesFromCooked(cooked);
+        this._opCookedHtml = this._filterOpCooked(cooked);
       } else {
         this._opCookedError = true;
       }
@@ -1553,23 +1553,23 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
-  // Strip images and their Discourse wrappers from cooked HTML so
-  // the Photographer's Notes panel shows the prose without
-  // re-introducing the reference image (or any other photo the
-  // photographer attached). Covers:
-  //   • `<img>` — every image element
-  //   • `<picture>` — modern responsive image wrappers
-  //   • `<a class="lightbox">` — Discourse's lightbox link that wraps
-  //     posted images
-  //   • `.lightbox-wrapper` — outer container that holds the lightbox
-  //     link + metadata strip
-  //   • `.image-wrapper`, `.meta` siblings of stripped images
+  // Strip duplicated content from the OP cooked HTML so the
+  // Photographer's Notes panel shows the prose only. Removed:
+  //   • `<img>` / `<picture>` / `a.lightbox` / `.lightbox-wrapper`
+  //     / `.image-wrapper` — the reference image and its Discourse
+  //     lightbox chrome. The critic is already looking at this
+  //     image at full size; no need to re-render it here.
+  //   • `.npn-critique-guidance` — the structured block the
+  //     submissions plugin injects into the OP with Critique Style
+  //     + Feedback Focus. The same info renders at the top of the
+  //     right pane in the Photographer's Request card; duplicating
+  //     it here makes the notes panel feel noisier than it is.
   //
   // Uses DOMParser rather than a regex so attribute-encoded ">"
-  // characters and odd whitespace in img tags don't slip through.
-  // Runs once at fetch time and the result is cached, so the cost
-  // is paid exactly once per modal session.
-  _stripImagesFromCooked(html) {
+  // characters and odd whitespace in tag attributes don't slip
+  // through. Runs once at fetch time and the result is cached, so
+  // the cost is paid exactly once per modal session.
+  _filterOpCooked(html) {
     if (!html) {
       return html;
     }
@@ -1581,13 +1581,14 @@ export default class NpnCritiqueReplyModal extends Component {
         "a.lightbox",
         ".lightbox-wrapper",
         ".image-wrapper",
+        ".npn-critique-guidance",
       ].join(",");
       doc.body.querySelectorAll(selector).forEach((el) => el.remove());
       return doc.body.innerHTML;
     } catch (_e) {
       // If parsing fails for any reason, fall back to the original
       // cooked HTML rather than dropping the photographer's notes
-      // entirely. Worst case: image shows.
+      // entirely. Worst case: duplicated content shows.
       return html;
     }
   }
