@@ -790,7 +790,9 @@
     border: 1px solid var(--primary-low);
     border-left: 3px solid var(--primary-low-mid);
     border-radius: var(--d-border-radius, 4px);
-    overflow: hidden;
+    // Note: NO `overflow: hidden` here. A clipped <details> wrapper
+    // was eating the bottom of long photographer descriptions
+    // regardless of how the content panel was sized.
   }
 
   &__photographers-notes-summary {
@@ -843,20 +845,15 @@
     border-top: 1px solid var(--primary-low);
     padding: 0.7em 0.85em 0.85em;
     background: var(--secondary);
-    // Internal scroll for long descriptions. Two reliability fixes
-    // over the previous attempt:
-    //   • `overflow-y: scroll` (instead of auto) so the scrollbar
-    //     gutter is ALWAYS reserved — on macOS / Safari the
-    //     auto-hidden scrollbar made users think the panel was
-    //     just clipping when in fact it was scrollable.
-    //   • `scrollbar-gutter: stable` for browsers that respect it,
-    //     same intent: always show that scroll is possible.
-    // Bumped the cap to 60vh so most posts fit without needing to
-    // scroll; long-form posts scroll cleanly inside.
-    max-height: 60vh;
-    overflow-y: scroll;
-    scrollbar-gutter: stable;
-    overscroll-behavior: contain;
+    // No max-height / overflow here. The previous viewport-based
+    // cap and the wrapper's `overflow: hidden` (now also removed)
+    // were combining to clip the bottom of long descriptions in
+    // ways the user couldn't bypass — neither nested-scroll nor
+    // outer-scroll reached the end. Letting the panel grow to fit
+    // its content means __write-col's own overflow:auto handles
+    // long posts: the user scrolls the writing column normally to
+    // read past the notes and on to the textarea, same gesture
+    // they already know.
   }
 
   &__photographers-notes-body {
