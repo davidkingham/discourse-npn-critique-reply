@@ -879,6 +879,23 @@
     }
   }
 
+  // Floating Quote button that appears near a text selection inside
+  // Photographer's Notes. Inline position: fixed + top/left are set
+  // from `_quoteButtonPosition` (viewport coords). z-index sits above
+  // the modal body so the button is reachable even when the selection
+  // straddles section boundaries. Uses btn-default for theme support.
+  &__quote-button {
+    z-index: 1000;
+    font-size: var(--font-down-1);
+    padding: 4px 10px;
+    box-shadow: 0 2px 6px var(--primary-low);
+
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+  }
+
   &__request-heading {
     @extend %npn-critique-section-heading;
     margin: 0 0 0.5em;
@@ -2180,6 +2197,20 @@
   &:focus {
     color: var(--danger, var(--primary-high));
     border-color: var(--danger, var(--primary-low-mid));
+  }
+}
+
+// Retrace button. Same baseline as the remove button (toolbar weight),
+// but the `.is-active` state inverts to a tertiary fill so the user can
+// see at a glance that retrace mode is armed and the next drag will
+// replace the selected shape.
+.npn-critique-reply-modal__retrace.npn-critique-reply-modal__retrace {
+  color: var(--primary-high);
+
+  &.is-active {
+    background: var(--tertiary-low-or-tertiary, var(--tertiary-low));
+    border-color: var(--tertiary);
+    color: var(--tertiary);
   }
 }
 

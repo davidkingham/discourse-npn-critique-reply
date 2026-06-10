@@ -174,7 +174,15 @@ function sameEyePaths(a, b) {
 }
 
 // Defensive clone so closure-side mutations can't leak into the
-// modal's tracked array.
+// modal's tracked array. Carries both shape variants — ellipse
+// (xPct/yPct/widthPct/heightPct) and path (shape: "path" + points[]).
+function cloneAreaPoints(points) {
+  if (!Array.isArray(points)) {
+    return null;
+  }
+  return points.map((pt) => ({ xPct: pt.xPct, yPct: pt.yPct }));
+}
+
 function cloneAttentionPulls(pulls) {
   if (!Array.isArray(pulls)) {
     return [];
@@ -185,11 +193,31 @@ function cloneAttentionPulls(pulls) {
     // A1 badge. Dropping it (the original shape did) silently
     // suppressed the badge after the first state sync.
     label: p.label,
+    shape: p.shape,
+    points: cloneAreaPoints(p.points),
     xPct: p.xPct,
     yPct: p.yPct,
     widthPct: p.widthPct,
     heightPct: p.heightPct,
   }));
+}
+
+function sameAreaPoints(a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (!Array.isArray(a) || !Array.isArray(b)) {
+    return false;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].xPct !== b[i].xPct || a[i].yPct !== b[i].yPct) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // Cheap structural equality — skip re-render when the modal sends
@@ -213,7 +241,9 @@ function sameAttentionPulls(a, b) {
       x.yPct !== y.yPct ||
       x.widthPct !== y.widthPct ||
       x.heightPct !== y.heightPct ||
-      (x.label ?? null) !== (y.label ?? null)
+      (x.label ?? null) !== (y.label ?? null) ||
+      (x.shape ?? null) !== (y.shape ?? null) ||
+      !sameAreaPoints(x.points, y.points)
     ) {
       return false;
     }
@@ -230,6 +260,8 @@ function cloneStrongAreas(areas) {
   return areas.map((p) => ({
     id: p.id,
     label: p.label,
+    shape: p.shape,
+    points: cloneAreaPoints(p.points),
     xPct: p.xPct,
     yPct: p.yPct,
     widthPct: p.widthPct,
@@ -256,7 +288,9 @@ function sameStrongAreas(a, b) {
       x.yPct !== y.yPct ||
       x.widthPct !== y.widthPct ||
       x.heightPct !== y.heightPct ||
-      (x.label ?? null) !== (y.label ?? null)
+      (x.label ?? null) !== (y.label ?? null) ||
+      (x.shape ?? null) !== (y.shape ?? null) ||
+      !sameAreaPoints(x.points, y.points)
     ) {
       return false;
     }
@@ -478,9 +512,15 @@ export async function createAnnotationStage({
   pinMoveEnabled = true,
   attentionPullEditEnabled = true,
   strongAreaEditEnabled = true,
-  // "oval" (default) or "path". When "path" + visualMode is
+  // "path" (default) or "oval". When "path" + visualMode is
   // attention_pull or strong_area, drag-to-draw is active.
-  areaShapeMode = "oval",
+  areaShapeMode = "path",
+  // Retrace targets: when set, the next path-shape drag in the
+  // matching tool mode REPLACES that marker's points instead of
+  // creating a new marker. Cleared on commit, cancel, or any of the
+  // modal-side cancel triggers (selection change, tool switch).
+  retracingAttentionPullId = null,
+  retracingStrongAreaId = null,
   onAddPin,
   onSelectPin,
   onMovePin,
@@ -493,10 +533,12 @@ export async function createAnnotationStage({
   onMoveEyePathPoint,
   onAddAttentionPull,
   onAddAttentionPullPath,
+  onRetraceAttentionPullPath,
   onSelectAttentionPull,
   onUpdateAttentionPull,
   onAddStrongArea,
   onAddStrongAreaPath,
+  onRetraceStrongAreaPath,
   onSelectStrongArea,
   onUpdateStrongArea,
   onAddDirectionArrow,
@@ -589,6 +631,8 @@ export async function createAnnotationStage({
     attentionPullEditEnabled,
     strongAreaEditEnabled,
     areaShapeMode,
+    retracingAttentionPullId,
+    retracingStrongAreaId,
   };
 
   // Drag-to-create attention-pull state — set on mousedown over empty
@@ -926,9 +970,22 @@ export async function createAnnotationStage({
       shortEdge,
       onSelect,
       modeMatches,
+      // When true, the existing shape is hidden so the user can see
+      // the underlying image while tracing the replacement. The
+      // toolbar's "Cancel retrace" button + hint copy keep retrace
+      // context visible.
+      isRetracing,
     } = opts;
     const points = Array.isArray(model.points) ? model.points : null;
     if (!points || points.length < 2) {
+      return;
+    }
+    // While retracing, hide the existing shape entirely so the user
+    // can see the underlying image as they trace the replacement.
+    // The toolbar's active "Cancel retrace" button + hint copy keep
+    // the context visible. The shape returns if retrace is cancelled
+    // (state.retracingXxxId clears → re-render → isRetracing false).
+    if (isRetracing) {
       return;
     }
     const flat = [];
@@ -1097,6 +1154,7 @@ export async function createAnnotationStage({
           shortEdge,
           onSelect: () => onSelectAttentionPull?.(pull.id),
           modeMatches: state.visualMode === "attention_pull",
+          isRetracing: pull.id === state.retracingAttentionPullId,
         });
         continue;
       }
@@ -1411,6 +1469,7 @@ export async function createAnnotationStage({
           shortEdge,
           onSelect: () => onSelectStrongArea?.(area.id),
           modeMatches: state.visualMode === "strong_area",
+          isRetracing: area.id === state.retracingStrongAreaId,
         });
         continue;
       }
@@ -3528,7 +3587,19 @@ export async function createAnnotationStage({
       return;
     }
     if (state.visualMode === "attention_pull") {
-      if (state.areaShapeMode === "path") {
+      // Retrace overrides the regular area-shape branch — drawing
+      // over an existing path-shape marker replaces its points
+      // regardless of the current areaShapeMode setting.
+      if (state.retracingAttentionPullId) {
+        attentionPathDrag = {
+          startX: pos.x,
+          startY: pos.y,
+          points: [{ x: pos.x, y: pos.y }],
+          lastSampleX: pos.x,
+          lastSampleY: pos.y,
+          retraceId: state.retracingAttentionPullId,
+        };
+      } else if (state.areaShapeMode === "path") {
         attentionPathDrag = {
           startX: pos.x,
           startY: pos.y,
@@ -3542,7 +3613,16 @@ export async function createAnnotationStage({
       return;
     }
     if (state.visualMode === "strong_area") {
-      if (state.areaShapeMode === "path") {
+      if (state.retracingStrongAreaId) {
+        strongPathDrag = {
+          startX: pos.x,
+          startY: pos.y,
+          points: [{ x: pos.x, y: pos.y }],
+          lastSampleX: pos.x,
+          lastSampleY: pos.y,
+          retraceId: state.retracingStrongAreaId,
+        };
+      } else if (state.areaShapeMode === "path") {
         strongPathDrag = {
           startX: pos.x,
           startY: pos.y,
@@ -3819,14 +3899,28 @@ export async function createAnnotationStage({
       const drag = attentionPathDrag;
       attentionPathDrag = null;
       clearPreview();
-      finishAreaPathDrag(drag, pos, sw, sh, onAddAttentionPullPath);
+      if (drag.retraceId) {
+        const targetId = drag.retraceId;
+        finishAreaPathDrag(drag, pos, sw, sh, (points) =>
+          onRetraceAttentionPullPath?.(targetId, points)
+        );
+      } else {
+        finishAreaPathDrag(drag, pos, sw, sh, onAddAttentionPullPath);
+      }
       return;
     }
     if (strongPathDrag) {
       const drag = strongPathDrag;
       strongPathDrag = null;
       clearPreview();
-      finishAreaPathDrag(drag, pos, sw, sh, onAddStrongAreaPath);
+      if (drag.retraceId) {
+        const targetId = drag.retraceId;
+        finishAreaPathDrag(drag, pos, sw, sh, (points) =>
+          onRetraceStrongAreaPath?.(targetId, points)
+        );
+      } else {
+        finishAreaPathDrag(drag, pos, sw, sh, onAddStrongAreaPath);
+      }
       return;
     }
 
@@ -3960,6 +4054,8 @@ export async function createAnnotationStage({
       attentionPullEditEnabled,
       strongAreaEditEnabled,
       areaShapeMode,
+      retracingAttentionPullId,
+      retracingStrongAreaId,
     } = {}) {
       let pinsChanged = false;
       let cropChanged = false;
@@ -4066,6 +4162,33 @@ export async function createAnnotationStage({
           attentionDrag = null;
           strongDrag = null;
           attentionPathDrag = null;
+          strongPathDrag = null;
+          clearPreview();
+        }
+      }
+      if (
+        retracingAttentionPullId !== undefined &&
+        retracingAttentionPullId !== state.retracingAttentionPullId
+      ) {
+        state.retracingAttentionPullId = retracingAttentionPullId;
+        // Re-render so the retrace target's fillBody becomes
+        // non-listening (or listening again when retrace is cancelled).
+        attentionPullsChanged = true;
+        // If a path drag is in flight for a different target (or for
+        // a new-shape draw), cancel it so the user doesn't accidentally
+        // commit one operation when the toolbar context says another.
+        if (attentionPathDrag) {
+          attentionPathDrag = null;
+          clearPreview();
+        }
+      }
+      if (
+        retracingStrongAreaId !== undefined &&
+        retracingStrongAreaId !== state.retracingStrongAreaId
+      ) {
+        state.retracingStrongAreaId = retracingStrongAreaId;
+        strongAreasChanged = true;
+        if (strongPathDrag) {
           strongPathDrag = null;
           clearPreview();
         }

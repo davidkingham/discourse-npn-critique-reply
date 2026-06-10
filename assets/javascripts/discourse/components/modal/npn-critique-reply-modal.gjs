@@ -407,16 +407,26 @@ export default class NpnCritiqueReplyModal extends Component {
   // percent-based annotation. No explicit refit call needed.
   @tracked visualFocusMode = false;
 
-  // -- Area shape sub-mode (Oval vs Draw Area) -------------------------
+  // -- Area shape sub-mode (Draw Area vs Oval) -------------------------
   //
-  // Experimental "Draw Area" variant for Attention and Strong Area:
-  // instead of drag-rectangle → ellipse, the user loosely outlines
-  // the region and the system smooths/closes the shape. Shared sub-
-  // mode applies to BOTH tools — picking Draw Area while in
-  // Attention keeps it selected when the user toggles to Strong
-  // Area and vice versa. Default "oval" matches the existing
-  // behaviour, so existing users see no change unless they opt in.
-  @tracked areaShapeMode = "oval";
+  // Draw Area is the primary mode — the user loosely outlines the
+  // region and the system smooths/closes the shape. Oval is the
+  // secondary mode (drag-rectangle → ellipse) for callers who want a
+  // clean geometric shape. Shared sub-mode applies to BOTH tools —
+  // picking one in Attention keeps it selected when the user toggles
+  // to Strong Area and vice versa.
+  @tracked areaShapeMode = "path";
+
+  // -- Retrace (path-shape only) ----------------------------------------
+  //
+  // When the user has a path-shape Attention / Strong Area marker
+  // selected, they can click Retrace and draw a fresh outline. The
+  // next path drag REPLACES the selected marker's `points` while
+  // preserving its id / label / note text. Only one retrace can be
+  // in flight at a time, so the two trackeds are mutually exclusive.
+  // Tool switches, selection changes, and modal close all cancel.
+  @tracked retracingAttentionPullId = null;
+  @tracked retracingStrongAreaId = null;
 
   // -- Photographer's Notes panel state --------------------------------
   //
@@ -437,6 +447,32 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked _opCookedHtml = null;
   @tracked _opCookedError = false;
   _opCookedFetched = false;
+  // Attribution data from /posts/:id.json — populated alongside
+  // `_opCookedHtml`. Used to build the `[quote="user, post:N, topic:T"]`
+  // attribution line; falls back to the unattributed `[quote]` form
+  // when either is missing.
+  _opUsername = null;
+  _opPostNumber = null;
+
+  // -- Photographer's Notes quote action -------------------------------
+  //
+  // Floating "Quote" button that appears near a non-empty text
+  // selection inside the Photographer's Notes content. Clicking
+  // inserts the selected text into the critique textarea wrapped in
+  // a Discourse-format `[quote]` block (with attribution when
+  // username/post_number are available). Selection detection is
+  // scoped to children of `_photographersNotesElement` so selections
+  // elsewhere in the modal do not show the button.
+  //
+  // `_quoteButtonPosition` is null when the button is hidden, or
+  // `{ top, left }` (viewport CSS pixels) when visible. Selection
+  // text is kept off-tracked in `_quoteSelectionText` so we don't
+  // schedule extra renders on every selectionchange tick.
+  @tracked _quoteButtonPosition = null;
+  _quoteSelectionText = "";
+  _photographersNotesElement = null;
+  _selectionChangeHandler = null;
+  _selectionChangeRaf = null;
 
   // -- Processing Example header popover -------------------------------
   //
@@ -513,6 +549,9 @@ export default class NpnCritiqueReplyModal extends Component {
       );
       this._processingExampleMenuOutsideHandler = null;
     }
+    // Drop Photographer's Notes selection listener if it's still
+    // attached (panel may be open at modal close).
+    this.teardownPhotographersNotes();
   }
 
   // -- Textarea wiring: @mention autocomplete + Insert link helper -------
@@ -1521,6 +1560,13 @@ export default class NpnCritiqueReplyModal extends Component {
   @action
   onPhotographersNotesToggle(event) {
     if (!event?.target?.open) {
+      // Collapsing the panel dismisses the floating Quote button so
+      // it doesn't dangle over later content. The body element
+      // remains in the DOM under the collapsed details, so the
+      // setup/teardown lifecycle does not re-run — we explicitly
+      // reset the button state here.
+      this._quoteButtonPosition = null;
+      this._quoteSelectionText = "";
       return;
     }
     if (this._opCookedFetched || this._opCookedLoading) {
@@ -1555,6 +1601,13 @@ export default class NpnCritiqueReplyModal extends Component {
       const cooked = json?.cooked ?? null;
       if (cooked) {
         this._opCookedHtml = this._filterOpCooked(cooked);
+        // Capture attribution data for the Quote action. Username may
+        // be missing on heavily redacted responses; post_number falls
+        // back to 1 since the OP is always the first post. We do NOT
+        // block the feature when these are missing — the quote falls
+        // back to the unattributed `[quote]…[/quote]` form.
+        this._opUsername = json?.username ?? null;
+        this._opPostNumber = json?.post_number ?? 1;
       } else {
         this._opCookedError = true;
       }
@@ -1576,6 +1629,277 @@ export default class NpnCritiqueReplyModal extends Component {
         this._opCookedFetched = true;
       }
     }
+  }
+
+  // ---- Photographer's Notes quote action -----------------------------
+
+  // Attached via `{{didInsert}}` on the panel body. Captures the
+  // container DOM ref + registers a debounced selectionchange listener.
+  // Document-level listening is the standard pattern — `selectionchange`
+  // only fires on `document`. We filter by container.contains() so
+  // selections elsewhere in the modal are ignored.
+  @action
+  setupPhotographersNotes(element) {
+    this._photographersNotesElement = element;
+    if (this._selectionChangeHandler) {
+      return;
+    }
+    this._selectionChangeHandler = () => {
+      // rAF throttle: selectionchange fires every few ms during a
+      // drag. We only need the latest state per paint to position
+      // the button.
+      if (this._selectionChangeRaf) {
+        return;
+      }
+      this._selectionChangeRaf = requestAnimationFrame(() => {
+        this._selectionChangeRaf = null;
+        if (this._destroyed) {
+          return;
+        }
+        this._updateQuoteButtonFromSelection();
+      });
+    };
+    document.addEventListener("selectionchange", this._selectionChangeHandler);
+    document.addEventListener("mousedown", this._maybeDismissQuoteButton, true);
+  }
+
+  // Called when the panel body unmounts (panel collapses, modal
+  // closes, or cooked HTML re-renders for any reason). Drops the
+  // container ref + listener so a stale node can't leak past teardown.
+  @action
+  teardownPhotographersNotes() {
+    if (this._selectionChangeHandler) {
+      document.removeEventListener(
+        "selectionchange",
+        this._selectionChangeHandler
+      );
+      this._selectionChangeHandler = null;
+    }
+    document.removeEventListener(
+      "mousedown",
+      this._maybeDismissQuoteButton,
+      true
+    );
+    if (this._selectionChangeRaf) {
+      cancelAnimationFrame(this._selectionChangeRaf);
+      this._selectionChangeRaf = null;
+    }
+    this._photographersNotesElement = null;
+    this._quoteButtonPosition = null;
+    this._quoteSelectionText = "";
+  }
+
+  // Bound arrow form so the same identity can be added + removed
+  // through addEventListener / removeEventListener. Hides the Quote
+  // button when the user clicks outside the panel AND outside the
+  // button itself — clicking the button is what fires the insert.
+  _maybeDismissQuoteButton = (event) => {
+    if (!this._quoteButtonPosition) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Node)) {
+      return;
+    }
+    if (this._photographersNotesElement?.contains(target)) {
+      return;
+    }
+    // Closest .npn-critique-reply-modal__quote-button — the button
+    // itself fires the insert; don't dismiss before its click runs.
+    if (target instanceof Element &&
+        target.closest(".npn-critique-reply-modal__quote-button")) {
+      return;
+    }
+    this._quoteButtonPosition = null;
+    this._quoteSelectionText = "";
+  };
+
+  _updateQuoteButtonFromSelection() {
+    const container = this._photographersNotesElement;
+    if (!container) {
+      this._quoteButtonPosition = null;
+      this._quoteSelectionText = "";
+      return;
+    }
+    const selection = window.getSelection?.();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      this._quoteButtonPosition = null;
+      this._quoteSelectionText = "";
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    // Both endpoints must live inside the panel. `contains` returns
+    // true for the container itself, which is fine — text-node
+    // ancestors resolve through the same chain.
+    if (
+      !container.contains(range.startContainer) ||
+      !container.contains(range.endContainer)
+    ) {
+      this._quoteButtonPosition = null;
+      this._quoteSelectionText = "";
+      return;
+    }
+    const raw = selection.toString();
+    const normalized = this._normalizeQuoteText(raw);
+    if (!normalized) {
+      this._quoteButtonPosition = null;
+      this._quoteSelectionText = "";
+      return;
+    }
+    this._quoteSelectionText = normalized;
+
+    // Position the button near the END of the selection (above it
+    // by default; below if the selection is near the top of the
+    // viewport). Viewport coords from getBoundingClientRect work
+    // with position: fixed.
+    const rect = range.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) {
+      this._quoteButtonPosition = null;
+      return;
+    }
+    const BUTTON_HEIGHT = 32;
+    const GAP = 6;
+    // Anchor above the selection's top edge when there's room;
+    // otherwise sit just below the selection so the button doesn't
+    // cover the page chrome (modal header).
+    let top = rect.top - BUTTON_HEIGHT - GAP;
+    if (top < 8) {
+      top = rect.bottom + GAP;
+    }
+    // Horizontally align to the right of the selection.
+    let left = rect.right - 70;
+    if (left < 8) {
+      left = 8;
+    }
+    if (left > window.innerWidth - 90) {
+      left = window.innerWidth - 90;
+    }
+    this._quoteButtonPosition = { top, left };
+  }
+
+  // Plain-text normalizer for selection content. `selection.toString()`
+  // already inserts newlines between block elements; we just collapse
+  // runs of whitespace WITHIN a line (not across newlines) and trim
+  // each line. Empty trailing/leading lines are dropped. The result
+  // either has paragraph breaks ("\n\n") between blocks or is a
+  // single line for inline selections.
+  _normalizeQuoteText(raw) {
+    if (!raw) {
+      return "";
+    }
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.replace(/[ \t ]+/g, " ").trim());
+    // Collapse runs of empty lines into a single paragraph break.
+    const out = [];
+    let lastBlank = true;
+    for (const line of lines) {
+      if (line === "") {
+        if (!lastBlank) {
+          out.push("");
+          lastBlank = true;
+        }
+      } else {
+        out.push(line);
+        lastBlank = false;
+      }
+    }
+    // Strip leading/trailing blanks
+    while (out.length && out[0] === "") {
+      out.shift();
+    }
+    while (out.length && out[out.length - 1] === "") {
+      out.pop();
+    }
+    return out.join("\n");
+  }
+
+  // Click handler for the floating Quote button. Builds the quote
+  // BBCode + inserts at the textarea caret via TextareaTextManipulation
+  // (same path as Insert link). Dispatches a synthetic `input` event
+  // so the draft autosaver picks up the change. Focuses the textarea
+  // afterwards so the critic can keep typing.
+  @action
+  insertQuoteFromPhotographersNotes(event) {
+    // Preventing default on mousedown / click keeps text selection
+    // alive in some browsers, but since we read `_quoteSelectionText`
+    // (snapshotted on selectionchange), even a cleared selection
+    // doesn't break the insert.
+    event?.preventDefault?.();
+    const text = this._quoteSelectionText;
+    if (!text) {
+      this._quoteButtonPosition = null;
+      return;
+    }
+    const attribution = this._buildQuoteAttribution();
+    const quoteText = this._buildQuoteBlock(text, attribution);
+    if (!this.#textManipulation || !this.#textarea) {
+      // Defensive fallback — append to end of critiqueText with
+      // the existing paragraph-spacing convention. The textarea
+      // ref is set by didInsert and lives for the modal's lifetime,
+      // so this path is unexpected in practice.
+      this._appendToTextarea(quoteText);
+    } else {
+      try {
+        const tm = this.#textManipulation;
+        const sel = tm.getSelected();
+        // Insert at caret with surrounding blank-line padding so
+        // the quote always reads as its own paragraph. Read the
+        // existing text + caret position to decide whether we need
+        // leading / trailing newlines.
+        const value = this.#textarea.value ?? "";
+        const before = value.slice(0, sel.start);
+        const after = value.slice(sel.end);
+        let payload = quoteText;
+        if (before && !/\n\n$/.test(before)) {
+          payload = (before.endsWith("\n") ? "\n" : "\n\n") + payload;
+        }
+        if (after && !/^\n\n/.test(after)) {
+          payload = payload + (after.startsWith("\n") ? "\n" : "\n\n");
+        } else if (!after) {
+          payload = payload + "\n";
+        }
+        tm.insertText(payload);
+      } catch (e) {
+        // Last-resort fallback — append to end.
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[npn-critique-reply] quote insert via text-manipulation failed:",
+          e
+        );
+        this._appendToTextarea(quoteText);
+      }
+    }
+    // Dispatch a synthetic `input` event so the bound
+    // `critiqueText` and the draft autosaver both see the change.
+    // The Textarea component listens on the native `input` event.
+    this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+    this.#textarea?.focus();
+    this._quoteButtonPosition = null;
+    this._quoteSelectionText = "";
+    // Clear the OP-side text selection so a stale highlight doesn't
+    // linger after the quote has moved into the textarea.
+    try {
+      window.getSelection?.()?.removeAllRanges?.();
+    } catch {
+      // Some browsers throw on removeAllRanges in odd states; not
+      // critical — the highlight will clear on the next click.
+    }
+  }
+
+  _buildQuoteAttribution() {
+    const username = (this._opUsername || "").trim();
+    const topicId = this.topic?.id;
+    const postNumber = this._opPostNumber;
+    if (!username || !topicId || !postNumber) {
+      return null;
+    }
+    return `${username}, post:${postNumber}, topic:${topicId}`;
+  }
+
+  _buildQuoteBlock(text, attribution) {
+    const open = attribution ? `[quote="${attribution}"]` : "[quote]";
+    return `${open}\n${text}\n[/quote]`;
   }
 
   // Strip duplicated content from the OP cooked HTML so the
@@ -2048,6 +2372,10 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
+    // Cancel any in-flight retrace — the marker it targeted is now
+    // unselected (and the new tool may not even support retrace).
+    this.retracingAttentionPullId = null;
+    this.retracingStrongAreaId = null;
     // Eye-path session tracking. Each entry into eye_path mode is
     // one path session: the first click creates a new path (up to
     // the per-critique cap) and subsequent clicks extend it. Leaving
@@ -2829,6 +3157,11 @@ export default class NpnCritiqueReplyModal extends Component {
     } else {
       this.selectedAttentionPullId = id;
     }
+    // Selection change cancels retrace — the user is now interacting
+    // with a different marker (or none), so the pending retrace is
+    // no longer the intent.
+    this.retracingAttentionPullId = null;
+    this.retracingStrongAreaId = null;
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] select-attention-pull", {
@@ -2857,6 +3190,9 @@ export default class NpnCritiqueReplyModal extends Component {
     this.attentionPulls = this.attentionPulls.filter((p) => p.id !== id);
     if (this.selectedAttentionPullId === id) {
       this.selectedAttentionPullId = null;
+    }
+    if (this.retracingAttentionPullId === id) {
+      this.retracingAttentionPullId = null;
     }
     // Close the popover if it was anchored to the removed marker.
     if (this.pendingAttentionPullPopover?.id === id) {
@@ -2887,6 +3223,7 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this.attentionPulls = [];
     this.selectedAttentionPullId = null;
+    this.retracingAttentionPullId = null;
     this.pendingAttentionPullPopover = null;
     this.pendingAttentionPullPopoverText = "";
     // Textarea text (including the starter) stays — same convention as
@@ -3018,6 +3355,104 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
+  // ---- Retrace (path-shape only) -------------------------------------
+
+  // Toggle retrace for the currently-selected Attention Pull. If the
+  // selected marker is already being retraced, this acts as a cancel.
+  // Only valid when the selected marker has `shape === "path"`; the
+  // template only renders the button in that case, but we re-check
+  // defensively.
+  @action
+  toggleRetraceAttentionPull() {
+    const pull = this.selectedAttentionPull;
+    if (!pull || pull.shape !== "path") {
+      return;
+    }
+    if (this.retracingAttentionPullId === pull.id) {
+      this.retracingAttentionPullId = null;
+      return;
+    }
+    this.retracingAttentionPullId = pull.id;
+    this.retracingStrongAreaId = null;
+  }
+
+  @action
+  toggleRetraceStrongArea() {
+    const area = this.selectedStrongArea;
+    if (!area || area.shape !== "path") {
+      return;
+    }
+    if (this.retracingStrongAreaId === area.id) {
+      this.retracingStrongAreaId = null;
+      return;
+    }
+    this.retracingStrongAreaId = area.id;
+    this.retracingAttentionPullId = null;
+  }
+
+  // Commit a retrace by replacing `points` on the existing marker.
+  // The id, label, shape ("path"), and any noteText are preserved so
+  // the textarea snippet that references [Aₙ] / [Sₙ] keeps pointing
+  // at the same marker. Clears retracing state on success or no-op
+  // (too-few points means the drag is treated as cancel).
+  @action
+  retraceAttentionPullPath(id, points) {
+    if (!id || this.retracingAttentionPullId !== id) {
+      return;
+    }
+    if (!Array.isArray(points) || points.length < 4) {
+      this.retracingAttentionPullId = null;
+      return;
+    }
+    const target = this.attentionPulls.find((p) => p.id === id);
+    if (!target || target.shape !== "path") {
+      this.retracingAttentionPullId = null;
+      return;
+    }
+    const nextPoints = points.map((p) => ({ xPct: p.xPct, yPct: p.yPct }));
+    this.attentionPulls = this.attentionPulls.map((p) =>
+      p.id === id ? { ...p, points: nextPoints } : p
+    );
+    this.retracingAttentionPullId = null;
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] retrace-attention-pull", {
+        topicId: this.topic?.id,
+        id,
+        pointCount: nextPoints.length,
+      });
+    }
+  }
+
+  @action
+  retraceStrongAreaPath(id, points) {
+    if (!id || this.retracingStrongAreaId !== id) {
+      return;
+    }
+    if (!Array.isArray(points) || points.length < 4) {
+      this.retracingStrongAreaId = null;
+      return;
+    }
+    const target = this.strongAreas.find((p) => p.id === id);
+    if (!target || target.shape !== "path") {
+      this.retracingStrongAreaId = null;
+      return;
+    }
+    const nextPoints = points.map((p) => ({ xPct: p.xPct, yPct: p.yPct }));
+    this.strongAreas = this.strongAreas.map((p) =>
+      p.id === id ? { ...p, points: nextPoints } : p
+    );
+    this.retracingStrongAreaId = null;
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] retrace-strong-area", {
+        topicId: this.topic?.id,
+        id,
+        pointCount: nextPoints.length,
+      });
+    }
+  }
+
   // Twin of addAttentionPull — same shape, different kind/label
   // prefix/starter copy.
   @action
@@ -3079,6 +3514,8 @@ export default class NpnCritiqueReplyModal extends Component {
     } else {
       this.selectedStrongAreaId = id;
     }
+    this.retracingAttentionPullId = null;
+    this.retracingStrongAreaId = null;
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] select-strong-area", {
@@ -3110,6 +3547,9 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
     }
+    if (this.retracingStrongAreaId === id) {
+      this.retracingStrongAreaId = null;
+    }
     if (this.pendingStrongAreaPopover?.id === id) {
       this.pendingStrongAreaPopover = null;
       this.pendingStrongAreaPopoverText = "";
@@ -3138,6 +3578,7 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this.strongAreas = [];
     this.selectedStrongAreaId = null;
+    this.retracingStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
     this.pendingStrongAreaPopover = null;
@@ -4838,6 +5279,30 @@ export default class NpnCritiqueReplyModal extends Component {
           {{didUpdate this.scheduleDraftAutosave this.draftSignature}}
         ></span>
 
+        {{! Floating Quote button — appears when the user selects
+            text inside Photographer's Notes. position: fixed +
+            inline top/left from _quoteButtonPosition (viewport
+            pixels). Rendered at body root so it isn't clipped by
+            panel overflow. }}
+        {{#if this._quoteButtonPosition}}
+          <button
+            type="button"
+            class="btn btn-default btn-icon-text
+              npn-critique-reply-modal__quote-button"
+            style="position: fixed; top: {{this._quoteButtonPosition.top}}px;
+              left: {{this._quoteButtonPosition.left}}px;"
+            aria-label={{i18n
+              "npn_critique_reply.modal.photographers_notes.quote_aria"
+            }}
+            {{on "mousedown" this.insertQuoteFromPhotographersNotes}}
+          >
+            {{dIcon "quote-left"}}
+            <span class="d-button-label">
+              {{i18n "npn_critique_reply.modal.photographers_notes.quote"}}
+            </span>
+          </button>
+        {{/if}}
+
         {{#if this.draftImageVersionMissingMessage}}
           <div
             class="npn-critique-reply-modal__draft-notice
@@ -5504,21 +5969,6 @@ export default class NpnCritiqueReplyModal extends Component {
                         <button
                           type="button"
                           class="npn-critique-reply-modal__area-shape-toggle-button
-                            {{if (eq this.areaShapeMode 'oval') 'is-selected'}}"
-                          aria-pressed={{if
-                            (eq this.areaShapeMode "oval")
-                            "true"
-                            "false"
-                          }}
-                          {{on "click" (fn this.setAreaShapeMode "oval")}}
-                        >
-                          {{i18n
-                            "npn_critique_reply.visual_notes.area_shape.oval"
-                          }}
-                        </button>
-                        <button
-                          type="button"
-                          class="npn-critique-reply-modal__area-shape-toggle-button
                             {{if (eq this.areaShapeMode 'path') 'is-selected'}}"
                           aria-pressed={{if
                             (eq this.areaShapeMode "path")
@@ -5531,6 +5981,21 @@ export default class NpnCritiqueReplyModal extends Component {
                             "npn_critique_reply.visual_notes.area_shape.draw_area"
                           }}
                         </button>
+                        <button
+                          type="button"
+                          class="npn-critique-reply-modal__area-shape-toggle-button
+                            {{if (eq this.areaShapeMode 'oval') 'is-selected'}}"
+                          aria-pressed={{if
+                            (eq this.areaShapeMode "oval")
+                            "true"
+                            "false"
+                          }}
+                          {{on "click" (fn this.setAreaShapeMode "oval")}}
+                        >
+                          {{i18n
+                            "npn_critique_reply.visual_notes.area_shape.oval"
+                          }}
+                        </button>
                       </div>
                     {{/if}}
 
@@ -5538,6 +6003,22 @@ export default class NpnCritiqueReplyModal extends Component {
                     {{#if this.attentionPullMode}}
                       {{#if this.attentionPulls.length}}
                         {{#if this.selectedAttentionPull}}
+                          {{#if
+                            (eq this.selectedAttentionPull.shape "path")
+                          }}
+                            <DButton
+                              class="btn-default npn-critique-reply-modal__retrace
+                                {{if this.retracingAttentionPullId 'is-active'}}"
+                              @icon="pencil"
+                              @action={{this.toggleRetraceAttentionPull}}
+                              @label={{if
+                                this.retracingAttentionPullId
+                                "npn_critique_reply.visual_notes.retrace.cancel"
+                                "npn_critique_reply.visual_notes.retrace.button"
+                              }}
+                              @disabled={{this.isPosting}}
+                            />
+                          {{/if}}
                           <DButton
                             class="btn-default npn-critique-reply-modal__remove-pin"
                             @icon="trash-can"
@@ -5560,12 +6041,34 @@ export default class NpnCritiqueReplyModal extends Component {
                             "npn_critique_reply.visual_notes.attention_pull_hint"
                           }}</p>
                       {{/if}}
+                      {{#if this.retracingAttentionPullId}}
+                        <p
+                          class="npn-critique-reply-modal__tool-hint"
+                          aria-live="polite"
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.retrace.hint"
+                          }}</p>
+                      {{/if}}
                     {{/if}}
 
                     {{! Strong-area mode. }}
                     {{#if this.strongAreaMode}}
                       {{#if this.strongAreas.length}}
                         {{#if this.selectedStrongArea}}
+                          {{#if (eq this.selectedStrongArea.shape "path")}}
+                            <DButton
+                              class="btn-default npn-critique-reply-modal__retrace
+                                {{if this.retracingStrongAreaId 'is-active'}}"
+                              @icon="pencil"
+                              @action={{this.toggleRetraceStrongArea}}
+                              @label={{if
+                                this.retracingStrongAreaId
+                                "npn_critique_reply.visual_notes.retrace.cancel"
+                                "npn_critique_reply.visual_notes.retrace.button"
+                              }}
+                              @disabled={{this.isPosting}}
+                            />
+                          {{/if}}
                           <DButton
                             class="btn-default npn-critique-reply-modal__remove-pin"
                             @icon="trash-can"
@@ -5586,6 +6089,14 @@ export default class NpnCritiqueReplyModal extends Component {
                           aria-live="polite"
                         >{{i18n
                             "npn_critique_reply.visual_notes.strong_area_hint"
+                          }}</p>
+                      {{/if}}
+                      {{#if this.retracingStrongAreaId}}
+                        <p
+                          class="npn-critique-reply-modal__tool-hint"
+                          aria-live="polite"
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.retrace.hint"
                           }}</p>
                       {{/if}}
                     {{/if}}
@@ -5696,8 +6207,10 @@ export default class NpnCritiqueReplyModal extends Component {
                 @attentionPulls={{this.attentionPulls}}
                 @selectedAttentionPullId={{this.selectedAttentionPullId}}
                 @attentionPullEditEnabled={{this.attentionPullEditEnabled}}
+                @retracingAttentionPullId={{this.retracingAttentionPullId}}
                 @onAddAttentionPull={{this.addAttentionPull}}
                 @onAddAttentionPullPath={{this.addAttentionPullPath}}
+                @onRetraceAttentionPullPath={{this.retraceAttentionPullPath}}
                 @onSelectAttentionPull={{this.selectAttentionPull}}
                 @onUpdateAttentionPull={{this.updateAttentionPull}}
                 @pendingAttentionPullPopover={{this.pendingAttentionPullPopover}}
@@ -5708,8 +6221,10 @@ export default class NpnCritiqueReplyModal extends Component {
                 @strongAreas={{this.strongAreas}}
                 @selectedStrongAreaId={{this.selectedStrongAreaId}}
                 @strongAreaEditEnabled={{this.strongAreaEditEnabled}}
+                @retracingStrongAreaId={{this.retracingStrongAreaId}}
                 @onAddStrongArea={{this.addStrongArea}}
                 @onAddStrongAreaPath={{this.addStrongAreaPath}}
+                @onRetraceStrongAreaPath={{this.retraceStrongAreaPath}}
                 @onSelectStrongArea={{this.selectStrongArea}}
                 @onUpdateStrongArea={{this.updateStrongArea}}
                 @pendingStrongAreaPopover={{this.pendingStrongAreaPopover}}
@@ -6272,6 +6787,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 {{else if this.opCookedSafe}}
                   <div
                     class="npn-critique-reply-modal__photographers-notes-body cooked"
+                    {{didInsert this.setupPhotographersNotes}}
                   >
                     {{this.opCookedSafe}}
                   </div>

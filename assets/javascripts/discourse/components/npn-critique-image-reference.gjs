@@ -182,10 +182,13 @@ export default class NpnCritiqueImageReference extends Component {
         attentionPulls: this.args.attentionPulls,
         selectedAttentionPullId: this.args.selectedAttentionPullId,
         attentionPullEditEnabled: this.args.attentionPullEditEnabled,
+        retracingAttentionPullId: this.args.retracingAttentionPullId,
         onAddAttentionPull: (xPct, yPct, widthPct, heightPct) =>
           this.args.onAddAttentionPull?.(xPct, yPct, widthPct, heightPct),
         onAddAttentionPullPath: (points) =>
           this.args.onAddAttentionPullPath?.(points),
+        onRetraceAttentionPullPath: (id, points) =>
+          this.args.onRetraceAttentionPullPath?.(id, points),
         onSelectAttentionPull: (id) =>
           this.args.onSelectAttentionPull?.(id),
         onUpdateAttentionPull: (id, xPct, yPct, widthPct, heightPct) =>
@@ -199,10 +202,13 @@ export default class NpnCritiqueImageReference extends Component {
         strongAreas: this.args.strongAreas,
         selectedStrongAreaId: this.args.selectedStrongAreaId,
         strongAreaEditEnabled: this.args.strongAreaEditEnabled,
+        retracingStrongAreaId: this.args.retracingStrongAreaId,
         onAddStrongArea: (xPct, yPct, widthPct, heightPct) =>
           this.args.onAddStrongArea?.(xPct, yPct, widthPct, heightPct),
         onAddStrongAreaPath: (points) =>
           this.args.onAddStrongAreaPath?.(points),
+        onRetraceStrongAreaPath: (id, points) =>
+          this.args.onRetraceStrongAreaPath?.(id, points),
         onSelectStrongArea: (id) => this.args.onSelectStrongArea?.(id),
         onUpdateStrongArea: (id, xPct, yPct, widthPct, heightPct) =>
           this.args.onUpdateStrongArea?.(
@@ -290,10 +296,13 @@ export default class NpnCritiqueImageReference extends Component {
       selectedDirectionArrowId: this.args.selectedDirectionArrowId,
       selectedRelationshipArrowId: this.args.selectedRelationshipArrowId,
       visualMode: this.args.visualMode,
+      areaShapeMode: this.args.areaShapeMode,
       aspectRatio: this.args.cropAspectRatio,
       pinMoveEnabled: this.args.pinMoveEnabled,
       attentionPullEditEnabled: this.args.attentionPullEditEnabled,
       strongAreaEditEnabled: this.args.strongAreaEditEnabled,
+      retracingAttentionPullId: this.args.retracingAttentionPullId,
+      retracingStrongAreaId: this.args.retracingStrongAreaId,
     });
   }
 
@@ -553,6 +562,7 @@ export default class NpnCritiqueImageReference extends Component {
                 this.pins
                 @selectedNumber
                 @visualMode
+                @areaShapeMode
                 @crop
                 @cropSelected
                 @cropAspectRatio
@@ -562,9 +572,11 @@ export default class NpnCritiqueImageReference extends Component {
                 @attentionPulls
                 @selectedAttentionPullId
                 @attentionPullEditEnabled
+                @retracingAttentionPullId
                 @strongAreas
                 @selectedStrongAreaId
                 @strongAreaEditEnabled
+                @retracingStrongAreaId
                 @directionArrows
                 @selectedDirectionArrowId
                 @relationshipArrows

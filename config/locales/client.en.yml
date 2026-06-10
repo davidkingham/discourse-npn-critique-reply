@@ -39,6 +39,8 @@ en:
           hint: "View the photographer’s description, questions, and details."
           loading: "Loading the photographer’s post…"
           failed: "Couldn’t load the photographer’s post. You can close and reopen the original topic in a new tab if needed."
+          quote: "Quote"
+          quote_aria: "Quote selected text"
         critique_style: "Style"
         feedback_focus: "Focus"
         weekly_challenge: "Weekly Challenge"
@@ -276,13 +278,19 @@ en:
         # Toolbar group + numbered-notes (pins)
         toolbar_label: "Visual annotation tools"
         # Area-shape sub-toggle. Shown only while Attention or Strong
-        # Area is the active tool. Default "Oval" preserves the
-        # long-standing behaviour; "Draw Area" is the experimental
-        # closed-polyline variant.
+        # Area is the active tool. "Draw Area" (default) is the
+        # closed-polyline variant; "Oval" is the geometric fallback.
         area_shape:
           label: "Area shape"
           oval: "Oval"
           draw_area: "Draw Area"
+        # Retrace replaces a path-shape marker's outline while keeping
+        # its label and any associated note text. Visible only when a
+        # path-shape Attention or Strong Area is selected.
+        retrace:
+          button: "Retrace"
+          cancel: "Cancel retrace"
+          hint: "Draw a new outline to replace this shape."
         add: "Add visual notes"
         # User-facing toolbar label shortened to "Notes" (the toolbar
         # is growing — 7 tools — so the longer "Numbered notes" only
