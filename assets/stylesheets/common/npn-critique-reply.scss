@@ -142,13 +142,20 @@
     // viewport while the user scrolls the writing area on the right.
     // The Processing Example row uses sticky-bottom (see below) so the
     // left-side workflow elements remain visible no matter where the
-    // user is in the writing scroll. Reserve ~25vh at the bottom for
-    // the Processing Example sticky row so neither sticky element
-    // overlaps the other on tall content.
+    // user is in the writing scroll.
+    //
+    // Both percentage and pixel ceilings via `min()`. The percentage
+    // tracks reasonable viewport heights; the pixel cap prevents
+    // image-col from outgrowing the modal body on very large
+    // displays (where 75vh = 1300px+ and would bleed behind the
+    // sticky Processing Example row). 720px keeps the image
+    // comfortable for casual viewing without competing with the
+    // sticky-bottom row; users who want a truly large image toggle
+    // Visual Focus Mode.
     position: sticky;
     top: 0;
     align-self: start;
-    max-height: calc(75vh - 4em);
+    max-height: min(calc(75vh - 4em), 720px);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -1397,7 +1404,13 @@
   &__img {
     display: block;
     max-width: 100%;
-    max-height: calc(80vh - 4em);
+    // Match the image-col cap pattern — pixel ceiling so the image
+    // doesn't outgrow the column on very large screens (where the
+    // vh-only cap previously let the IMG render ~1000px tall,
+    // which then bled behind the modal's sticky-bottom workflow
+    // row). The Visual Focus Mode rule overrides this with a
+    // higher cap when the writing pane is hidden.
+    max-height: min(calc(80vh - 4em), 600px);
     width: auto;
     height: auto;
     margin: 0 auto;
