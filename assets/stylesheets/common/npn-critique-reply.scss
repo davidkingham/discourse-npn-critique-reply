@@ -861,14 +861,6 @@
         margin-bottom: 0;
       }
     }
-    // Compact images so a photo embedded in the post body doesn't
-    // re-introduce the reference image at large size.
-    img {
-      max-width: 100%;
-      height: auto;
-      max-height: 18vh;
-      object-fit: contain;
-    }
   }
 
   &__photographers-notes-status {
