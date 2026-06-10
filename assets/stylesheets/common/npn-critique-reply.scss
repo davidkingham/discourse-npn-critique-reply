@@ -843,11 +843,13 @@
     border-top: 1px solid var(--primary-low);
     padding: 0.7em 0.85em 0.85em;
     background: var(--secondary);
-    // Cap the expanded panel so a long photographer description
-    // doesn't dominate the writing area. Scrolls internally on
-    // overflow.
-    max-height: 28vh;
-    overflow-y: auto;
+    // No internal scroll cap. The parent __write-col already
+    // scrolls, so a nested scroll context inside this panel only
+    // creates a confusing "scroll within scroll" that can swallow
+    // wheel events at the inner boundary. Letting the panel grow
+    // to fit its content means the user scrolls the writing
+    // column normally to read through long notes — same gesture
+    // they'd use to reach the textarea.
   }
 
   &__photographers-notes-body {
