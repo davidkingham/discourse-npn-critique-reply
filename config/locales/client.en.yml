@@ -154,6 +154,19 @@ en:
         mobile:
           visual_tools_summary: "Visual tools"
 
+        # Visual Focus Mode — a layout toggle that hides the write
+        # pane and lets the image use most of the modal width.
+        # Especially useful on 14-inch laptops where the default
+        # two-pane split leaves the image too small for precise
+        # annotation work. Enter / Exit labels chosen so the button
+        # reads as a temporary view change, not a mode the user has
+        # to commit to.
+        visual_focus:
+          enter: "Larger Image"
+          enter_title: "Hide the writing area and view the image at full modal width"
+          exit: "Return to Writing"
+          exit_title: "Return to the normal two-pane layout"
+
         # Visual notes — async export + upload pipeline ----------------
         preparing_visual_notes: "Preparing visual notes…"
         uploading_visual_notes: "Uploading visual notes…"

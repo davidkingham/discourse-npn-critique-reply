@@ -391,6 +391,21 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked mobileVisualToolsOpen = false;
   @tracked mobileProcessingExampleOpen = false;
 
+  // -- Visual Focus Mode -----------------------------------------------
+  //
+  // Optional layout mode that hides the writing pane and lets the
+  // image use most of the modal width. Useful on smaller laptops
+  // where the default two-pane split leaves the image too small for
+  // precise annotation work (per beta feedback). It's a LAYOUT
+  // toggle — annotations, text, drafts, processing example, and
+  // tool state all persist across enter/exit.
+  //
+  // The Konva stage tracks its containing `<img>` element via a
+  // ResizeObserver, so widening the image-col when this flag flips
+  // automatically resizes the stage and re-positions every
+  // percent-based annotation. No explicit refit call needed.
+  @tracked visualFocusMode = false;
+
   // Which image the LARGE image-area shows. Independent of the
   // visual-annotation selectedVersionKey — switching the large view
   // to "processing_example" doesn't change which reference-image
@@ -1378,6 +1393,18 @@ export default class NpnCritiqueReplyModal extends Component {
   @action
   toggleMobileProcessingExample() {
     this.mobileProcessingExampleOpen = !this.mobileProcessingExampleOpen;
+  }
+
+  @action
+  toggleVisualFocusMode() {
+    this.visualFocusMode = !this.visualFocusMode;
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] visual-focus-mode", {
+        topicId: this.topic?.id,
+        active: this.visualFocusMode,
+      });
+    }
   }
 
   // Opens the hidden file input. The handler below reads the selected
@@ -4300,7 +4327,8 @@ export default class NpnCritiqueReplyModal extends Component {
       @title={{i18n "npn_critique_reply.modal.title"}}
       @closeModal={{@closeModal}}
       class="npn-critique-reply-modal --workspace
-        {{unless this.hasImage 'npn-critique-reply-modal--no-image'}}"
+        {{unless this.hasImage 'npn-critique-reply-modal--no-image'}}
+        {{if this.visualFocusMode 'npn-critique-reply-modal--visual-focus'}}"
     >
       <:body>
         {{! Hidden autosave anchor. didUpdate fires whenever any
@@ -4339,12 +4367,40 @@ export default class NpnCritiqueReplyModal extends Component {
               class="npn-critique-reply-modal__image-col"
               aria-labelledby="npn-critique-reply-image-heading"
             >
-              <h3
-                id="npn-critique-reply-image-heading"
-                class="npn-critique-reply-modal__image-heading"
-              >
-                {{i18n "npn_critique_reply.modal.reference_image"}}
-              </h3>
+              {{! Header row: section heading on the left, Larger
+                  Image / Return to Writing toggle on the right.
+                  The toggle is the entry point for Visual Focus
+                  Mode (see `visualFocusMode` tracked state). When
+                  active, the modal modifier class hides the write
+                  pane and lets the image-col fill the modal. }}
+              <div class="npn-critique-reply-modal__image-col-header">
+                <h3
+                  id="npn-critique-reply-image-heading"
+                  class="npn-critique-reply-modal__image-heading"
+                >
+                  {{i18n "npn_critique_reply.modal.reference_image"}}
+                </h3>
+                <DButton
+                  class="btn-flat btn-small npn-critique-reply-modal__visual-focus-toggle"
+                  @action={{this.toggleVisualFocusMode}}
+                  @icon={{if
+                    this.visualFocusMode
+                    "down-left-and-up-right-to-center"
+                    "up-right-and-down-left-from-center"
+                  }}
+                  @label={{if
+                    this.visualFocusMode
+                    "npn_critique_reply.modal.visual_focus.exit"
+                    "npn_critique_reply.modal.visual_focus.enter"
+                  }}
+                  @title={{if
+                    this.visualFocusMode
+                    "npn_critique_reply.modal.visual_focus.exit_title"
+                    "npn_critique_reply.modal.visual_focus.enter_title"
+                  }}
+                  aria-pressed={{if this.visualFocusMode "true" "false"}}
+                />
+              </div>
 
               {{#if this.hasMultipleVersions}}
                 <div

@@ -31,6 +31,12 @@ register_svg_icon "arrow-right"
 # `arrows-left-right` is the Relationship Arrow tool button — two-way
 # arrow for "these areas relate / echo / balance" use cases.
 register_svg_icon "arrows-left-right"
+# Visual Focus Mode toggle icons. `up-right-and-down-left-from-center`
+# is the standard "expand" affordance, `down-left-and-up-right-to-center`
+# its "compress" counterpart — together they signal enter / exit of
+# the Larger Image layout.
+register_svg_icon "up-right-and-down-left-from-center"
+register_svg_icon "down-left-and-up-right-to-center"
 
 module ::DiscourseNpnCritiqueReply
   PLUGIN_NAME = "discourse-npn-critique-reply"

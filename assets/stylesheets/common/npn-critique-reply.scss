@@ -79,6 +79,43 @@
       "example";
   }
 
+  // -- Visual Focus Mode --------------------------------------------------
+  //
+  // Layout modifier that hides the write pane (and the Processing
+  // Example row) so the image can use most of the modal width. Only
+  // a LAYOUT change — annotations, text, drafts, tool state, and
+  // the processing example all persist across enter/exit. The Konva
+  // stage tracks its image element via ResizeObserver, so flipping
+  // these CSS rules automatically resizes the stage and re-flows
+  // every percent-based annotation.
+  &.npn-critique-reply-modal--visual-focus {
+    &__layout {
+      grid-template-columns: 1fr;
+      grid-template-areas: "image";
+    }
+
+    &__write-col,
+    &__processing-example-row {
+      display: none;
+    }
+
+    // The image column is the entire workspace now — drop the
+    // sticky / max-height behavior tuned for the two-pane split.
+    &__image-col {
+      position: static;
+      max-height: none;
+    }
+
+    // Let the image grow into the freed vertical space. With the
+    // write pane hidden the modal has the same height available,
+    // but the image-col is the only consumer — bump the IMG cap
+    // so it actually uses the room.
+    .npn-critique-image-reference__img,
+    &__processing-example-large {
+      max-height: calc(85vh - 6em);
+    }
+  }
+
   // -- Image column ------------------------------------------------------
 
   &__image-col {
@@ -105,8 +142,35 @@
     gap: 0.5em;
   }
 
+  // Header row across the top of the image column — the section
+  // heading and the Visual Focus Mode toggle live here. Flex so the
+  // toggle pins to the right while the heading takes the rest. The
+  // existing __image-heading spacing is preserved by the extend.
+  &__image-col-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5em;
+    margin-bottom: 0.25em;
+  }
+
   &__image-heading {
     @extend %npn-critique-section-heading;
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  // The "Larger Image" / "Return to Writing" button. Quiet button
+  // (btn-flat) so it reads as a layout affordance rather than a
+  // peer of the visual annotation tools. aria-pressed mirrors the
+  // active state for screen readers.
+  &__visual-focus-toggle.npn-critique-reply-modal__visual-focus-toggle {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    .d-icon {
+      margin-right: 0.4em;
+    }
   }
 
   // -- Version selector --------------------------------------------------
