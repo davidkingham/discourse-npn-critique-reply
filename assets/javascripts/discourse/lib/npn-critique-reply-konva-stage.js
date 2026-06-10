@@ -603,23 +603,83 @@ export async function createAnnotationStage({
   // Drag-to-trace Eye Path in-flight state. Per beta feedback the
   // tool should feel like drawing a path, not dropping discrete
   // pins. mousedown in eye_path mode begins a drag; mousemove
-  // samples points by distance threshold; mouseup commits the
-  // accumulated points as a single path via onCommitEyePath. A
-  // short pointer press that never crosses the distance threshold
-  // falls through to the existing click-to-drop behaviour.
+  // samples points by distance threshold; mouseup runs Douglas-
+  // Peucker simplification on the samples and commits the trimmed
+  // result via onCommitEyePath. A short pointer press that never
+  // crosses the distance threshold falls through to the existing
+  // click-to-drop behaviour.
   let eyePathDrag = null;
   // Pixel distance the pointer must travel between sample points
-  // before another one is recorded. Lower values trace finer
-  // detail; higher values produce smoother paths with fewer
-  // points. 14 px hits a comfortable balance at typical stage
-  // sizes — paths render smooth without burning the 40-point cap
-  // on tiny pen tremors.
-  const EYE_PATH_SAMPLE_MIN_PX = 14;
+  // before another one is recorded. Looser sampling (24px) keeps
+  // the raw point count modest even before simplification, which
+  // means individual point handles stay draggable after the fact
+  // rather than being a dense cloud the user can't grab cleanly.
+  const EYE_PATH_SAMPLE_MIN_PX = 24;
   // Pointer must move at least this far from mousedown for the
   // gesture to count as a "drag". Anything shorter falls back to
   // single-point click behaviour so users who just want to tap
   // get the existing pin-style point.
   const EYE_PATH_DRAG_THRESHOLD_PX = 8;
+  // Douglas-Peucker tolerance, as a fraction of the smaller stage
+  // dimension. A 2 % tolerance on a 700-px stage = 14 px; any
+  // sampled point within 14 px of the simplified line gets
+  // dropped. Combined with the Konva line tension on render
+  // (`EYE_PATH_SMOOTH_TENSION = 0.4`), this produces a smooth
+  // curve from typically 4-8 control points — sparse enough to
+  // edit each point by drag, dense enough to capture the shape
+  // the user traced.
+  const EYE_PATH_SIMPLIFY_TOLERANCE_PCT = 0.02;
+  // Defensive cap on the simplification output. The schema allows
+  // up to MAX_EYE_PATH_POINTS (40), but in practice DP returns
+  // well under this for a normal drag. The cap is a backstop
+  // against pathological inputs (e.g. a long zig-zagging drag).
+  const EYE_PATH_SIMPLIFY_HARD_CAP = 12;
+
+  // Douglas-Peucker line simplification. Given a polyline and a
+  // tolerance, returns a subset of the original points that
+  // preserves the curve's shape — points within `tolerance` of the
+  // simplified line are dropped. Endpoints are always kept.
+  function douglasPeucker(points, tolerance) {
+    if (points.length <= 2) {
+      return points.slice();
+    }
+    const last = points.length - 1;
+    // Find the point farthest from the line connecting first and
+    // last. If it's within tolerance, the whole stretch
+    // collapses to those two endpoints. If not, recurse on each
+    // half split at the farthest point.
+    let maxDist = 0;
+    let maxIndex = 0;
+    for (let i = 1; i < last; i++) {
+      const dist = perpendicularDistance(points[i], points[0], points[last]);
+      if (dist > maxDist) {
+        maxDist = dist;
+        maxIndex = i;
+      }
+    }
+    if (maxDist > tolerance) {
+      const left = douglasPeucker(points.slice(0, maxIndex + 1), tolerance);
+      const right = douglasPeucker(points.slice(maxIndex), tolerance);
+      // The shared midpoint appears once in each half — drop the
+      // duplicate when concatenating.
+      return [...left.slice(0, -1), ...right];
+    }
+    return [points[0], points[last]];
+  }
+
+  function perpendicularDistance(point, lineStart, lineEnd) {
+    const dx = lineEnd.x - lineStart.x;
+    const dy = lineEnd.y - lineStart.y;
+    if (dx === 0 && dy === 0) {
+      return Math.hypot(point.x - lineStart.x, point.y - lineStart.y);
+    }
+    const t =
+      ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) /
+      (dx * dx + dy * dy);
+    const projX = lineStart.x + t * dx;
+    const projY = lineStart.y + t * dy;
+    return Math.hypot(point.x - projX, point.y - projY);
+  }
 
   // References kept across renders so dim rects can be moved/resized
   // live during drag/transform (without tearing down the whole layer).
@@ -3441,7 +3501,30 @@ export async function createAnnotationStage({
       ) {
         drag.points.push({ x: pos.x, y: pos.y });
       }
-      const asPct = drag.points.map((p) => ({
+      // Run Douglas-Peucker simplification BEFORE converting to
+      // percent. Working in pixel space keeps the tolerance
+      // meaningful (it represents on-screen distance). After
+      // simplification, the path typically lands on 4-8 well-
+      // placed control points — sparse enough to be dragged
+      // individually after the fact, smooth enough to look like
+      // a flowing curve thanks to the Konva line tension.
+      const stageMin = Math.min(sw, sh);
+      const tolerance = stageMin * EYE_PATH_SIMPLIFY_TOLERANCE_PCT;
+      let simplified = douglasPeucker(drag.points, tolerance);
+      if (simplified.length > EYE_PATH_SIMPLIFY_HARD_CAP) {
+        // Pathological inputs (zig-zags) can still exceed the
+        // hard cap. Walk-and-drop alternating intermediate
+        // points until we fit, always keeping endpoints.
+        while (simplified.length > EYE_PATH_SIMPLIFY_HARD_CAP) {
+          const out = [simplified[0]];
+          for (let i = 1; i < simplified.length - 1; i += 2) {
+            out.push(simplified[i]);
+          }
+          out.push(simplified[simplified.length - 1]);
+          simplified = out;
+        }
+      }
+      const asPct = simplified.map((p) => ({
         xPct: Math.max(0, Math.min(100, (p.x / sw) * 100)),
         yPct: Math.max(0, Math.min(100, (p.y / sh) * 100)),
       }));
