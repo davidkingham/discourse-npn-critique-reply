@@ -843,16 +843,19 @@
     border-top: 1px solid var(--primary-low);
     padding: 0.7em 0.85em 0.85em;
     background: var(--secondary);
-    // Internal scroll so a long photographer description doesn't
-    // push the textarea below the fold while leaving the panel
-    // partially visible. `overscroll-behavior: contain` keeps the
-    // wheel event from chaining back to __write-col at the panel
-    // edges — without it, hitting the panel's top/bottom would
-    // immediately scroll the writing pane and feel jumpy.
-    // 50vh is generous enough that most posts fit without
-    // scrolling; long-form posts scroll cleanly inside.
-    max-height: 50vh;
-    overflow-y: auto;
+    // Internal scroll for long descriptions. Two reliability fixes
+    // over the previous attempt:
+    //   • `overflow-y: scroll` (instead of auto) so the scrollbar
+    //     gutter is ALWAYS reserved — on macOS / Safari the
+    //     auto-hidden scrollbar made users think the panel was
+    //     just clipping when in fact it was scrollable.
+    //   • `scrollbar-gutter: stable` for browsers that respect it,
+    //     same intent: always show that scroll is possible.
+    // Bumped the cap to 60vh so most posts fit without needing to
+    // scroll; long-form posts scroll cleanly inside.
+    max-height: 60vh;
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
     overscroll-behavior: contain;
   }
 
