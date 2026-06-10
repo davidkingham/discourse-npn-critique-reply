@@ -58,8 +58,20 @@
     grid-template-areas:
       "image write"
       "example write";
+    // Row 1 takes whatever's left after row 2's natural height —
+    // Processing Example hugs its content at the bottom of the
+    // left column, image-col fills the rest above it.
+    grid-template-rows: minmax(0, 1fr) auto;
     gap: 1.5em;
-    align-items: start;
+    align-items: stretch;
+    // Fix the layout's height so each column can scroll its own
+    // content independently. Without this, the modal body would
+    // scroll as one unit and the Processing Example section would
+    // drift up/down along with the writing area (the reported
+    // issue). 85vh - 4em fits inside the standard DModal body
+    // height and leaves room for the modal title + footer.
+    height: calc(85vh - 4em);
+    overflow: hidden;
   }
 
   &__image-col {
@@ -123,9 +135,6 @@
   // -- Image column ------------------------------------------------------
 
   &__image-col {
-    position: sticky;
-    top: 0;
-    align-self: start;
     min-width: 0;
 
     // Workspace container: soft panel that frames the photo and reserves
@@ -135,12 +144,12 @@
     border: 1px solid var(--primary-low);
     border-radius: var(--d-border-radius, 4px);
 
-    // Cap the column at the modal body's effective height so the entire
-    // image + surrounding controls fit on screen without scrolling.
-    // The img inside uses `position: absolute` (see below) which makes
-    // its `max-height: 100%` resolve against the frame regardless of
-    // whether the flex chain produces a definite height.
-    max-height: calc(80vh - 4em);
+    // Independent scroll. The parent __layout has a fixed height
+    // and `overflow: hidden`, so this column scrolls its own
+    // content separately from the writing column on the right and
+    // the Processing Example row below.
+    overflow-y: auto;
+    max-height: 100%;
     display: flex;
     flex-direction: column;
     gap: 0.5em;
@@ -598,6 +607,24 @@
     // surfaces (intro / request / prompts / textarea) rather than a
     // worksheet of stacked rows.
     gap: 1.5em;
+    // Independent scroll. See __layout comment — each column has
+    // its own scroll context so the writing area doesn't drag the
+    // image / processing-example sections along when the user
+    // scrolls long prose.
+    overflow-y: auto;
+    max-height: 100%;
+    // Modest left padding so the textarea / cards don't kiss the
+    // scrollbar in the scrollable area.
+    padding-right: 0.25em;
+  }
+
+  // Processing Example row sits in left column row 2. Independent
+  // scroll like the other two columns so it stays in its own slot
+  // at the bottom of the left side.
+  &__processing-example-row {
+    min-width: 0;
+    overflow-y: auto;
+    max-height: 100%;
   }
 
   &__intro {
@@ -1151,11 +1178,29 @@
         "image"
         "write"
         "example";
+      grid-template-rows: auto;
       gap: 1.25em;
+      // Mobile stack scrolls as one modal body. Undo the desktop
+      // fixed-height + overflow rules so column heights flow
+      // naturally and the modal body owns the scrollbar.
+      height: auto;
+      overflow: visible;
+    }
+
+    &__image-col,
+    &__write-col,
+    &__processing-example-row {
+      overflow: visible;
+      max-height: none;
+    }
+
+    &__write-col {
+      // The desktop right-padding for the inner scrollbar is
+      // pointless when there's no inner scroll.
+      padding-right: 0;
     }
 
     &__image-col {
-      position: static;
       padding: 0.5em;
       // Drop the desktop height cap on mobile — the stacked layout
       // doesn't have a sticky column to keep in view, and the body
