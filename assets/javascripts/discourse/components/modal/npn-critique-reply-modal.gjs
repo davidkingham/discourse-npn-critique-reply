@@ -1403,14 +1403,38 @@ export default class NpnCritiqueReplyModal extends Component {
     return err;
   }
 
-  _visualNotesErrorMessage(stage) {
-    return (
+  _visualNotesErrorMessage(stage, cause = null) {
+    const base =
       {
         load: i18n("npn_critique_reply.modal.visual_notes_load_failed"),
         export: i18n("npn_critique_reply.modal.visual_notes_export_failed"),
         upload: i18n("npn_critique_reply.modal.visual_notes_upload_failed"),
-      }[stage] ?? i18n("npn_critique_reply.modal.visual_notes_generic_failure")
-    );
+      }[stage] ?? i18n("npn_critique_reply.modal.visual_notes_generic_failure");
+
+    // When the server returned a specific reason (size / type / rate
+    // limit / per-user policy), surface it. Without this the user gets
+    // a generic "please try again" which obscures actionable causes —
+    // e.g. "Sorry, the maximum filesize for uploads is 4 MB" or
+    // "You have reached the maximum number of new posts in this hour".
+    const detail = this._extractCauseMessage(cause);
+    return detail ? `${base} ${detail}` : base;
+  }
+
+  _extractCauseMessage(cause) {
+    if (!cause) {
+      return null;
+    }
+    const json = cause?.jqXHR?.responseJSON ?? cause?.responseJSON;
+    if (Array.isArray(json?.errors) && json.errors.length > 0) {
+      return json.errors.join(". ");
+    }
+    if (typeof json?.error === "string") {
+      return json.error;
+    }
+    if (typeof cause?.message === "string" && cause.message.length > 0) {
+      return cause.message;
+    }
+    return null;
   }
 
   // ---- Processing Example ---------------------------------------------
@@ -4356,7 +4380,10 @@ export default class NpnCritiqueReplyModal extends Component {
         return;
       }
       if (error?.stage) {
-        this.errorMessage = this._visualNotesErrorMessage(error.stage);
+        this.errorMessage = this._visualNotesErrorMessage(
+          error.stage,
+          error.cause
+        );
         this.visualNotesFailureContext = "post";
       } else {
         // Server validation, rate limit, etc. — no fallback button.
@@ -4452,7 +4479,10 @@ export default class NpnCritiqueReplyModal extends Component {
         return;
       }
       if (error?.stage) {
-        this.errorMessage = this._visualNotesErrorMessage(error.stage);
+        this.errorMessage = this._visualNotesErrorMessage(
+          error.stage,
+          error.cause
+        );
         this.visualNotesFailureContext = "edit";
       } else {
         this.errorMessage = this._extractErrorMessage(error);
