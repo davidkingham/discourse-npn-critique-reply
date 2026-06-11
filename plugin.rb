@@ -18,12 +18,17 @@ register_asset "stylesheets/common/npn-critique-reply.scss"
 # product intent — show the order the eye moves through the image).
 register_svg_icon "crop-simple"
 register_svg_icon "route"
-# `highlighter` is used for the Attention Pull tool button — represents
-# soft marking of an area without warning-tool connotations.
+# `draw-polygon` is the Area tool button — the unified marker for any
+# region the critic wants to discuss. Reads as "mark a region" for
+# both the oval and Draw Area (freeform) sub-modes.
+register_svg_icon "draw-polygon"
+# `highlighter` was the legacy Attention Pull button; kept registered
+# in case any old template path still references it during the
+# transition. Safe to drop in a follow-up once we're sure nothing
+# external relies on it.
 register_svg_icon "highlighter"
-# `circle-check` is used for the Strong Area tool button — the positive
-# counterpart to Attention Pull. Visible "supportive observation" cue
-# without overreading as "correct answer".
+# `circle-check` was the legacy Strong Area button; kept registered
+# for the same reason as `highlighter`.
 register_svg_icon "circle-check"
 # `arrow-right` is the Direction Arrow tool button — one-way arrow for
 # "this leads my eye toward..." use cases.

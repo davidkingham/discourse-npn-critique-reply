@@ -5736,7 +5736,7 @@ export default class NpnCritiqueReplyModal extends Component {
                     @icon={{if
                       this.attentionPullMode
                       "check"
-                      "highlighter"
+                      "draw-polygon"
                     }}
                     @label={{if
                       this.attentionPullMode
