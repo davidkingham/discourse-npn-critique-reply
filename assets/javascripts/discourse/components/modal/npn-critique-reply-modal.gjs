@@ -3276,7 +3276,7 @@ export default class NpnCritiqueReplyModal extends Component {
       // reference so the textarea line still connects back to the
       // visual marker. No filler scaffolding.
       const line = i18n(
-        "npn_critique_reply.visual_notes.attention_pull_line_template",
+        "npn_critique_reply.visual_notes.area_note_line_template",
         { label: pull.label, text }
       );
       this._appendToTextarea(line);
@@ -5721,6 +5721,11 @@ export default class NpnCritiqueReplyModal extends Component {
                     }}
                     @disabled={{this.isPosting}}
                   />
+                  {{! Unified Area tool. Internally still routes
+                      through attentionPullMode / attention_pull —
+                      schema and tracked state are unchanged so
+                      existing annotations remain compatible. Only
+                      the labels, tooltip, and helper hint change. }}
                   <DButton
                     class={{if
                       this.attentionPullMode
@@ -5735,28 +5740,10 @@ export default class NpnCritiqueReplyModal extends Component {
                     }}
                     @label={{if
                       this.attentionPullMode
-                      "npn_critique_reply.visual_notes.attention_pull_done"
-                      "npn_critique_reply.visual_notes.attention_pull"
+                      "npn_critique_reply.visual_notes.area_note_done"
+                      "npn_critique_reply.visual_notes.area_note"
                     }}
-                    @disabled={{this.isPosting}}
-                  />
-                  <DButton
-                    class={{if
-                      this.strongAreaMode
-                      "btn-primary"
-                      "btn-default"
-                    }}
-                    @action={{this.toggleStrongAreaMode}}
-                    @icon={{if
-                      this.strongAreaMode
-                      "check"
-                      "circle-check"
-                    }}
-                    @label={{if
-                      this.strongAreaMode
-                      "npn_critique_reply.visual_notes.strong_area_done"
-                      "npn_critique_reply.visual_notes.strong_area"
-                    }}
+                    @title="npn_critique_reply.visual_notes.area_note_title"
                     @disabled={{this.isPosting}}
                   />
                   <DButton
@@ -6023,14 +6010,14 @@ export default class NpnCritiqueReplyModal extends Component {
                             class="btn-default npn-critique-reply-modal__remove-pin"
                             @icon="trash-can"
                             @action={{this.removeSelectedAttentionPull}}
-                            @label="npn_critique_reply.visual_notes.attention_pull_remove"
+                            @label="npn_critique_reply.visual_notes.area_note_remove"
                             @disabled={{this.isPosting}}
                           />
                         {{/if}}
                         <DButton
                           class="btn-flat npn-critique-reply-modal__clear-notes"
                           @action={{this.clearAttentionPulls}}
-                          @label="npn_critique_reply.visual_notes.attention_pull_clear"
+                          @label="npn_critique_reply.visual_notes.area_note_clear"
                           @disabled={{this.isPosting}}
                         />
                       {{else}}
@@ -6038,7 +6025,7 @@ export default class NpnCritiqueReplyModal extends Component {
                           class="npn-critique-reply-modal__tool-hint"
                           aria-live="polite"
                         >{{i18n
-                            "npn_critique_reply.visual_notes.attention_pull_hint"
+                            "npn_critique_reply.visual_notes.area_note_hint"
                           }}</p>
                       {{/if}}
                       {{#if this.retracingAttentionPullId}}
@@ -6383,7 +6370,7 @@ export default class NpnCritiqueReplyModal extends Component {
                         <span
                           class="npn-critique-reply-modal__a11y-list-label"
                         >{{i18n
-                            "npn_critique_reply.visual_notes.attention_pull_a11y_label"
+                            "npn_critique_reply.visual_notes.area_note_a11y_label"
                             label=pull.label
                           }}</span>
                         <button

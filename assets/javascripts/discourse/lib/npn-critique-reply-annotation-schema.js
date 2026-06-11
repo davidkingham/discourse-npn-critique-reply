@@ -70,7 +70,17 @@ export const ANNOTATION_KINDS = Object.freeze({
   PIN: "pin",
   CROP: "crop",
   EYE_PATH: "eye_path",
+  // Unified area marker (the toolbar's "Area" tool). New annotations
+  // are written as area_note. Renders with the same color family,
+  // A<N> labels, and ellipse/path shapes as the legacy attention_pull.
+  AREA_NOTE: "area_note",
+  // Legacy — superseded by AREA_NOTE. Existing posts and drafts that
+  // contain attention_pull entries still deserialize correctly; on
+  // next save they're re-emitted as area_note.
   ATTENTION_PULL: "attention_pull",
+  // Legacy — Strong Area was removed from the toolbar. Existing
+  // strong_area entries continue to render/restore/export; no new
+  // ones are produced.
   STRONG_AREA: "strong_area",
   // Direction arrow — one-way (single arrowhead), labeled "D<N>".
   // For "this leads my eye toward..." / "this gesture points toward
@@ -98,6 +108,7 @@ const ACTIVE_KINDS_V1 = Object.freeze(
     ANNOTATION_KINDS.PIN,
     ANNOTATION_KINDS.CROP,
     ANNOTATION_KINDS.EYE_PATH,
+    ANNOTATION_KINDS.AREA_NOTE,
     ANNOTATION_KINDS.ATTENTION_PULL,
     ANNOTATION_KINDS.STRONG_AREA,
     ANNOTATION_KINDS.DIRECTION_ARROW,
@@ -197,6 +208,14 @@ export function nextEyePathId(existingIds) {
   return `eye_path_${max + 1}`;
 }
 
+// Area-note caps. Same cap + minimum as the legacy attention_pull
+// since they share an in-memory array and a label namespace.
+// AREA_NOTE is what new annotations are SERIALIZED as; the modal
+// continues to operate on this.attentionPulls in memory so legacy
+// attention_pull payloads round-trip cleanly.
+export const MAX_AREA_NOTE_COUNT = 8;
+export const MIN_AREA_NOTE_DIMENSION_PCT = 3;
+
 // Attention-pull caps. Up to 8 markers per critique — past that the
 // image gets crowded and the observational tone is lost. The 3% min
 // dimension matches crop's tiny-accident floor; ellipses below it
@@ -220,6 +239,11 @@ export const MIN_STRONG_AREA_DIMENSION_PCT = 3;
 export const MAX_DIRECTION_ARROW_COUNT = 8;
 export const MAX_RELATIONSHIP_ARROW_COUNT = 8;
 export const MIN_ARROW_DISTANCE_PCT = 3;
+
+// Area-note labels reuse the existing A<N> namespace so legacy
+// attention_pull labels round-trip without renumbering. Same strict
+// pattern.
+export const AREA_NOTE_LABEL_PATTERN = /^A\d+$/;
 
 // Attention-pull labels are short "A<N>" tags — visible on the image
 // as a small pill and embedded in the critique text as `[A<N>]`. The
@@ -668,10 +692,65 @@ export function normalizeAttentionPullAnnotation(raw) {
   };
 }
 
+// Area-note normalizer. Same geometry validation as attention_pull —
+// the in-memory model and label namespace are identical — but emits
+// `kind: "area_note"` so new annotations are stored in the canonical
+// post-unification shape. Path-shape and ellipse-shape both supported.
+export function normalizeAreaNoteAnnotation(raw) {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  if (raw.shape === "path") {
+    return normalizeAreaPathAnnotation(
+      raw,
+      ANNOTATION_KINDS.AREA_NOTE,
+      AREA_NOTE_LABEL_PATTERN
+    );
+  }
+  const xPct = clampPct(raw.x_pct ?? raw.xPct);
+  const yPct = clampPct(raw.y_pct ?? raw.yPct);
+  const rawWidth = clampPct(raw.width_pct ?? raw.widthPct);
+  const rawHeight = clampPct(raw.height_pct ?? raw.heightPct);
+  if (xPct == null || yPct == null || rawWidth == null || rawHeight == null) {
+    return null;
+  }
+  const widthPct = Math.min(rawWidth, 100 - xPct);
+  const heightPct = Math.min(rawHeight, 100 - yPct);
+  if (
+    widthPct < MIN_AREA_NOTE_DIMENSION_PCT ||
+    heightPct < MIN_AREA_NOTE_DIMENSION_PCT
+  ) {
+    return null;
+  }
+  const id = isNonEmptyString(raw.id) ? raw.id : null;
+  const rawLabel = raw.label;
+  const label =
+    typeof rawLabel === "string" && AREA_NOTE_LABEL_PATTERN.test(rawLabel)
+      ? rawLabel
+      : null;
+  return {
+    id,
+    kind: ANNOTATION_KINDS.AREA_NOTE,
+    shape: "ellipse",
+    label,
+    x_pct: xPct,
+    y_pct: yPct,
+    width_pct: widthPct,
+    height_pct: heightPct,
+  };
+}
+
 // Modal attention-pull model shape:
 //   { id, xPct, yPct, widthPct, heightPct }
 // Schema attention-pull is the same fields snake_case + kind + shape.
 
+// Serializes the modal's in-memory area markers to wire format. Each
+// entry is emitted with `kind: "area_note"` — the canonical post-
+// unification kind. Legacy `attention_pull` entries that were
+// restored from older drafts/posts still live in the same in-memory
+// array (this.attentionPulls) and get re-emitted as area_note here,
+// completing the migration on the next save. Function name preserved
+// for caller stability; the OUTPUT KIND is what changed.
 export function attentionPullsToAnnotations(pulls) {
   if (!Array.isArray(pulls)) {
     return [];
@@ -682,7 +761,7 @@ export function attentionPullsToAnnotations(pulls) {
   // exported image. Track ones we've already emitted to detect dupes.
   const usedLabels = new Set();
   for (const pull of pulls) {
-    if (out.length >= MAX_ATTENTION_PULL_COUNT) {
+    if (out.length >= MAX_AREA_NOTE_COUNT) {
       break;
     }
     // Build the raw payload to pass into the normalizer. Path-shape
@@ -692,7 +771,7 @@ export function attentionPullsToAnnotations(pulls) {
     const raw =
       pull.shape === "path"
         ? {
-            id: pull.id ?? `attention_pull_${idCounter}`,
+            id: pull.id ?? `area_note_${idCounter}`,
             label: pull.label,
             shape: "path",
             points: Array.isArray(pull.points)
@@ -700,20 +779,23 @@ export function attentionPullsToAnnotations(pulls) {
               : [],
           }
         : {
-            id: pull.id ?? `attention_pull_${idCounter}`,
+            id: pull.id ?? `area_note_${idCounter}`,
             label: pull.label,
             x_pct: pull.xPct,
             y_pct: pull.yPct,
             width_pct: pull.widthPct,
             height_pct: pull.heightPct,
           };
-    const normalized = normalizeAttentionPullAnnotation(raw);
+    const normalized = normalizeAreaNoteAnnotation(raw);
     if (normalized) {
       if (!normalized.id) {
-        normalized.id = `attention_pull_${idCounter}`;
+        normalized.id = `area_note_${idCounter}`;
       }
       // Preserve valid + unique labels; regenerate via max-suffix+1
       // when missing OR colliding with an already-emitted label.
+      // Reuses nextAttentionPullLabel since the label namespaces are
+      // shared (both A<N>); legacy attention_pull labels round-trip
+      // without renumbering.
       if (!normalized.label || usedLabels.has(normalized.label)) {
         normalized.label = nextAttentionPullLabel(Array.from(usedLabels));
       }
@@ -725,13 +807,21 @@ export function attentionPullsToAnnotations(pulls) {
   return out;
 }
 
+// Deserializes both AREA_NOTE (canonical, post-unification) and
+// ATTENTION_PULL (legacy) wire entries into the same in-memory
+// shape used by this.attentionPulls in the modal. Saving the draft
+// or posting the critique re-emits the entire set as area_note via
+// attentionPullsToAnnotations, completing the migration.
 export function annotationsToAttentionPulls(payload) {
   if (!payload || !Array.isArray(payload.annotations)) {
     return [];
   }
   const out = [];
   for (const a of payload.annotations) {
-    if (a?.kind !== ANNOTATION_KINDS.ATTENTION_PULL) {
+    if (
+      a?.kind !== ANNOTATION_KINDS.AREA_NOTE &&
+      a?.kind !== ANNOTATION_KINDS.ATTENTION_PULL
+    ) {
       continue;
     }
     if (a.shape === "path") {
@@ -1331,6 +1421,9 @@ function normalizeAnnotationsArray(raw) {
   let eyePathCount = 0;
   let eyePathIdCounter = 1;
   const usedEyePathLabels = new Set();
+  let areaNoteCount = 0;
+  let areaNoteIdCounter = 1;
+  const usedAreaNoteLabels = new Set();
   let attentionPullCount = 0;
   let attentionPullIdCounter = 1;
   const usedAttentionPullLabels = new Set();
@@ -1394,10 +1487,36 @@ function normalizeAnnotationsArray(raw) {
           eyePathIdCounter += 1;
         }
         break;
+      case ANNOTATION_KINDS.AREA_NOTE:
+        // Canonical area kind post-unification. Same cap + label
+        // namespace as the legacy ATTENTION_PULL — both share A<N>
+        // labels so a mixed payload (transition state) doesn't
+        // double-assign labels.
+        if (areaNoteCount >= MAX_AREA_NOTE_COUNT) {
+          continue;
+        }
+        normalized = normalizeAreaNoteAnnotation(entry);
+        if (normalized) {
+          if (!normalized.id) {
+            normalized.id = `area_note_${areaNoteIdCounter}`;
+          }
+          if (
+            !normalized.label ||
+            usedAreaNoteLabels.has(normalized.label)
+          ) {
+            normalized.label = nextAttentionPullLabel(
+              Array.from(usedAreaNoteLabels)
+            );
+          }
+          usedAreaNoteLabels.add(normalized.label);
+          areaNoteCount += 1;
+          areaNoteIdCounter += 1;
+        }
+        break;
       case ANNOTATION_KINDS.ATTENTION_PULL:
-        // Multiple allowed up to the cap. After-cap entries are
-        // silently dropped to mirror the modal's cap-enforcing
-        // addAttentionPull action.
+        // Legacy kind. Multiple allowed up to the cap. After-cap
+        // entries are silently dropped to mirror the modal's cap-
+        // enforcing addAttentionPull action.
         if (attentionPullCount >= MAX_ATTENTION_PULL_COUNT) {
           continue;
         }

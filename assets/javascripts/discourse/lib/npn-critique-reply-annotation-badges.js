@@ -25,6 +25,10 @@ const KIND_CSS_SUFFIX = Object.freeze({
   pin: "note",
   crop: "crop",
   eye_path: "eye-path",
+  // area_note is the canonical post-unification kind; reuses the
+  // existing "attention" badge style so new [A1] markers render
+  // visually identical to legacy attention_pull markers.
+  area_note: "attention",
   attention_pull: "attention",
   strong_area: "strong-area",
   direction_arrow: "direction",

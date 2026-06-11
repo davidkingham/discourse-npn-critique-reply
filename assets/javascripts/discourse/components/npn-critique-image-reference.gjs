@@ -670,7 +670,7 @@ export default class NpnCritiqueImageReference extends Component {
               class="npn-critique-image-reference__note-popover"
               role="dialog"
               aria-label={{i18n
-                "npn_critique_reply.visual_notes.attention_pull_popover_dialog_label"
+                "npn_critique_reply.visual_notes.area_note_popover_dialog_label"
               }}
               {{didInsert
                 this.positionNotePopover
@@ -684,13 +684,13 @@ export default class NpnCritiqueImageReference extends Component {
               <div
                 class="npn-critique-image-reference__note-popover-title"
               >{{i18n
-                  "npn_critique_reply.visual_notes.attention_pull_popover_title"
+                  "npn_critique_reply.visual_notes.area_note_popover_title"
                 }}</div>
               <input
                 type="text"
                 class="npn-critique-image-reference__note-popover-input"
                 placeholder={{i18n
-                  "npn_critique_reply.visual_notes.attention_pull_popover_placeholder"
+                  "npn_critique_reply.visual_notes.area_note_popover_placeholder"
                 }}
                 value={{@pendingAttentionPullPopoverText}}
                 autocomplete="off"

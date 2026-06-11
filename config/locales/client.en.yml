@@ -277,16 +277,16 @@ en:
       visual_notes:
         # Toolbar group + numbered-notes (pins)
         toolbar_label: "Visual annotation tools"
-        # Area-shape sub-toggle. Shown only while Attention or Strong
-        # Area is the active tool. "Draw Area" (default) is the
-        # closed-polyline variant; "Oval" is the geometric fallback.
+        # Area-shape sub-toggle. Shown only while the Area tool is
+        # active. "Draw Area" (default) is the closed-polyline variant;
+        # "Oval" is the geometric fallback.
         area_shape:
           label: "Area shape"
           oval: "Oval"
           draw_area: "Draw Area"
         # Retrace replaces a path-shape marker's outline while keeping
         # its label and any associated note text. Visible only when a
-        # path-shape Attention or Strong Area is selected.
+        # path-shape Area marker is selected.
         retrace:
           button: "Retrace"
           cancel: "Cancel retrace"
@@ -369,31 +369,51 @@ en:
         # Legacy starter — kept for any in-flight session referencing
         # it, but no longer inserted by the modal.
         eye_path_starter: "My eye moves through the image like this..."
-        # Attention Pull tool — observational marker for areas that pull
-        # attention. Wording avoids "distraction" / "problem" framing.
-        # Toolbar label shortened to "Attention"; tooltip keeps the full
-        # descriptive form.
+        # Area tool — unified replacement for the previous separate
+        # Attention and Strong Area tools. One tool that marks any
+        # area worth discussing; the meaning ("pulls attention",
+        # "feels strong", "needs work") comes from the critic's
+        # written response, not from the tool choice.
+        #
+        # Internal schema kind stays `attention_pull` so existing
+        # annotations, drafts, exports, and posts keep working without
+        # a migration. Only the user-facing copy changes.
+        area_note: "Area"
+        area_note_title: "Area note — mark an area you want to discuss"
+        area_note_done: "Done with area"
+        area_note_hint: "Drag on the image to mark an area you want to discuss."
+        area_note_remove: "Remove selected"
+        area_note_clear: "Clear area notes"
+        area_note_a11y_label: "Area %{label}"
+        # Per-marker textarea line — appended only when the critic
+        # types in the popover and clicks Add note. No filler is
+        # inserted on marker creation or on Skip; the [label] prefix
+        # keeps the textarea reference tied to the visual marker.
+        area_note_line_template: "[%{label}] %{text}"
+        # Popover that appears after each Area marker is placed
+        # (mirrors the numbered-notes popover pattern).
+        area_note_popover_title: "Area note"
+        area_note_popover_dialog_label: "Add a note for this area"
+        area_note_popover_placeholder: "What's notable about this area?"
+        # Legacy Attention Pull keys — retained because some older
+        # drafts and existing annotations may still reference them
+        # before they're re-rendered through the new Area copy.
         attention_pull: "Attention"
         attention_pull_done: "Done with attention pull"
         attention_pull_hint: "Drag on the image to mark an area that pulls your attention."
         attention_pull_remove: "Remove selected"
         attention_pull_clear: "Clear attention pulls"
         attention_pull_a11y_label: "Attention pull %{label}"
-        # Per-marker textarea line — appended only when the critic
-        # types in the popover and clicks Add note. No filler is
-        # inserted on marker creation or on Skip; the [label] prefix
-        # keeps the textarea reference tied to the visual marker.
         attention_pull_line_template: "[%{label}] %{text}"
-        # Legacy starter — kept around for any in-flight session that
-        # references it, but no longer inserted by the modal.
         attention_pull_starter: "This area pulls my attention because..."
-        # Popover that appears after each attention-pull marker is
-        # placed (mirrors the numbered-notes popover pattern).
         attention_pull_popover_title: "Attention pull"
         attention_pull_popover_dialog_label: "Add a note for this attention pull"
         attention_pull_popover_placeholder: "What's pulling your attention here?"
-        # Strong Area tool — positive counterpart to Attention Pull.
-        # Observational/supportive tone; never "best/correct/winner".
+        # Strong Area tool — REMOVED from the toolbar as of the Area
+        # unification. Existing strong_area annotations still render,
+        # restore from drafts, and export; these keys remain so the
+        # accessible annotation list and any legacy popovers continue
+        # to label them correctly.
         strong_area: "Strong area"
         strong_area_done: "Done with strong area"
         strong_area_hint: "Drag on the image to mark an area that feels especially strong."

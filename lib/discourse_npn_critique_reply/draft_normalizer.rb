@@ -35,6 +35,12 @@ module DiscourseNpnCritiqueReply
     # If a drag's bounding box is below this threshold along BOTH
     # axes, treat it as an accidental tap rather than a real shape.
     MIN_AREA_PATH_DIM_PCT = 3.0
+    # Area-note caps match the legacy attention_pull caps — the two
+    # share an in-memory array, an A<N> label namespace, and the
+    # same UX workload. A mixed payload during transition counts
+    # the two kinds independently against their own caps; in
+    # practice the client rewrites everything as area_note on save.
+    MAX_AREA_NOTE_COUNT = 8
     MAX_ATTENTION_PULL_COUNT = 8
     MAX_STRONG_AREA_COUNT = 8
     MAX_DIRECTION_ARROW_COUNT = 8
@@ -45,6 +51,7 @@ module DiscourseNpnCritiqueReply
       pin
       crop
       eye_path
+      area_note
       attention_pull
       strong_area
       direction_arrow
@@ -125,6 +132,7 @@ module DiscourseNpnCritiqueReply
       pin_count = 0
       crop_count = 0
       eye_path_count = 0
+      area_note_count = 0
       attention_pull_count = 0
       strong_area_count = 0
       direction_arrow_count = 0
@@ -155,7 +163,17 @@ module DiscourseNpnCritiqueReply
           when "eye_path"
             next if eye_path_count >= MAX_EYE_PATH_COUNT
             normalize_eye_path(entry).tap { |n| eye_path_count += 1 if n }
+          when "area_note"
+            # Canonical area kind post-unification — same geometry
+            # validation as attention_pull, same A<N> label namespace.
+            next if area_note_count >= MAX_AREA_NOTE_COUNT
+            normalize_area(entry, kind: "area_note").tap do |n|
+              area_note_count += 1 if n
+            end
           when "attention_pull"
+            # Legacy. Existing drafts and posts may still carry this
+            # kind. Validated and persisted as-is; the client re-emits
+            # as area_note on the next save.
             next if attention_pull_count >= MAX_ATTENTION_PULL_COUNT
             normalize_area(entry, kind: "attention_pull").tap do |n|
               attention_pull_count += 1 if n
