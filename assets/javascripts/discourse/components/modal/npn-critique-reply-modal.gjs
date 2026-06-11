@@ -5522,6 +5522,114 @@ export default class NpnCritiqueReplyModal extends Component {
                 </div>
               </div>
 
+              {{! Image first — moved up so the reference is the
+                  primary visual element under the header. Version
+                  selector + large-image-view-toggle (the "Showing X"
+                  status indicators) now sit below the image. The
+                  visual tools come further down, under their own
+                  "Optional Visual Notes" section header. }}
+              {{#if this.viewingProcessingExample}}
+                {{! The alt text on the <img> already carries the
+                    accessible name; no separate figcaption needed. }}
+                <div
+                  class="npn-critique-reply-modal__processing-example-large"
+                >
+                  <img
+                    class="npn-critique-reply-modal__processing-example-large-img"
+                    src={{this.processingExample.url}}
+                    alt={{this.largeImageAlt}}
+                  />
+                </div>
+              {{else}}
+              <NpnCritiqueImageReference
+                @imageUrl={{this.effectiveImageUrl}}
+                @alt={{this.imageAlt}}
+                @pins={{this.notes}}
+                @crop={{this.crop}}
+                @visualMode={{this.visualMode}}
+                @areaShapeMode={{this.areaShapeMode}}
+                @selectedNumber={{this.selectedPinNumber}}
+                @cropSelected={{this.cropSelected}}
+                @onImageClick={{this.addPin}}
+                @onPinSelect={{this.selectPin}}
+                @onMovePin={{this.movePin}}
+                @pinMoveEnabled={{this.pinMoveEnabled}}
+                @onAddCrop={{this.addCrop}}
+                @onSelectCrop={{this.selectCrop}}
+                @onUpdateCrop={{this.updateCrop}}
+                @pendingCropPopover={{this.pendingCropPopover}}
+                @pendingCropPopoverText={{this.pendingCropPopoverText}}
+                @onPendingCropPopoverInput={{this.updatePendingCropPopoverText}}
+                @onConfirmPendingCropPopover={{this.confirmPendingCropPopover}}
+                @onSkipPendingCropPopover={{this.skipPendingCropPopover}}
+                @eyePaths={{this.eyePaths}}
+                @selectedEyePathId={{this.selectedEyePathId}}
+                @onAddEyePathPoint={{this.addEyePathPoint}}
+                @onCommitEyePath={{this.commitEyePath}}
+                @onSelectEyePath={{this.selectEyePath}}
+                @onMoveEyePathPoint={{this.moveEyePathPoint}}
+                @attentionPulls={{this.attentionPulls}}
+                @selectedAttentionPullId={{this.selectedAttentionPullId}}
+                @attentionPullEditEnabled={{this.attentionPullEditEnabled}}
+                @retracingAttentionPullId={{this.retracingAttentionPullId}}
+                @onAddAttentionPull={{this.addAttentionPull}}
+                @onAddAttentionPullPath={{this.addAttentionPullPath}}
+                @onRetraceAttentionPullPath={{this.retraceAttentionPullPath}}
+                @onSelectAttentionPull={{this.selectAttentionPull}}
+                @onUpdateAttentionPull={{this.updateAttentionPull}}
+                @pendingAttentionPullPopover={{this.pendingAttentionPullPopover}}
+                @pendingAttentionPullPopoverText={{this.pendingAttentionPullPopoverText}}
+                @onPendingAttentionPullPopoverInput={{this.updatePendingAttentionPullPopoverText}}
+                @onConfirmPendingAttentionPullPopover={{this.confirmPendingAttentionPullPopover}}
+                @onSkipPendingAttentionPullPopover={{this.skipPendingAttentionPullPopover}}
+                @strongAreas={{this.strongAreas}}
+                @selectedStrongAreaId={{this.selectedStrongAreaId}}
+                @strongAreaEditEnabled={{this.strongAreaEditEnabled}}
+                @retracingStrongAreaId={{this.retracingStrongAreaId}}
+                @onAddStrongArea={{this.addStrongArea}}
+                @onAddStrongAreaPath={{this.addStrongAreaPath}}
+                @onRetraceStrongAreaPath={{this.retraceStrongAreaPath}}
+                @onSelectStrongArea={{this.selectStrongArea}}
+                @onUpdateStrongArea={{this.updateStrongArea}}
+                @pendingStrongAreaPopover={{this.pendingStrongAreaPopover}}
+                @pendingStrongAreaPopoverText={{this.pendingStrongAreaPopoverText}}
+                @onPendingStrongAreaPopoverInput={{this.updatePendingStrongAreaPopoverText}}
+                @onConfirmPendingStrongAreaPopover={{this.confirmPendingStrongAreaPopover}}
+                @onSkipPendingStrongAreaPopover={{this.skipPendingStrongAreaPopover}}
+                @pendingEyePathPopover={{this.pendingEyePathPopover}}
+                @pendingEyePathPopoverText={{this.pendingEyePathPopoverText}}
+                @onPendingEyePathPopoverInput={{this.updatePendingEyePathPopoverText}}
+                @onConfirmPendingEyePathPopover={{this.confirmPendingEyePathPopover}}
+                @onSkipPendingEyePathPopover={{this.skipPendingEyePathPopover}}
+                @directionArrows={{this.directionArrows}}
+                @selectedDirectionArrowId={{this.selectedDirectionArrowId}}
+                @onAddDirectionArrow={{this.addDirectionArrow}}
+                @onSelectDirectionArrow={{this.selectDirectionArrow}}
+                @onUpdateDirectionArrow={{this.updateDirectionArrow}}
+                @pendingDirectionArrowPopover={{this.pendingDirectionArrowPopover}}
+                @pendingDirectionArrowPopoverText={{this.pendingDirectionArrowPopoverText}}
+                @onPendingDirectionArrowPopoverInput={{this.updatePendingDirectionArrowPopoverText}}
+                @onConfirmPendingDirectionArrowPopover={{this.confirmPendingDirectionArrowPopover}}
+                @onSkipPendingDirectionArrowPopover={{this.skipPendingDirectionArrowPopover}}
+                @relationshipArrows={{this.relationshipArrows}}
+                @selectedRelationshipArrowId={{this.selectedRelationshipArrowId}}
+                @onAddRelationshipArrow={{this.addRelationshipArrow}}
+                @onSelectRelationshipArrow={{this.selectRelationshipArrow}}
+                @onUpdateRelationshipArrow={{this.updateRelationshipArrow}}
+                @pendingRelationshipArrowPopover={{this.pendingRelationshipArrowPopover}}
+                @pendingRelationshipArrowPopoverText={{this.pendingRelationshipArrowPopoverText}}
+                @onPendingRelationshipArrowPopoverInput={{this.updatePendingRelationshipArrowPopoverText}}
+                @onConfirmPendingRelationshipArrowPopover={{this.confirmPendingRelationshipArrowPopover}}
+                @onSkipPendingRelationshipArrowPopover={{this.skipPendingRelationshipArrowPopover}}
+                @cropAspectRatio={{this.cropAspectRatio}}
+                @pendingPin={{this.pendingPin}}
+                @pendingPinNoteText={{this.pendingPinNoteText}}
+                @onPendingNoteInput={{this.updatePendingPinNoteText}}
+                @onConfirmPendingNote={{this.confirmPendingPinNote}}
+                @onSkipPendingNote={{this.skipPendingPinNote}}
+              />
+              {{/if}}
+
               {{#if this.hasMultipleVersions}}
                 <div
                   class="npn-critique-reply-modal__version-selector"
@@ -5656,17 +5764,35 @@ export default class NpnCritiqueReplyModal extends Component {
                 </div>
               {{/if}}
 
-              {{! Toolbar moved ABOVE the image so it's visible without
-                  scrolling. The image's sticky positioning + max-height
-                  could push the controls below the fold otherwise.
-
-                  Hidden entirely when the user is looking at the
-                  processing example — in v1 annotations apply only
-                  to the reference image, so surfacing the tools
-                  here would imply otherwise. A compact note
-                  replaces the toolbar so the disabled state is
-                  legible. }}
+              {{! Optional Visual Notes section. Toolbar now sits
+                  BELOW the image with a section heading and helper
+                  copy so visual marks read as optional support, not
+                  as the workspace's primary purpose. Hidden entirely
+                  when the user is looking at the processing example
+                  — in v1 annotations apply only to the reference
+                  image, so surfacing the tools here would imply
+                  otherwise. A compact note replaces the toolbar so
+                  the disabled state is legible. }}
               {{#if this.visualNotesAvailable}}
+                <section
+                  class="npn-critique-reply-modal__optional-visual-notes"
+                  aria-labelledby="npn-critique-reply-optional-visual-notes-heading"
+                >
+                <h3
+                  id="npn-critique-reply-optional-visual-notes-heading"
+                  class="npn-critique-reply-modal__optional-section-heading"
+                >
+                  {{i18n
+                    "npn_critique_reply.modal.optional_visual_notes_heading"
+                  }}
+                </h3>
+                <p
+                  class="npn-critique-reply-modal__optional-section-helper"
+                >
+                  {{i18n
+                    "npn_critique_reply.modal.optional_visual_notes_helper"
+                  }}
+                </p>
                 {{#if this.viewingProcessingExample}}
                   <p
                     class="npn-critique-reply-modal__visual-notes-disabled-note"
@@ -6179,108 +6305,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 {{! Closes the else branch above: toolbar + secondary
                     are the reference-view path. }}
                 {{/if}}
-              {{/if}}
-
-              {{#if this.viewingProcessingExample}}
-                {{! The alt text on the <img> already carries the
-                    accessible name; no separate figcaption needed. }}
-                <div
-                  class="npn-critique-reply-modal__processing-example-large"
-                >
-                  <img
-                    class="npn-critique-reply-modal__processing-example-large-img"
-                    src={{this.processingExample.url}}
-                    alt={{this.largeImageAlt}}
-                  />
-                </div>
-              {{else}}
-              <NpnCritiqueImageReference
-                @imageUrl={{this.effectiveImageUrl}}
-                @alt={{this.imageAlt}}
-                @pins={{this.notes}}
-                @crop={{this.crop}}
-                @visualMode={{this.visualMode}}
-                @areaShapeMode={{this.areaShapeMode}}
-                @selectedNumber={{this.selectedPinNumber}}
-                @cropSelected={{this.cropSelected}}
-                @onImageClick={{this.addPin}}
-                @onPinSelect={{this.selectPin}}
-                @onMovePin={{this.movePin}}
-                @pinMoveEnabled={{this.pinMoveEnabled}}
-                @onAddCrop={{this.addCrop}}
-                @onSelectCrop={{this.selectCrop}}
-                @onUpdateCrop={{this.updateCrop}}
-                @pendingCropPopover={{this.pendingCropPopover}}
-                @pendingCropPopoverText={{this.pendingCropPopoverText}}
-                @onPendingCropPopoverInput={{this.updatePendingCropPopoverText}}
-                @onConfirmPendingCropPopover={{this.confirmPendingCropPopover}}
-                @onSkipPendingCropPopover={{this.skipPendingCropPopover}}
-                @eyePaths={{this.eyePaths}}
-                @selectedEyePathId={{this.selectedEyePathId}}
-                @onAddEyePathPoint={{this.addEyePathPoint}}
-                @onCommitEyePath={{this.commitEyePath}}
-                @onSelectEyePath={{this.selectEyePath}}
-                @onMoveEyePathPoint={{this.moveEyePathPoint}}
-                @attentionPulls={{this.attentionPulls}}
-                @selectedAttentionPullId={{this.selectedAttentionPullId}}
-                @attentionPullEditEnabled={{this.attentionPullEditEnabled}}
-                @retracingAttentionPullId={{this.retracingAttentionPullId}}
-                @onAddAttentionPull={{this.addAttentionPull}}
-                @onAddAttentionPullPath={{this.addAttentionPullPath}}
-                @onRetraceAttentionPullPath={{this.retraceAttentionPullPath}}
-                @onSelectAttentionPull={{this.selectAttentionPull}}
-                @onUpdateAttentionPull={{this.updateAttentionPull}}
-                @pendingAttentionPullPopover={{this.pendingAttentionPullPopover}}
-                @pendingAttentionPullPopoverText={{this.pendingAttentionPullPopoverText}}
-                @onPendingAttentionPullPopoverInput={{this.updatePendingAttentionPullPopoverText}}
-                @onConfirmPendingAttentionPullPopover={{this.confirmPendingAttentionPullPopover}}
-                @onSkipPendingAttentionPullPopover={{this.skipPendingAttentionPullPopover}}
-                @strongAreas={{this.strongAreas}}
-                @selectedStrongAreaId={{this.selectedStrongAreaId}}
-                @strongAreaEditEnabled={{this.strongAreaEditEnabled}}
-                @retracingStrongAreaId={{this.retracingStrongAreaId}}
-                @onAddStrongArea={{this.addStrongArea}}
-                @onAddStrongAreaPath={{this.addStrongAreaPath}}
-                @onRetraceStrongAreaPath={{this.retraceStrongAreaPath}}
-                @onSelectStrongArea={{this.selectStrongArea}}
-                @onUpdateStrongArea={{this.updateStrongArea}}
-                @pendingStrongAreaPopover={{this.pendingStrongAreaPopover}}
-                @pendingStrongAreaPopoverText={{this.pendingStrongAreaPopoverText}}
-                @onPendingStrongAreaPopoverInput={{this.updatePendingStrongAreaPopoverText}}
-                @onConfirmPendingStrongAreaPopover={{this.confirmPendingStrongAreaPopover}}
-                @onSkipPendingStrongAreaPopover={{this.skipPendingStrongAreaPopover}}
-                @pendingEyePathPopover={{this.pendingEyePathPopover}}
-                @pendingEyePathPopoverText={{this.pendingEyePathPopoverText}}
-                @onPendingEyePathPopoverInput={{this.updatePendingEyePathPopoverText}}
-                @onConfirmPendingEyePathPopover={{this.confirmPendingEyePathPopover}}
-                @onSkipPendingEyePathPopover={{this.skipPendingEyePathPopover}}
-                @directionArrows={{this.directionArrows}}
-                @selectedDirectionArrowId={{this.selectedDirectionArrowId}}
-                @onAddDirectionArrow={{this.addDirectionArrow}}
-                @onSelectDirectionArrow={{this.selectDirectionArrow}}
-                @onUpdateDirectionArrow={{this.updateDirectionArrow}}
-                @pendingDirectionArrowPopover={{this.pendingDirectionArrowPopover}}
-                @pendingDirectionArrowPopoverText={{this.pendingDirectionArrowPopoverText}}
-                @onPendingDirectionArrowPopoverInput={{this.updatePendingDirectionArrowPopoverText}}
-                @onConfirmPendingDirectionArrowPopover={{this.confirmPendingDirectionArrowPopover}}
-                @onSkipPendingDirectionArrowPopover={{this.skipPendingDirectionArrowPopover}}
-                @relationshipArrows={{this.relationshipArrows}}
-                @selectedRelationshipArrowId={{this.selectedRelationshipArrowId}}
-                @onAddRelationshipArrow={{this.addRelationshipArrow}}
-                @onSelectRelationshipArrow={{this.selectRelationshipArrow}}
-                @onUpdateRelationshipArrow={{this.updateRelationshipArrow}}
-                @pendingRelationshipArrowPopover={{this.pendingRelationshipArrowPopover}}
-                @pendingRelationshipArrowPopoverText={{this.pendingRelationshipArrowPopoverText}}
-                @onPendingRelationshipArrowPopoverInput={{this.updatePendingRelationshipArrowPopoverText}}
-                @onConfirmPendingRelationshipArrowPopover={{this.confirmPendingRelationshipArrowPopover}}
-                @onSkipPendingRelationshipArrowPopover={{this.skipPendingRelationshipArrowPopover}}
-                @cropAspectRatio={{this.cropAspectRatio}}
-                @pendingPin={{this.pendingPin}}
-                @pendingPinNoteText={{this.pendingPinNoteText}}
-                @onPendingNoteInput={{this.updatePendingPinNoteText}}
-                @onConfirmPendingNote={{this.confirmPendingPinNote}}
-                @onSkipPendingNote={{this.skipPendingPinNote}}
-              />
+                </section>
               {{/if}}
 
               {{! Visual annotation list stays available on either
@@ -6591,7 +6616,7 @@ export default class NpnCritiqueReplyModal extends Component {
                     class="npn-critique-reply-modal__processing-example-summary-label"
                   >
                     {{i18n
-                      "npn_critique_reply.modal.processing_example.section_title"
+                      "npn_critique_reply.modal.optional_processing_example_heading"
                     }}
                   </span>
                   {{#if this.hasProcessingExample}}
@@ -6613,12 +6638,20 @@ export default class NpnCritiqueReplyModal extends Component {
 
                 <h4
                   id="npn-critique-reply-processing-example-heading"
-                  class="npn-critique-reply-modal__processing-example-heading"
+                  class="npn-critique-reply-modal__processing-example-heading
+                    npn-critique-reply-modal__optional-section-heading"
                 >
                   {{i18n
-                    "npn_critique_reply.modal.processing_example.section_title"
+                    "npn_critique_reply.modal.optional_processing_example_heading"
                   }}
                 </h4>
+                <p
+                  class="npn-critique-reply-modal__optional-section-helper"
+                >
+                  {{i18n
+                    "npn_critique_reply.modal.optional_processing_example_helper"
+                  }}
+                </p>
 
                 <div
                   id="npn-critique-reply-processing-example-content"
@@ -6760,139 +6793,11 @@ export default class NpnCritiqueReplyModal extends Component {
               </p>
             {{/if}}
 
-            {{! Photographer's Notes — collapsed-by-default disclosure
-                showing the cooked OP content. Lazy-fetched on first
-                expand via `onPhotographersNotesToggle`; cached in
-                state for the rest of the session. Permissions are
-                inherited from the standard /posts/:id.json endpoint
-                — the user only sees content they can already see in
-                the topic. }}
-            <details
-              class="npn-critique-reply-modal__photographers-notes"
-              {{on "toggle" this.onPhotographersNotesToggle}}
-            >
-              <summary
-                class="npn-critique-reply-modal__photographers-notes-summary"
-              >
-                <span
-                  class="npn-critique-reply-modal__photographers-notes-title"
-                >
-                  {{i18n
-                    "npn_critique_reply.modal.photographers_notes.title"
-                  }}
-                </span>
-                <span
-                  class="npn-critique-reply-modal__photographers-notes-hint"
-                >
-                  {{i18n
-                    "npn_critique_reply.modal.photographers_notes.hint"
-                  }}
-                </span>
-              </summary>
-              <div
-                class="npn-critique-reply-modal__photographers-notes-content"
-              >
-                {{#if this._opCookedLoading}}
-                  <p
-                    class="npn-critique-reply-modal__photographers-notes-status"
-                    aria-live="polite"
-                  >
-                    {{i18n
-                      "npn_critique_reply.modal.photographers_notes.loading"
-                    }}
-                  </p>
-                {{else if this.opCookedSafe}}
-                  <div
-                    class="npn-critique-reply-modal__photographers-notes-body cooked"
-                    {{didInsert this.setupPhotographersNotes}}
-                  >
-                    {{this.opCookedSafe}}
-                  </div>
-                {{else if this._opCookedError}}
-                  <p
-                    class="npn-critique-reply-modal__photographers-notes-status --error"
-                    role="alert"
-                  >
-                    {{i18n
-                      "npn_critique_reply.modal.photographers_notes.failed"
-                    }}
-                  </p>
-                {{/if}}
-              </div>
-            </details>
-
-            <section
-              class="npn-critique-reply-modal__questions"
-              aria-labelledby="npn-critique-reply-questions-heading"
-            >
-              <h3
-                id="npn-critique-reply-questions-heading"
-                class="npn-critique-reply-modal__questions-heading"
-              >
-                {{i18n "npn_critique_reply.modal.questions_to_consider"}}
-              </h3>
-
-              {{! Default trio — adapts to critique style + feedback
-                  focus. Reads as quiet guidance: no buttons, no
-                  insert affordances, just three short questions. }}
-              <ul class="npn-critique-reply-modal__questions-list">
-                {{#each this.defaultQuestions as |question|}}
-                  <li
-                    class="npn-critique-reply-modal__question-item"
-                  >{{question}}</li>
-                {{/each}}
-              </ul>
-
-              {{! Expandable More-ideas panel — same grouped bank
-                  across every topic, with two conditional groups
-                  (visual notes / project sequence). Persists open/
-                  closed via localStorage + draft.ui. Still no
-                  insert affordances; the panel is reference only. }}
-              <button
-                type="button"
-                class="npn-critique-reply-modal__more-ideas-toggle"
-                aria-expanded={{if this.moreIdeasExpanded "true" "false"}}
-                aria-controls="npn-critique-reply-more-ideas"
-                {{on "click" this.toggleMoreIdeas}}
-              >
-                {{#if this.moreIdeasExpanded}}
-                  {{dIcon "chevron-up"}}
-                  <span>{{i18n
-                      "npn_critique_reply.modal.more_ideas_hide"
-                    }}</span>
-                {{else}}
-                  {{dIcon "chevron-down"}}
-                  <span>{{i18n
-                      "npn_critique_reply.modal.more_ideas_show"
-                    }}</span>
-                {{/if}}
-              </button>
-
-              {{#if this.moreIdeasExpanded}}
-                <div
-                  id="npn-critique-reply-more-ideas"
-                  class="npn-critique-reply-modal__more-ideas"
-                >
-                  {{#each this.moreIdeasGroups as |group|}}
-                    <div class="npn-critique-reply-modal__prompt-group">
-                      <h4
-                        class="npn-critique-reply-modal__prompt-group-title"
-                      >{{group.title}}</h4>
-                      <ul
-                        class="npn-critique-reply-modal__prompt-group-list"
-                      >
-                        {{#each group.prompts as |prompt|}}
-                          <li
-                            class="npn-critique-reply-modal__prompt-group-item"
-                          >{{prompt}}</li>
-                        {{/each}}
-                      </ul>
-                    </div>
-                  {{/each}}
-                </div>
-              {{/if}}
-            </section>
-
+            {{! Your Critique — moved above Photographer's Notes /
+                Questions to Consider so the writing surface is the
+                first thing the critic reaches under the request.
+                Keeps the workspace focused on the response rather
+                than on the supporting material. }}
             <section class="npn-critique-reply-modal__textarea-section">
               <label
                 for="npn-critique-reply-textarea"
@@ -7044,6 +6949,139 @@ export default class NpnCritiqueReplyModal extends Component {
                 {{on "input" this.clearValidationOnInput}}
                 {{didInsert this.setupTextarea}}
               />
+            </section>
+
+            {{! Photographer's Notes — collapsed-by-default disclosure
+                showing the cooked OP content. Lazy-fetched on first
+                expand via `onPhotographersNotesToggle`; cached in
+                state for the rest of the session. Permissions are
+                inherited from the standard /posts/:id.json endpoint
+                — the user only sees content they can already see in
+                the topic. }}
+            <details
+              class="npn-critique-reply-modal__photographers-notes"
+              {{on "toggle" this.onPhotographersNotesToggle}}
+            >
+              <summary
+                class="npn-critique-reply-modal__photographers-notes-summary"
+              >
+                <span
+                  class="npn-critique-reply-modal__photographers-notes-title"
+                >
+                  {{i18n
+                    "npn_critique_reply.modal.photographers_notes.title"
+                  }}
+                </span>
+                <span
+                  class="npn-critique-reply-modal__photographers-notes-hint"
+                >
+                  {{i18n
+                    "npn_critique_reply.modal.photographers_notes.hint"
+                  }}
+                </span>
+              </summary>
+              <div
+                class="npn-critique-reply-modal__photographers-notes-content"
+              >
+                {{#if this._opCookedLoading}}
+                  <p
+                    class="npn-critique-reply-modal__photographers-notes-status"
+                    aria-live="polite"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.photographers_notes.loading"
+                    }}
+                  </p>
+                {{else if this.opCookedSafe}}
+                  <div
+                    class="npn-critique-reply-modal__photographers-notes-body cooked"
+                    {{didInsert this.setupPhotographersNotes}}
+                  >
+                    {{this.opCookedSafe}}
+                  </div>
+                {{else if this._opCookedError}}
+                  <p
+                    class="npn-critique-reply-modal__photographers-notes-status --error"
+                    role="alert"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.photographers_notes.failed"
+                    }}
+                  </p>
+                {{/if}}
+              </div>
+            </details>
+
+            <section
+              class="npn-critique-reply-modal__questions"
+              aria-labelledby="npn-critique-reply-questions-heading"
+            >
+              <h3
+                id="npn-critique-reply-questions-heading"
+                class="npn-critique-reply-modal__questions-heading"
+              >
+                {{i18n "npn_critique_reply.modal.questions_to_consider"}}
+              </h3>
+
+              {{! Default trio — adapts to critique style + feedback
+                  focus. Reads as quiet guidance: no buttons, no
+                  insert affordances, just three short questions. }}
+              <ul class="npn-critique-reply-modal__questions-list">
+                {{#each this.defaultQuestions as |question|}}
+                  <li
+                    class="npn-critique-reply-modal__question-item"
+                  >{{question}}</li>
+                {{/each}}
+              </ul>
+
+              {{! Expandable More-ideas panel — same grouped bank
+                  across every topic, with two conditional groups
+                  (visual notes / project sequence). Persists open/
+                  closed via localStorage + draft.ui. Still no
+                  insert affordances; the panel is reference only. }}
+              <button
+                type="button"
+                class="npn-critique-reply-modal__more-ideas-toggle"
+                aria-expanded={{if this.moreIdeasExpanded "true" "false"}}
+                aria-controls="npn-critique-reply-more-ideas"
+                {{on "click" this.toggleMoreIdeas}}
+              >
+                {{#if this.moreIdeasExpanded}}
+                  {{dIcon "chevron-up"}}
+                  <span>{{i18n
+                      "npn_critique_reply.modal.more_ideas_hide"
+                    }}</span>
+                {{else}}
+                  {{dIcon "chevron-down"}}
+                  <span>{{i18n
+                      "npn_critique_reply.modal.more_ideas_show"
+                    }}</span>
+                {{/if}}
+              </button>
+
+              {{#if this.moreIdeasExpanded}}
+                <div
+                  id="npn-critique-reply-more-ideas"
+                  class="npn-critique-reply-modal__more-ideas"
+                >
+                  {{#each this.moreIdeasGroups as |group|}}
+                    <div class="npn-critique-reply-modal__prompt-group">
+                      <h4
+                        class="npn-critique-reply-modal__prompt-group-title"
+                      >{{group.title}}</h4>
+                      <ul
+                        class="npn-critique-reply-modal__prompt-group-list"
+                      >
+                        {{#each group.prompts as |prompt|}}
+                          <li
+                            class="npn-critique-reply-modal__prompt-group-item"
+                          >{{prompt}}</li>
+                        {{/each}}
+                      </ul>
+                    </div>
+                  {{/each}}
+                </div>
+              {{/if}}
             </section>
           </div>
 

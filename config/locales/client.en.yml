@@ -28,7 +28,7 @@ en:
 
       modal:
         title: "Start a Critique"
-        intro: "Use the image and suggested prompts as a starting point. You can edit or delete anything before posting."
+        intro: "Write your critique with the image, request, and photographer’s notes close at hand. Visual notes are optional."
         request_heading: "Photographer’s request"
         # Collapsed-by-default disclosure between Photographer's Request
         # and Questions to Consider. Surfaces the cooked OP content so
@@ -83,7 +83,16 @@ en:
             insert: "Insert"
             cancel: "Cancel"
             markdown_note: "The link may look a little different while you’re editing, but it will appear as a normal clickable link in the preview and final post."
-        reference_image: "Image & Visual Notes"
+        reference_image: "Reference Image"
+        # New section headings + helper copy for the Optional Visual
+        # Notes / Optional Processing Example sections that frame the
+        # visual tools as supporting material. The previous version
+        # buried this under "Image & Visual Notes" which read like
+        # markup tools were the workspace's primary purpose.
+        optional_visual_notes_heading: "Optional Visual Notes"
+        optional_visual_notes_helper: "Add marks only when they help clarify your critique."
+        optional_processing_example_heading: "Optional Processing Example"
+        optional_processing_example_helper: "Download the reference image if you want to demonstrate a processing idea."
         image_alt: "Image being critiqued"
         image_alt_with_title: "Image being critiqued: %{title}"
         image_alt_versioned: "%{label} image being critiqued"
