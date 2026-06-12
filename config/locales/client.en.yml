@@ -29,6 +29,12 @@ en:
       modal:
         title: "Start a Critique"
         intro: "Write your critique with the image, request, and photographer’s notes close at hand. Visual notes are optional."
+        # aria-label on the small chevron that sits at the bottom of
+        # a pane when there's more content scrollable below the fold.
+        # Clicking it scrolls the pane down by ~75% of its visible
+        # height. Quiet aria copy — the affordance is decorative and
+        # the same destination is reachable via plain scrolling.
+        scroll_more_below: "Show more content below"
         request_heading: "Photographer’s request"
         # Collapsed-by-default disclosure between Photographer's Request
         # and Questions to Consider. Surfaces the cooked OP content so

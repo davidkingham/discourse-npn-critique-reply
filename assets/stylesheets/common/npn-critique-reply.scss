@@ -68,18 +68,120 @@
 
   // Left pane wraps image-col + processing-example-row in a single
   // scroll context. The wrapper itself is the scroll container; the
-  // children below are natural-flow content inside.
+  // children below are natural-flow content inside. The pane is
+  // also the positioning context for the "more below" scroll cue
+  // (`position: relative`) — the cue sits sticky-bottom inside the
+  // scrollable content so it tracks the visible bottom edge without
+  // shifting layout.
   &__left-pane {
+    position: relative;
     min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 1em;
     overflow-y: auto;
     max-height: 100%;
+    // Breathing room above the modal's sticky footer. Without this,
+    // the last item in the pane sits flush against the footer's top
+    // edge on tighter viewports, making the section feel hidden.
+    padding-bottom: 2.5em;
   }
 
   &.npn-critique-reply-modal--no-image &__layout {
     grid-template-columns: 1fr;
+  }
+
+  // -- Pane "more below" scroll cue ------------------------------------
+  //
+  // Sentinel + sticky chevron pair, repeated for each scrolling pane
+  // (__left-pane, __write-col). The sentinel is an invisible <span>
+  // at the very end of the pane's scrollable content; an
+  // IntersectionObserver scoped to the pane flips a tracked flag
+  // based on whether it's currently intersecting the pane viewport.
+  // When the flag is true the chevron renders and floats sticky at
+  // the bottom of the pane, with a subtle fade behind it so the
+  // affordance reads as "there's more below" rather than as a peer
+  // control.
+
+  // Zero-size marker. height: 1px so layout engines can compute
+  // intersection cleanly even when the parent is a flex column.
+  &__pane-sentinel {
+    display: block;
+    width: 100%;
+    height: 1px;
+    pointer-events: none;
+  }
+
+  &__pane-scroll-cue {
+    // Sticky-bottom inside the scroll container so the chevron
+    // tracks the visible viewport edge while content scrolls above
+    // it. `bottom: 0.6em` keeps it just inside the pane's
+    // padding-bottom so it never sits flush against the modal
+    // footer.
+    position: sticky;
+    bottom: 0.6em;
+    align-self: center;
+    // Pull the cue out of the natural flow gap so it overlaps the
+    // bottom edge of the content rather than adding an extra row.
+    margin-top: -2.5em;
+    // Compact circular pill with the down-chevron icon. The fade
+    // gradient is on the ::before pseudo so the button's hit area
+    // matches its visible shape (not the wider gradient strip).
+    width: 2em;
+    height: 2em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--primary-low);
+    border-radius: 50%;
+    background: var(--secondary);
+    color: var(--primary-medium);
+    box-shadow: 0 2px 6px var(--primary-low);
+    cursor: pointer;
+    z-index: 4;
+    transition:
+      color 0.12s ease,
+      transform 0.12s ease;
+
+    &:hover {
+      color: var(--tertiary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+    &:active {
+      transform: translateY(1px);
+    }
+
+    .d-icon {
+      // The icon is the affordance — size + color come from the
+      // button. Leave no margins so it centers cleanly.
+      margin: 0;
+    }
+
+    // Subtle fade behind the chevron so the affordance reads as
+    // "there's content under this fold". Uses the modal's secondary
+    // (panel background) so it blends with both light and dark
+    // themes. Sits ABOVE the content via z-index but BELOW the
+    // chevron via stacking order.
+    &::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -0.4em;
+      width: 14em;
+      height: 3em;
+      transform: translateX(-50%);
+      background: linear-gradient(
+        to bottom,
+        transparent,
+        var(--secondary) 70%
+      );
+      pointer-events: none;
+      z-index: -1;
+    }
   }
 
   // -- Visual Focus Mode --------------------------------------------------
@@ -776,6 +878,7 @@
   // -- Write column ------------------------------------------------------
 
   &__write-col {
+    position: relative;
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -788,6 +891,9 @@
     overflow-y: auto;
     max-height: 100%;
     padding-right: 0.25em;
+    // Match the left pane's footer breathing room so neither side
+    // sits flush against the sticky footer's top edge.
+    padding-bottom: 2.5em;
   }
 
   // Processing Example sits inside __left-pane below image-col.

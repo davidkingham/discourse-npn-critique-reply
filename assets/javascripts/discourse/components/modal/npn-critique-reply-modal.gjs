@@ -474,6 +474,27 @@ export default class NpnCritiqueReplyModal extends Component {
   _selectionChangeHandler = null;
   _selectionChangeRaf = null;
 
+  // -- Pane "more below" scroll cue ------------------------------------
+  //
+  // Each pane (__left-pane, __write-col) flags whether there is more
+  // content below the current scroll position. The flag drives a
+  // small sticky chevron + fade gradient at the pane's bottom edge
+  // so the user notices Optional Visual Notes / Optional Processing
+  // Example / Photographer's Notes / Questions when they would
+  // otherwise sit below the fold.
+  //
+  // Detection uses an IntersectionObserver on a sentinel <span>
+  // placed at the very end of each pane's scrollable content. The
+  // observer's `root` is the pane itself; when the sentinel is
+  // intersecting the root viewport, the user is at (or past) the
+  // bottom — flag goes false. When it leaves the root viewport
+  // (content overflows downward), the flag goes true.
+  @tracked _leftPaneHasMore = false;
+  @tracked _rightPaneHasMore = false;
+  _leftPaneElement = null;
+  _rightPaneElement = null;
+  _paneSentinelObservers = [];
+
   // -- Processing Example header popover -------------------------------
   //
   // A small dropdown anchored to the "Processing Example" action in
@@ -552,6 +573,8 @@ export default class NpnCritiqueReplyModal extends Component {
     // Drop Photographer's Notes selection listener if it's still
     // attached (panel may be open at modal close).
     this.teardownPhotographersNotes();
+    // Drop pane scroll-cue observers.
+    this._teardownPaneSentinels();
   }
 
   // -- Textarea wiring: @mention autocomplete + Insert link helper -------
@@ -1711,6 +1734,85 @@ export default class NpnCritiqueReplyModal extends Component {
     this._photographersNotesElement = null;
     this._quoteButtonPosition = null;
     this._quoteSelectionText = "";
+  }
+
+  // ---- Pane "more below" scroll cue ---------------------------------
+
+  // Captures the pane element so the click handler can scroll it.
+  // The sentinel observer is wired up separately via
+  // `setupPaneSentinel` so the sentinel's `did-insert` fires AFTER
+  // the pane element is mounted regardless of children order.
+  @action
+  setupLeftPane(element) {
+    this._leftPaneElement = element;
+  }
+
+  @action
+  setupRightPane(element) {
+    this._rightPaneElement = element;
+  }
+
+  // Wired to the sentinel <span> at the very end of each pane's
+  // scrollable content. Uses an IntersectionObserver whose `root` is
+  // the pane element — when the sentinel is intersecting the pane's
+  // visible viewport, the user is at the bottom (or there's nothing
+  // to scroll). Otherwise there's more content below the fold.
+  @action
+  setupPaneSentinel(key, element) {
+    if (!element || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+    const root =
+      key === "left" ? this._leftPaneElement : this._rightPaneElement;
+    if (!root) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (this._destroyed) {
+          return;
+        }
+        const intersecting = entries[0]?.isIntersecting ?? true;
+        if (key === "left") {
+          this._leftPaneHasMore = !intersecting;
+        } else {
+          this._rightPaneHasMore = !intersecting;
+        }
+      },
+      { root, threshold: 0.01 }
+    );
+    observer.observe(element);
+    this._paneSentinelObservers.push(observer);
+  }
+
+  @action
+  scrollPaneDown(key) {
+    const pane =
+      key === "left" ? this._leftPaneElement : this._rightPaneElement;
+    if (!pane) {
+      return;
+    }
+    // Scroll by ~75% of the pane's visible height — enough to bring
+    // the next section into view without skipping past it.
+    const distance = Math.max(120, Math.round(pane.clientHeight * 0.75));
+    try {
+      pane.scrollBy({ top: distance, behavior: "smooth" });
+    } catch {
+      pane.scrollTop += distance;
+    }
+  }
+
+  _teardownPaneSentinels() {
+    for (const observer of this._paneSentinelObservers) {
+      try {
+        observer.disconnect();
+      } catch {
+        // Observer may have been GC'd along with its target — fine.
+      }
+    }
+    this._paneSentinelObservers = [];
+    this._leftPaneElement = null;
+    this._rightPaneElement = null;
   }
 
   // Bound arrow form so the same identity can be added + removed
@@ -5363,7 +5465,10 @@ export default class NpnCritiqueReplyModal extends Component {
               right panes each get overflow:auto and scroll
               independently. }}
           {{#if this.hasImage}}
-            <div class="npn-critique-reply-modal__left-pane">
+            <div
+              class="npn-critique-reply-modal__left-pane"
+              {{didInsert this.setupLeftPane}}
+            >
               <aside
                 class="npn-critique-reply-modal__image-col"
                 aria-labelledby="npn-critique-reply-image-heading"
@@ -6635,10 +6740,34 @@ export default class NpnCritiqueReplyModal extends Component {
               </section>
             {{/if}}
 
+              {{! Sentinel for the IntersectionObserver. Sits at the
+                  end of __left-pane's scrollable content; when it
+                  intersects the pane viewport the user is at the
+                  bottom and the scroll cue hides. }}
+              <span
+                class="npn-critique-reply-modal__pane-sentinel"
+                aria-hidden="true"
+                {{didInsert (fn this.setupPaneSentinel "left")}}
+              ></span>
+              {{#if this._leftPaneHasMore}}
+                <button
+                  type="button"
+                  class="npn-critique-reply-modal__pane-scroll-cue"
+                  aria-label={{i18n
+                    "npn_critique_reply.modal.scroll_more_below"
+                  }}
+                  {{on "click" (fn this.scrollPaneDown "left")}}
+                >
+                  {{dIcon "chevron-down"}}
+                </button>
+              {{/if}}
             </div>{{! end __left-pane }}
           {{/if}}
 
-          <div class="npn-critique-reply-modal__write-col">
+          <div
+            class="npn-critique-reply-modal__write-col"
+            {{didInsert this.setupRightPane}}
+          >
             <p class="npn-critique-reply-modal__intro">
               {{i18n "npn_critique_reply.modal.intro"}}
             </p>
@@ -6990,6 +7119,28 @@ export default class NpnCritiqueReplyModal extends Component {
                 </div>
               {{/if}}
             </section>
+
+            {{! Sentinel + scroll cue for the write pane. Same shape
+                as the left-pane cue — sentinel at the end of the
+                scrollable content, sticky chevron when more is
+                below. }}
+            <span
+              class="npn-critique-reply-modal__pane-sentinel"
+              aria-hidden="true"
+              {{didInsert (fn this.setupPaneSentinel "right")}}
+            ></span>
+            {{#if this._rightPaneHasMore}}
+              <button
+                type="button"
+                class="npn-critique-reply-modal__pane-scroll-cue"
+                aria-label={{i18n
+                  "npn_critique_reply.modal.scroll_more_below"
+                }}
+                {{on "click" (fn this.scrollPaneDown "right")}}
+              >
+                {{dIcon "chevron-down"}}
+              </button>
+            {{/if}}
           </div>
 
         </div>
