@@ -241,6 +241,26 @@
     display: none;
   }
 
+  // Surface "Return to Critique" next to the DModal X when in
+  // focus mode so the affordance reads as intentional rather than
+  // a generic close. The X's beforeClose hook clears
+  // visualFocusMode, so clicking it returns to the normal
+  // workspace rather than closing the modal entirely.
+  &.npn-critique-reply-modal--visual-focus .modal-close {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45em;
+    padding-inline: 0.5em;
+
+    &::before {
+      content: "Return to Critique";
+      font-size: var(--font-down-1);
+      color: var(--primary-medium);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+  }
+
   // Hide the Optional Visual Notes heading + helper in focus mode.
   // The user explicitly entered focus mode to use the visual
   // tools; labeling them as "Optional" reads redundant and eats
