@@ -1510,6 +1510,30 @@ export default class NpnCritiqueReplyModal extends Component {
     this.mobileProcessingExampleOpen = !this.mobileProcessingExampleOpen;
   }
 
+  // Inline "Add processing example" / "Manage processing example"
+  // link near the image status. Reveals the Optional Processing
+  // Example section (so the mobile disclosure can't hide it),
+  // scrolls it into view, and moves focus to its heading. The
+  // heading itself isn't naturally focusable; we set tabindex=-1
+  // on it in the template so programmatic focus works without
+  // putting it in the tab order.
+  @action
+  openProcessingExampleSection() {
+    this.mobileProcessingExampleOpen = true;
+    const heading = document.getElementById(
+      "npn-critique-reply-processing-example-heading"
+    );
+    if (!heading) {
+      return;
+    }
+    try {
+      heading.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch {
+      heading.scrollIntoView();
+    }
+    heading.focus({ preventScroll: true });
+  }
+
   @action
   toggleVisualFocusMode() {
     this.visualFocusMode = !this.visualFocusMode;
@@ -5385,120 +5409,13 @@ export default class NpnCritiqueReplyModal extends Component {
                 <div
                   class="npn-critique-reply-modal__image-col-header-actions"
                 >
-                  {{! Processing Example quick-access. Same affordance
-                      lives in the below-image panel; this trigger
-                      lets the user reach Download / Upload (or
-                      Replace / Remove) without scrolling past the
-                      image on tall viewports. Gated by the same
-                      eligibility getter the below-image section
-                      uses. }}
-                  {{#if this.processingExampleAvailable}}
-                    <div
-                      class="npn-critique-reply-modal__processing-example-menu-wrapper"
-                    >
-                      <DButton
-                        @id="npn-critique-reply-processing-example-trigger"
-                        class="btn-flat btn-small npn-critique-reply-modal__processing-example-trigger
-                          {{if this.processingExampleMenuOpen 'is-open'}}"
-                        @action={{this.toggleProcessingExampleMenu}}
-                        @icon="image"
-                        @label={{if
-                          this.hasProcessingExample
-                          "npn_critique_reply.modal.processing_example.menu_trigger_uploaded"
-                          "npn_critique_reply.modal.processing_example.menu_trigger"
-                        }}
-                        aria-haspopup="true"
-                        aria-expanded={{if
-                          this.processingExampleMenuOpen
-                          "true"
-                          "false"
-                        }}
-                        aria-controls="npn-critique-reply-processing-example-menu"
-                      />
-
-                      {{#if this.processingExampleMenuOpen}}
-                        <div
-                          id="npn-critique-reply-processing-example-menu"
-                          class="npn-critique-reply-modal__processing-example-menu"
-                          role="dialog"
-                          aria-labelledby="npn-critique-reply-processing-example-menu-title"
-                          {{on "keydown" this.onProcessingExampleMenuKeydown}}
-                        >
-                          <h4
-                            id="npn-critique-reply-processing-example-menu-title"
-                            class="npn-critique-reply-modal__processing-example-menu-title"
-                          >
-                            {{i18n
-                              "npn_critique_reply.modal.processing_example.section_title"
-                            }}
-                          </h4>
-
-                          {{#if this.hasProcessingExample}}
-                            <p
-                              class="npn-critique-reply-modal__processing-example-menu-status"
-                            >
-                              {{i18n
-                                "npn_critique_reply.modal.processing_example.uploaded"
-                              }}
-                            </p>
-                            <div
-                              class="npn-critique-reply-modal__processing-example-menu-actions"
-                            >
-                              <DButton
-                                class="btn-default btn-small"
-                                @action={{this.triggerProcessingExampleFilePicker}}
-                                @icon="rotate"
-                                @label="npn_critique_reply.modal.processing_example.replace"
-                                @disabled={{this.processingExampleUploading}}
-                              />
-                              <DButton
-                                class="btn-flat btn-small"
-                                @action={{this.removeProcessingExample}}
-                                @icon="trash-can"
-                                @label="npn_critique_reply.modal.processing_example.remove"
-                                @disabled={{this.processingExampleUploading}}
-                              />
-                            </div>
-                          {{else}}
-                            <p
-                              class="npn-critique-reply-modal__processing-example-menu-help"
-                            >
-                              {{i18n
-                                "npn_critique_reply.modal.processing_example.helper"
-                              }}
-                            </p>
-                            <div
-                              class="npn-critique-reply-modal__processing-example-menu-actions"
-                            >
-                              <a
-                                class="btn btn-default btn-small"
-                                href={{this.processingExampleSourceUrl}}
-                                download={{this.processingExampleSourceDownloadFilename}}
-                                rel="noopener"
-                                target="_blank"
-                              >
-                                {{dIcon "download"}}
-                                <span>
-                                  {{i18n
-                                    "npn_critique_reply.modal.processing_example.download"
-                                  }}
-                                </span>
-                              </a>
-                              <DButton
-                                class="btn-default btn-small"
-                                @action={{this.triggerProcessingExampleFilePicker}}
-                                @icon="upload"
-                                @label="npn_critique_reply.modal.processing_example.upload"
-                                @disabled={{this.processingExampleUploading}}
-                                @isLoading={{this.processingExampleUploading}}
-                              />
-                            </div>
-                          {{/if}}
-                        </div>
-                      {{/if}}
-                    </div>
-                  {{/if}}
-
+                  {{! Processing Example used to live here as a
+                      quick-access popover. Moved out of the header
+                      so the only action exposed up here is "Larger
+                      Image" — Processing Example is reached via
+                      the inline link near "Showing X" status and
+                      via the Optional Processing Example section
+                      lower in the pane. }}
                   <DButton
                     class="btn-flat btn-small npn-critique-reply-modal__visual-focus-toggle"
                     @action={{this.toggleVisualFocusMode}}
@@ -5762,6 +5679,42 @@ export default class NpnCritiqueReplyModal extends Component {
                     />
                   </div>
                 </div>
+              {{/if}}
+
+              {{! Inline status row near the image — shows what the
+                  user is looking at plus a small secondary link to
+                  the Optional Processing Example section below.
+                  The link is the ONLY surfaced affordance for PE up
+                  here now — the header popover was removed. Click
+                  expands the PE section (in case it's collapsed on
+                  mobile), scrolls to it, and focuses its heading. }}
+              {{#if this.processingExampleAvailable}}
+                <p
+                  class="npn-critique-reply-modal__image-status-row"
+                  role="status"
+                >
+                  <span
+                    class="npn-critique-reply-modal__image-status"
+                  >{{this.showingVersionLabel}}</span>
+                  <span
+                    class="npn-critique-reply-modal__image-status-sep"
+                    aria-hidden="true"
+                  >·</span>
+                  <button
+                    type="button"
+                    class="btn-link
+                      npn-critique-reply-modal__image-status-pe-link"
+                    {{on "click" this.openProcessingExampleSection}}
+                  >
+                    {{i18n
+                      (if
+                        this.hasProcessingExample
+                        "npn_critique_reply.modal.processing_example.inline_manage"
+                        "npn_critique_reply.modal.processing_example.inline_add"
+                      )
+                    }}
+                  </button>
+                </p>
               {{/if}}
 
               {{! Optional Visual Notes section. Toolbar now sits
@@ -6640,6 +6593,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   id="npn-critique-reply-processing-example-heading"
                   class="npn-critique-reply-modal__processing-example-heading
                     npn-critique-reply-modal__optional-section-heading"
+                  tabindex="-1"
                 >
                   {{i18n
                     "npn_critique_reply.modal.optional_processing_example_heading"
@@ -6672,13 +6626,10 @@ export default class NpnCritiqueReplyModal extends Component {
                       }}
                     </p>
                   {{else}}
-                    <p
-                      class="npn-critique-reply-modal__processing-example-help"
-                    >
-                      {{i18n
-                        "npn_critique_reply.modal.processing_example.helper"
-                      }}
-                    </p>
+                    {{! Helper text used to live here too; removed
+                        because the section heading above already
+                        carries the same copy via __optional-section
+                        -helper, and the duplicate read as clutter. }}
                     <div
                       class="npn-critique-reply-modal__processing-example-actions"
                     >

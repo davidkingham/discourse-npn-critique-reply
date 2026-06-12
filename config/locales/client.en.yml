@@ -125,6 +125,12 @@ en:
         # "Revision" is reserved for the photographer's own next image.
         processing_example:
           section_title: "Processing Example"
+          # Inline secondary link near the image status row. Replaces
+          # the popover trigger that previously lived in the header
+          # actions — keeps Processing Example discoverable without
+          # weighting it as a primary action.
+          inline_add: "Add processing example"
+          inline_manage: "Manage processing example"
           # Compact label for the header quick-access trigger that opens
           # the popover. Two variants so the action subtly reflects
           # whether an example has been uploaded without being loud.

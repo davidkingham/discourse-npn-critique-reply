@@ -192,6 +192,53 @@
     line-height: 1.35;
   }
 
+  // Inline status row right under the image: shows what the user is
+  // looking at ("Showing Original") and a small secondary link to
+  // open the Optional Processing Example section. The link is the
+  // only quick affordance for Processing Example up here now — the
+  // header popover was removed.
+  &__image-status-row {
+    margin: 0.25em 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4em;
+    color: var(--primary-medium);
+    font-size: var(--font-down-1);
+    line-height: 1.35;
+  }
+
+  &__image-status {
+    color: var(--primary-medium);
+  }
+
+  &__image-status-sep {
+    color: var(--primary-low-mid);
+  }
+
+  &__image-status-pe-link {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    color: var(--tertiary);
+    font-size: inherit;
+    line-height: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--tertiary-hover, var(--tertiary));
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+  }
+
   // Right-side action group: Processing Example quick-access menu
   // trigger + the Larger Image / Return to Writing toggle. Both are
   // quiet `btn-flat` buttons so they read as layout affordances,
