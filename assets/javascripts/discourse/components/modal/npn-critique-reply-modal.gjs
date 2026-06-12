@@ -1356,8 +1356,9 @@ export default class NpnCritiqueReplyModal extends Component {
       }
 
       let blob;
+      let canvas;
       try {
-        const canvas = buildVisualNotesCanvas({
+        canvas = buildVisualNotesCanvas({
           image,
           pins: this.notes,
           crop: this.crop,
@@ -1379,8 +1380,8 @@ export default class NpnCritiqueReplyModal extends Component {
       if (this.siteSettings.npn_critique_reply_debug_enabled) {
         // eslint-disable-next-line no-console
         console.info("[npn-critique-reply] visual-notes export ready", {
-          canvasWidth: canvas.width,
-          canvasHeight: canvas.height,
+          canvasWidth: canvas?.width ?? null,
+          canvasHeight: canvas?.height ?? null,
           blobSize: blob?.size ?? null,
           blobType: blob?.type ?? null,
           filename: this._visualNotesFilename(),
