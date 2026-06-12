@@ -1372,6 +1372,21 @@ export default class NpnCritiqueReplyModal extends Component {
         throw this._wrapVisualNotesError("export", e);
       }
 
+      // Debug-only diagnostics so beta users can share canvas/blob
+      // sizes when an upload fails server-side. Logged unconditionally
+      // — opt-in is via the site setting, and the values are small
+      // and entirely about the in-flight export.
+      if (this.siteSettings.npn_critique_reply_debug_enabled) {
+        // eslint-disable-next-line no-console
+        console.info("[npn-critique-reply] visual-notes export ready", {
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height,
+          blobSize: blob?.size ?? null,
+          blobType: blob?.type ?? null,
+          filename: this._visualNotesFilename(),
+        });
+      }
+
       this.statusMessage = i18n(
         "npn_critique_reply.modal.uploading_visual_notes"
       );

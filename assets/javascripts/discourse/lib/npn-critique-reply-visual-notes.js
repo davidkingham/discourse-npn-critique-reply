@@ -1192,28 +1192,77 @@ function drawPinsOnCanvas(ctx, pins, width, height) {
 // JPEG by default (smaller files for photos; pins on a photo background
 // don't benefit from PNG's lossless encoding). Throws on canvas taint —
 // the modal converts that to a friendly export-failed message.
+//
+// Defensive guards:
+//   • Canvas must have non-zero dimensions — a 0-pixel canvas
+//     silently produces a tiny/empty blob that Discourse rejects with
+//     "couldn't determine the size of the image".
+//   • toBlob can return null (callback signature) OR a 0-byte blob
+//     in some browsers' failure modes (Safari with large composites,
+//     Chrome when GPU encoding silently fails). Reject both so the
+//     failure surfaces as an export-stage error with diagnostic
+//     dimensions, instead of a generic upload-stage server error.
 export function exportCanvasToBlob(
   canvas,
   { type = "image/jpeg", quality = JPEG_QUALITY } = {}
 ) {
-  return new Promise((resolve, reject) => {
-    try {
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
+  if (!canvas || !canvas.width || !canvas.height) {
+    return Promise.reject(
+      new Error(
+        `visual_notes: canvas has invalid dimensions ` +
+          `(${canvas?.width ?? "?"}x${canvas?.height ?? "?"})`
+      )
+    );
+  }
+  // Tries the preferred type/quality first; if the encoder returns
+  // null or an empty blob (some Chrome/Safari versions silently fail
+  // on large composites with the JPEG encoder), falls back to
+  // image/png which is the most reliable canvas export format.
+  // PNGs are larger but still well under Discourse's default upload
+  // ceiling for 1600x1600 composites.
+  const attempt = (encodeType, encodeQuality) =>
+    new Promise((resolve, reject) => {
+      try {
+        canvas.toBlob(
+          (blob) => {
+            if (!blob || blob.size === 0) {
+              resolve(null);
+              return;
+            }
             resolve(blob);
-          } else {
-            reject(new Error("visual_notes: toBlob returned null"));
-          }
-        },
-        type,
-        quality
-      );
-    } catch (e) {
-      // SecurityError when the canvas is tainted by a cross-origin image
-      // without proper CORS headers.
-      reject(e);
+          },
+          encodeType,
+          encodeQuality
+        );
+      } catch (e) {
+        // SecurityError when the canvas is tainted by a cross-origin
+        // image without proper CORS headers — bubble up so the caller
+        // surfaces the export-failed message.
+        reject(e);
+      }
+    });
+
+  return attempt(type, quality).then((blob) => {
+    if (blob) {
+      return blob;
     }
+    // First attempt produced null / 0-byte. Try PNG once before giving
+    // up so a flaky JPEG encoder doesn't block the user's post.
+    if (type !== "image/png") {
+      return attempt("image/png").then((pngBlob) => {
+        if (pngBlob) {
+          return pngBlob;
+        }
+        throw new Error(
+          `visual_notes: toBlob produced no usable blob ` +
+            `(canvas ${canvas.width}x${canvas.height}, tried ${type} then image/png)`
+        );
+      });
+    }
+    throw new Error(
+      `visual_notes: toBlob produced no usable blob ` +
+        `(canvas ${canvas.width}x${canvas.height}, type ${type})`
+    );
   });
 }
 
