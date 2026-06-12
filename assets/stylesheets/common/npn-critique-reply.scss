@@ -250,6 +250,24 @@
     display: none;
   }
 
+  // Crop mode: the tool-action row that follows the toolbar carries
+  // the aspect-ratio chip group (Free / 1:1 / 4:3 / 3:2 / 16:9 / …),
+  // which adds ~40px below the toolbar. Shrink the image cap so
+  // those chips stay visible without scrolling. The UI is
+  // intentionally allowed to "jump" when crop mode activates — the
+  // user explicitly entered crop mode and the height shift is the
+  // visible cue that the workspace is now in crop context.
+  &.npn-critique-reply-modal--crop-mode .npn-critique-image-reference__img,
+  &.npn-critique-reply-modal--crop-mode &__processing-example-large {
+    max-height: clamp(380px, calc(56vh - 4em), 620px);
+  }
+  &.npn-critique-reply-modal--crop-mode.npn-critique-reply-modal--visual-focus
+    .npn-critique-image-reference__img,
+  &.npn-critique-reply-modal--crop-mode.npn-critique-reply-modal--visual-focus
+    &__processing-example-large {
+    max-height: clamp(380px, calc(70vh - 4em), 740px);
+  }
+
   // -- Image column ------------------------------------------------------
 
   &__image-col {

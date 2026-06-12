@@ -5477,7 +5477,8 @@ export default class NpnCritiqueReplyModal extends Component {
       @beforeClose={{this.beforeClose}}
       class="npn-critique-reply-modal --workspace
         {{unless this.hasImage 'npn-critique-reply-modal--no-image'}}
-        {{if this.visualFocusMode 'npn-critique-reply-modal--visual-focus'}}"
+        {{if this.visualFocusMode 'npn-critique-reply-modal--visual-focus'}}
+        {{if this.cropMode 'npn-critique-reply-modal--crop-mode'}}"
     >
       <:body>
         {{! Hidden autosave anchor. didUpdate fires whenever any
