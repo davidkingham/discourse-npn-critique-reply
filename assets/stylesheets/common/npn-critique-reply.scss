@@ -207,13 +207,23 @@
     max-height: 100%;
   }
 
-  // Let the image grow into the freed vertical space. With the
-  // write pane hidden the modal has the same height available, but
-  // the image-col is the only consumer — bump the IMG cap so it
-  // actually uses the room.
+  // Visual Focus Mode: write pane is hidden so the image-col gains
+  // the full layout width. The image gets noticeably larger from
+  // the width gain alone, but vertical height still has to leave
+  // room for the Optional Visual Notes section + tool row below.
+  // Cap mirrors the default-mode clamp() pattern, raised so the
+  // focus-mode image feels meaningfully bigger:
+  //
+  //   clamp(420px, calc(68vh - 4em), 720px)
+  //
+  // At 1080p that lands the image at ~670px — about 90px taller
+  // than default (~580px) — while leaving ~200px below for the
+  // visual tools. On 1440p+ monitors the 720px ceiling still lets
+  // the image feel like the workspace centerpiece without pushing
+  // the toolbar out of view.
   &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus &__processing-example-large {
-    max-height: calc(85vh - 6em);
+    max-height: clamp(420px, calc(68vh - 4em), 720px);
   }
 
   // -- Image column ------------------------------------------------------
