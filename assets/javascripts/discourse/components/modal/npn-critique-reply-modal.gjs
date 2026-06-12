@@ -6756,52 +6756,25 @@ export default class NpnCritiqueReplyModal extends Component {
               <section
                 class="npn-critique-reply-modal__processing-example-row
                   npn-critique-reply-modal__processing-example
-                  {{if this.mobileProcessingExampleOpen 'is-open'}}"
+                  is-open"
                 aria-labelledby="npn-critique-reply-processing-example-heading"
               >
-                {{! Disclosure header — heading on the left, action
-                    label on the right ("Add" / "Hide" / "Manage").
-                    Replaces the old chevron + separate <h4> heading
-                    pair. The summary button IS the heading now; the
-                    section's aria-labelledby points at the heading
-                    span inside the button. }}
-                <button
-                  type="button"
-                  class="npn-critique-reply-modal__processing-example-summary"
-                  aria-expanded={{if
-                    this.mobileProcessingExampleOpen
-                    "true"
-                    "false"
-                  }}
-                  aria-controls="npn-critique-reply-processing-example-content"
-                  {{on "click" this.toggleMobileProcessingExample}}
+                {{! Always-expanded section header. The disclosure
+                    pattern was dropped per beta feedback — the
+                    section is short enough that hiding it behind
+                    "Add" / "Manage" added friction without saving
+                    meaningful space. Heading + helper now read as a
+                    quiet section break and the actions are always
+                    one click away. }}
+                <h4
+                  id="npn-critique-reply-processing-example-heading"
+                  class="npn-critique-reply-modal__processing-example-heading
+                    npn-critique-reply-modal__optional-section-heading"
                 >
-                  <span
-                    id="npn-critique-reply-processing-example-heading"
-                    class="npn-critique-reply-modal__processing-example-summary-label
-                      npn-critique-reply-modal__optional-section-heading"
-                  >
-                    {{i18n
-                      "npn_critique_reply.modal.optional_processing_example_heading"
-                    }}
-                  </span>
-                  <span
-                    class="npn-critique-reply-modal__processing-example-summary-action"
-                    aria-hidden="true"
-                  >
-                    {{i18n
-                      (if
-                        this.hasProcessingExample
-                        "npn_critique_reply.modal.processing_example.disclosure_manage"
-                        (if
-                          this.mobileProcessingExampleOpen
-                          "npn_critique_reply.modal.processing_example.disclosure_hide"
-                          "npn_critique_reply.modal.processing_example.disclosure_add"
-                        )
-                      )
-                    }}
-                  </span>
-                </button>
+                  {{i18n
+                    "npn_critique_reply.modal.optional_processing_example_heading"
+                  }}
+                </h4>
 
                 <div
                   id="npn-critique-reply-processing-example-content"

@@ -628,18 +628,14 @@
     display: block;
   }
 
-  // -- Disclosure buttons (Visual tools + Processing Example) ----------
+  // -- Visual-tools mobile disclosure -----------------------------------
   //
-  // Visual tools: stays mobile-only — desktop shows the toolbar
-  //   inline because the tools are the section's whole point.
-  // Processing Example: unified across desktop + mobile. Reads as a
-  //   section heading with a small action label pinned to the right
-  //   ("Add" / "Hide" / "Manage"). Behaves like a disclosure on both
-  //   viewports so the collapsed state stays compact when no
-  //   example exists.
-  &__visual-tools-summary,
-  &__processing-example-summary {
-    display: flex;
+  // Only the Visual Tools section uses the disclosure pattern, and
+  // only on mobile. Processing Example used to share these styles
+  // but is now always-expanded — its summary button + content
+  // gating were removed.
+  &__visual-tools-summary {
+    display: none;
     align-items: baseline;
     justify-content: space-between;
     gap: 0.4em;
@@ -667,35 +663,11 @@
     }
   }
 
-  // Visual tools disclosure stays mobile-only; desktop hides it and
-  // shows the toolbar inline. The Processing Example disclosure is
-  // shown on every viewport — its rule above is the default.
-  &__visual-tools-summary {
-    display: none;
-  }
-
-  &__visual-tools-summary-label,
-  &__processing-example-summary-label {
+  &__visual-tools-summary-label {
     flex: 1 1 auto;
     min-width: 0;
   }
 
-  // Right-aligned action label on the Processing Example summary
-  // ("Add" / "Hide" / "Manage"). Reads as the affordance, not as a
-  // value indicator — quiet weight, tertiary color so it's clearly
-  // interactive.
-  &__processing-example-summary-action {
-    flex: 0 0 auto;
-    color: var(--tertiary);
-    font-weight: 600;
-    text-transform: none;
-    letter-spacing: 0;
-    font-size: var(--font-down-1);
-  }
-
-  // Visual-tools-summary chevron still uses the icon affordance on
-  // mobile. The processing-example chevron is gone (replaced by the
-  // text action label) — its rule is removed.
   &__visual-tools-summary-chevron {
     display: inline-flex;
     align-items: center;
@@ -728,24 +700,10 @@
     gap: 0.45em;
   }
 
-  // Disclosure content gating — works on every viewport now that the
-  // PE section is a unified disclosure (the summary button shows on
-  // desktop too). Collapsed state hides the content; the summary
-  // remains visible as the section anchor.
-  &__processing-example-row:not(.is-open)
-    > .npn-critique-reply-modal__processing-example-content {
-    display: none;
-  }
-
   &__processing-example-heading {
-    margin: 0;
-    // Smaller / lighter than the section headings above the image —
-    // the section is supporting, not a primary surface.
-    font-size: var(--font-down-1);
-    font-weight: 500;
-    color: var(--primary-medium);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    margin: 0 0 0.25em;
+    // Inherits the optional-section-heading style; the per-element
+    // rule is kept for any future shape-specific tweaks.
   }
 
   &__processing-example-help {
