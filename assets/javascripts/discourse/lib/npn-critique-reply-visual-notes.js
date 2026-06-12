@@ -838,21 +838,26 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
   // Start dot at the first point — small tertiary dot with a white
   // halo. Anchors "begin here" without reading as a numbered pin.
   // Also handles the single-point case where no line has formed.
+  // Skipped in Points mode: the numbered "1" stop badge below
+  // already marks the start.
+  const isPointsMode = eyePath.mode === "points";
   if (points.length >= 1) {
     const startR = Math.max(4, Math.round(shortEdge * 0.0065));
     const startHaloR = startR + Math.max(2, Math.round(startR * 0.4));
     const start = points[0];
 
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = secondary;
-    ctx.beginPath();
-    ctx.arc(start.x, start.y, startHaloR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = tertiary;
-    ctx.beginPath();
-    ctx.arc(start.x, start.y, startR, 0, Math.PI * 2);
-    ctx.fill();
+    if (!isPointsMode) {
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = secondary;
+      ctx.beginPath();
+      ctx.arc(start.x, start.y, startHaloR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = tertiary;
+      ctx.beginPath();
+      ctx.arc(start.x, start.y, startR, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Label badge — small tertiary pill above-right of the start
     // dot. Quieter than the D/R arrow badges and much quieter than
@@ -888,15 +893,19 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
   // editor's "always-visible numbered badges" decoration. Each
   // clicked stop renders as a small filled circle with a centered
   // white digit. Stroke-mode paths render no stop badges (their
-  // start dot + label badge above carry the affordance).
-  if (eyePath.mode === "points" && points.length >= 1) {
+  // start dot + label badge above carry the affordance). The LAST
+  // point is skipped: the terminal arrowhead drawn below marks
+  // the path's end, so a numbered badge there would compete.
+  // Single-point paths still get "1" since there's no arrowhead.
+  if (isPointsMode && points.length >= 1) {
     const stopFontSize = Math.max(10, Math.round(shortEdge * 0.014));
     const stopR = Math.max(8, Math.round(shortEdge * 0.0085));
     const stopHaloR = stopR + Math.max(2, Math.round(stopR * 0.35));
     ctx.font = `600 ${stopFontSize}px sans-serif`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "center";
-    for (let i = 0; i < points.length; i++) {
+    const lastNumbered = points.length === 1 ? 0 : points.length - 2;
+    for (let i = 0; i <= lastNumbered; i++) {
       const wp = points[i];
       // Halo
       ctx.globalAlpha = 0.92;

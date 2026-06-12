@@ -2056,7 +2056,13 @@ export async function createAnnotationStage({
         const stopPadding = Math.max(2, Math.round(stopFontSize * 0.28));
         const stopR = Math.max(8, Math.round(shortEdge * 0.0085));
         const stopHaloR = stopR + Math.max(2, Math.round(stopR * 0.35));
-        for (let i = 0; i < pts.length; i++) {
+        // Number every stop EXCEPT the last one — the terminal
+        // arrowhead drawn later already marks the path's end, so a
+        // numbered badge there would compete with it. Single-point
+        // paths still get "1" since there's no arrowhead in that
+        // case.
+        const lastNumbered = pts.length === 1 ? 0 : pts.length - 2;
+        for (let i = 0; i <= lastNumbered; i++) {
           const wp = pts[i];
           // Halo + filled circle so the digit reads on light AND
           // dark backgrounds.
@@ -2130,29 +2136,35 @@ export async function createAnnotationStage({
       // cue (they appear when the user clicks the curve and vanish
       // when selection clears); the start dot stays put as the
       // permanent direction anchor and matches the exported JPEG.
+      //
+      // In Points mode the numbered "1" badge above already marks
+      // the start, so we skip the start dot to avoid stacking two
+      // circles. The label badge still anchors to `start` below.
       if (pts.length >= 1) {
         const startR = Math.max(4, Math.round(shortEdge * 0.0065));
         const startHaloR = startR + Math.max(2, Math.round(startR * 0.4));
         const start = pts[0];
-        decorationsGroup.add(
-          new Konva.Circle({
-            x: start.x,
-            y: start.y,
-            radius: startHaloR,
-            fill: secondary,
-            opacity: 0.9,
-            listening: false,
-          })
-        );
-        decorationsGroup.add(
-          new Konva.Circle({
-            x: start.x,
-            y: start.y,
-            radius: startR,
-            fill: isSelected ? tertiaryHover : tertiary,
-            listening: false,
-          })
-        );
+        if (!isPointsMode) {
+          decorationsGroup.add(
+            new Konva.Circle({
+              x: start.x,
+              y: start.y,
+              radius: startHaloR,
+              fill: secondary,
+              opacity: 0.9,
+              listening: false,
+            })
+          );
+          decorationsGroup.add(
+            new Konva.Circle({
+              x: start.x,
+              y: start.y,
+              radius: startR,
+              fill: isSelected ? tertiaryHover : tertiary,
+              listening: false,
+            })
+          );
+        }
 
         // Label badge — small tertiary pill near the start dot.
         // The eye-path badge is intentionally quieter than the D/R
