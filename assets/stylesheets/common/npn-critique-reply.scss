@@ -216,16 +216,16 @@
   // the user explicitly chose focus mode for the toolbar, not for
   // browsing existing annotations.
   //
-  //   clamp(420px, calc(70vh - 4em), 740px)
+  //   clamp(420px, calc(72vh - 4em), 760px)
   //
   // At 1080p (real Chrome body ≈ 800px after browser chrome) this
-  // lands the image at ~692px. With img-col header (~48), gaps
+  // lands the image at ~714px. With img-col header (~48), gaps
   // and padding (~30), and the toolbar row (~40), the toolbar's
   // bottom edge sits right at the body edge. 1440p+ hits the
-  // 740px ceiling.
+  // 760px ceiling.
   &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus &__processing-example-large {
-    max-height: clamp(420px, calc(70vh - 4em), 740px);
+    max-height: clamp(420px, calc(72vh - 4em), 760px);
   }
 
   // Hide the Optional Visual Notes heading + helper in focus mode.
