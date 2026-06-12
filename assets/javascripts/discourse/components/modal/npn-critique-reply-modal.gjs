@@ -1510,30 +1510,6 @@ export default class NpnCritiqueReplyModal extends Component {
     this.mobileProcessingExampleOpen = !this.mobileProcessingExampleOpen;
   }
 
-  // Inline "Add processing example" / "Manage processing example"
-  // link near the image status. Reveals the Optional Processing
-  // Example section (so the mobile disclosure can't hide it),
-  // scrolls it into view, and moves focus to its heading. The
-  // heading itself isn't naturally focusable; we set tabindex=-1
-  // on it in the template so programmatic focus works without
-  // putting it in the tab order.
-  @action
-  openProcessingExampleSection() {
-    this.mobileProcessingExampleOpen = true;
-    const heading = document.getElementById(
-      "npn-critique-reply-processing-example-heading"
-    );
-    if (!heading) {
-      return;
-    }
-    try {
-      heading.scrollIntoView({ behavior: "smooth", block: "start" });
-    } catch {
-      heading.scrollIntoView();
-    }
-    heading.focus({ preventScroll: true });
-  }
-
   @action
   toggleVisualFocusMode() {
     this.visualFocusMode = !this.visualFocusMode;
@@ -5681,39 +5657,34 @@ export default class NpnCritiqueReplyModal extends Component {
                 </div>
               {{/if}}
 
-              {{! Inline status row near the image — shows what the
-                  user is looking at plus a small secondary link to
-                  the Optional Processing Example section below.
-                  The link is the ONLY surfaced affordance for PE up
-                  here now — the header popover was removed. Click
-                  expands the PE section (in case it's collapsed on
-                  mobile), scrolls to it, and focuses its heading. }}
-              {{#if this.processingExampleAvailable}}
+              {{! Canonical image-status line — single line directly
+                  under the image. Replaces the older `__version-
+                  status` that used to live below the a11y list and
+                  the inline "Add processing example" anchor link
+                  that scrolled to the section below. Processing
+                  Example is now reachable via the disclosure button
+                  in the Optional Processing Example section. }}
+              {{#if this.showingVersionLabel}}
                 <p
                   class="npn-critique-reply-modal__image-status-row"
                   role="status"
+                  aria-live="polite"
                 >
                   <span
                     class="npn-critique-reply-modal__image-status"
                   >{{this.showingVersionLabel}}</span>
-                  <span
-                    class="npn-critique-reply-modal__image-status-sep"
-                    aria-hidden="true"
-                  >·</span>
-                  <button
-                    type="button"
-                    class="btn-link
-                      npn-critique-reply-modal__image-status-pe-link"
-                    {{on "click" this.openProcessingExampleSection}}
-                  >
-                    {{i18n
-                      (if
-                        this.hasProcessingExample
-                        "npn_critique_reply.modal.processing_example.inline_manage"
-                        "npn_critique_reply.modal.processing_example.inline_add"
-                      )
-                    }}
-                  </button>
+                  {{#if this.revisionNote}}
+                    <span
+                      class="npn-critique-reply-modal__image-status-sep"
+                      aria-hidden="true"
+                    >—</span>
+                    <span
+                      class="npn-critique-reply-modal__version-note"
+                    >{{i18n
+                        "npn_critique_reply.modal.revision_note"
+                        note=this.revisionNote
+                      }}</span>
+                  {{/if}}
                 </p>
               {{/if}}
 
@@ -6519,23 +6490,10 @@ export default class NpnCritiqueReplyModal extends Component {
                 </details>
               {{/if}}
 
-              {{#if this.showingVersionLabel}}
-                <p
-                  class="npn-critique-reply-modal__version-status"
-                  aria-live="polite"
-                >
-                  {{this.showingVersionLabel}}
-                  {{#if this.revisionNote}}
-                    —
-                    <span class="npn-critique-reply-modal__version-note">
-                      {{i18n
-                        "npn_critique_reply.modal.revision_note"
-                        note=this.revisionNote
-                      }}
-                    </span>
-                  {{/if}}
-                </p>
-              {{/if}}
+              {{! `__version-status` removed — its content moved up
+                  to the canonical __image-status-row right under the
+                  image, eliminating the duplicate "Showing Original"
+                  the user was seeing. }}
 
             </aside>
 
@@ -6554,6 +6512,12 @@ export default class NpnCritiqueReplyModal extends Component {
                   {{if this.mobileProcessingExampleOpen 'is-open'}}"
                 aria-labelledby="npn-critique-reply-processing-example-heading"
               >
+                {{! Disclosure header — heading on the left, action
+                    label on the right ("Add" / "Hide" / "Manage").
+                    Replaces the old chevron + separate <h4> heading
+                    pair. The summary button IS the heading now; the
+                    section's aria-labelledby points at the heading
+                    span inside the button. }}
                 <button
                   type="button"
                   class="npn-critique-reply-modal__processing-example-summary"
@@ -6566,46 +6530,31 @@ export default class NpnCritiqueReplyModal extends Component {
                   {{on "click" this.toggleMobileProcessingExample}}
                 >
                   <span
-                    class="npn-critique-reply-modal__processing-example-summary-label"
+                    id="npn-critique-reply-processing-example-heading"
+                    class="npn-critique-reply-modal__processing-example-summary-label
+                      npn-critique-reply-modal__optional-section-heading"
                   >
                     {{i18n
                       "npn_critique_reply.modal.optional_processing_example_heading"
                     }}
                   </span>
-                  {{#if this.hasProcessingExample}}
-                    <span
-                      class="npn-critique-reply-modal__processing-example-summary-status"
-                    >
-                      {{i18n
-                        "npn_critique_reply.modal.processing_example.uploaded"
-                      }}
-                    </span>
-                  {{/if}}
                   <span
-                    class="npn-critique-reply-modal__processing-example-summary-chevron"
+                    class="npn-critique-reply-modal__processing-example-summary-action"
                     aria-hidden="true"
                   >
-                    {{dIcon "chevron-down"}}
+                    {{i18n
+                      (if
+                        this.hasProcessingExample
+                        "npn_critique_reply.modal.processing_example.disclosure_manage"
+                        (if
+                          this.mobileProcessingExampleOpen
+                          "npn_critique_reply.modal.processing_example.disclosure_hide"
+                          "npn_critique_reply.modal.processing_example.disclosure_add"
+                        )
+                      )
+                    }}
                   </span>
                 </button>
-
-                <h4
-                  id="npn-critique-reply-processing-example-heading"
-                  class="npn-critique-reply-modal__processing-example-heading
-                    npn-critique-reply-modal__optional-section-heading"
-                  tabindex="-1"
-                >
-                  {{i18n
-                    "npn_critique_reply.modal.optional_processing_example_heading"
-                  }}
-                </h4>
-                <p
-                  class="npn-critique-reply-modal__optional-section-helper"
-                >
-                  {{i18n
-                    "npn_critique_reply.modal.optional_processing_example_helper"
-                  }}
-                </p>
 
                 <div
                   id="npn-critique-reply-processing-example-content"
@@ -6626,10 +6575,17 @@ export default class NpnCritiqueReplyModal extends Component {
                       }}
                     </p>
                   {{else}}
-                    {{! Helper text used to live here too; removed
-                        because the section heading above already
-                        carries the same copy via __optional-section
-                        -helper, and the duplicate read as clutter. }}
+                    {{! Helper now lives inside the expanded content
+                        so it surfaces only when the user opens the
+                        section. Collapsed state stays minimal: just
+                        heading + Add. }}
+                    <p
+                      class="npn-critique-reply-modal__optional-section-helper"
+                    >
+                      {{i18n
+                        "npn_critique_reply.modal.optional_processing_example_helper"
+                      }}
+                    </p>
                     <div
                       class="npn-critique-reply-modal__processing-example-actions"
                     >

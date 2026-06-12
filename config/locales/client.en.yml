@@ -125,10 +125,17 @@ en:
         # "Revision" is reserved for the photographer's own next image.
         processing_example:
           section_title: "Processing Example"
-          # Inline secondary link near the image status row. Replaces
-          # the popover trigger that previously lived in the header
-          # actions — keeps Processing Example discoverable without
-          # weighting it as a primary action.
+          # Right-aligned action label on the Optional Processing
+          # Example disclosure summary. Reads as "Add" before any
+          # upload, "Manage" once a processing example exists, and
+          # "Hide" while the section is expanded (regardless of
+          # uploaded state).
+          disclosure_add: "Add"
+          disclosure_hide: "Hide"
+          disclosure_manage: "Manage"
+          # Legacy inline-link strings — no longer rendered after the
+          # disclosure cleanup; kept for backward compat in case any
+          # transient draft state still references them.
           inline_add: "Add processing example"
           inline_manage: "Manage processing example"
           # Compact label for the header quick-access trigger that opens
