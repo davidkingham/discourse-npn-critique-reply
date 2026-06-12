@@ -1530,6 +1530,15 @@
       padding-right: 0;
     }
 
+    // Hide the "More below" cue on mobile. The modal body is the
+    // single scroll container in the stacked layout — there's no
+    // per-pane viewport to anchor the band to, and the natural
+    // mobile scroll affordance already lets the user reach lower
+    // sections.
+    &__pane-scroll-cue {
+      display: none;
+    }
+
     &__left-pane {
       // The left pane was a single scroll container on desktop;
       // on mobile its children just stack inline with the rest of
