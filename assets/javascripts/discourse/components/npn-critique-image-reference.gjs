@@ -298,6 +298,7 @@ export default class NpnCritiqueImageReference extends Component {
       selectedRelationshipArrowId: this.args.selectedRelationshipArrowId,
       visualMode: this.args.visualMode,
       areaShapeMode: this.args.areaShapeMode,
+      eyePathInteractionMode: this.args.eyePathInteractionMode,
       aspectRatio: this.args.cropAspectRatio,
       pinMoveEnabled: this.args.pinMoveEnabled,
       attentionPullEditEnabled: this.args.attentionPullEditEnabled,
