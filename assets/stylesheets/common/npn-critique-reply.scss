@@ -210,20 +210,22 @@
   // Visual Focus Mode: write pane + processing-example are hidden
   // so the image-col gains the full layout width. The horizontal
   // gain is what makes the focus-mode image feel substantially
-  // bigger; vertical cap stays tight so the visual-tool row stays
-  // above the modal footer at 1080p (real Chrome body ≈ 800px
-  // after browser chrome).
+  // bigger; the vertical cap is sized so the visual-tool ROW
+  // lands flush with the bottom of the visible body. The "Visual
+  // annotations" a11y list intentionally falls below the fold —
+  // the user explicitly chose focus mode for the toolbar, not for
+  // browsing existing annotations.
   //
-  //   clamp(420px, calc(62vh - 4em), 680px)
+  //   clamp(420px, calc(65vh - 4em), 700px)
   //
-  // At 1080p that lands the image at ~605px — image-col content
-  // below it (toolbar + tool-action + a11y list + padding) takes
-  // ~170px after the Optional Visual Notes heading + helper are
-  // hidden (see rule below). 1440p+ monitors hit the 680px
-  // ceiling.
+  // At 1080p (real Chrome body ≈ 800px after browser chrome) this
+  // lands the image at ~638px. With img-col header (~48), gaps
+  // and padding (~30), and the toolbar row (~40), the toolbar's
+  // bottom edge sits right at the body edge. 1440p+ hits the
+  // 700px ceiling with even more headroom.
   &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus &__processing-example-large {
-    max-height: clamp(420px, calc(62vh - 4em), 680px);
+    max-height: clamp(420px, calc(65vh - 4em), 700px);
   }
 
   // Hide the Optional Visual Notes heading + helper in focus mode.
