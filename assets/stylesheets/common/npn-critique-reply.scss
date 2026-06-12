@@ -216,16 +216,27 @@
   // the user explicitly chose focus mode for the toolbar, not for
   // browsing existing annotations.
   //
-  //   clamp(420px, calc(71vh - 4em), 750px)
+  //   clamp(420px, calc(75vh - 4em), 790px)
   //
   // At 1080p (real Chrome body ≈ 800px after browser chrome) this
-  // lands the image at ~703px. With img-col header (~48), gaps
-  // and padding (~30), and the toolbar row (~40), the toolbar's
-  // bottom edge sits right at the body edge. 1440p+ hits the
-  // 750px ceiling.
+  // lands the image at ~746px. The image-col header (Reference
+  // Image title + Return-to-Critique button) is hidden in focus
+  // mode — the DModal X already runs `beforeClose` which clears
+  // `visualFocusMode` instead of closing the modal, so the X
+  // serves as the "Return to Critique" affordance. The freed
+  // ~48px lets the image grow without pushing the toolbar past
+  // the footer.
   &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus &__processing-example-large {
-    max-height: clamp(420px, calc(71vh - 4em), 750px);
+    max-height: clamp(420px, calc(75vh - 4em), 790px);
+  }
+
+  // Hide the image-col header in focus mode — the heading is
+  // redundant when the workspace is the image, and the visual-
+  // focus toggle button is replaced by DModal's X (which clears
+  // focus mode via beforeClose).
+  &.npn-critique-reply-modal--visual-focus &__image-col-header {
+    display: none;
   }
 
   // Hide the Optional Visual Notes heading + helper in focus mode.
