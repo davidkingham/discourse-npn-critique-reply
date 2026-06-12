@@ -207,23 +207,34 @@
     max-height: 100%;
   }
 
-  // Visual Focus Mode: write pane is hidden so the image-col gains
-  // the full layout width. The image gets noticeably larger from
-  // the width gain alone, but vertical height still has to leave
-  // room for the Optional Visual Notes section + tool row below.
-  // Cap mirrors the default-mode clamp() pattern, raised so the
-  // focus-mode image feels meaningfully bigger:
+  // Visual Focus Mode: write pane + processing-example are hidden
+  // so the image-col gains the full layout width. The horizontal
+  // gain is what makes the focus-mode image feel substantially
+  // bigger; vertical cap stays tight so the visual-tool row stays
+  // above the modal footer at 1080p (real Chrome body ≈ 800px
+  // after browser chrome).
   //
-  //   clamp(420px, calc(68vh - 4em), 720px)
+  //   clamp(420px, calc(62vh - 4em), 680px)
   //
-  // At 1080p that lands the image at ~670px — about 90px taller
-  // than default (~580px) — while leaving ~200px below for the
-  // visual tools. On 1440p+ monitors the 720px ceiling still lets
-  // the image feel like the workspace centerpiece without pushing
-  // the toolbar out of view.
+  // At 1080p that lands the image at ~605px — image-col content
+  // below it (toolbar + tool-action + a11y list + padding) takes
+  // ~170px after the Optional Visual Notes heading + helper are
+  // hidden (see rule below). 1440p+ monitors hit the 680px
+  // ceiling.
   &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus &__processing-example-large {
-    max-height: clamp(420px, calc(68vh - 4em), 720px);
+    max-height: clamp(420px, calc(62vh - 4em), 680px);
+  }
+
+  // Hide the Optional Visual Notes heading + helper in focus mode.
+  // The user explicitly entered focus mode to use the visual
+  // tools; labeling them as "Optional" reads redundant and eats
+  // ~50px that the toolbar needs to stay above the footer.
+  &.npn-critique-reply-modal--visual-focus &__optional-visual-notes
+    > &__optional-section-heading,
+  &.npn-critique-reply-modal--visual-focus &__optional-visual-notes
+    > &__optional-section-helper {
+    display: none;
   }
 
   // -- Image column ------------------------------------------------------
@@ -296,13 +307,16 @@
     line-height: 1.35;
   }
 
-  // Canonical "Showing Original / Showing Revision / Showing
-  // Processing Example" status line right under the image. The
-  // older `__version-status` paragraph below the a11y list was
-  // removed because it duplicated this row.
+  // Canonical "Showing X" status line under the image — hidden by
+  // default per beta feedback (the version selector / large-image
+  // toggle already convey what the user is looking at; the extra
+  // text line added clutter without surfacing new information).
+  // Kept in the DOM with `display: none` so the existing a11y
+  // pipe-through (aria-live, revisionNote) still has a target if
+  // we want to re-enable it later.
   &__image-status-row {
+    display: none;
     margin: 0.25em 0 0;
-    display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     gap: 0.4em;
