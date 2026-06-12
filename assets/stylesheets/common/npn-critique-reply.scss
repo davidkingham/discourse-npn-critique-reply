@@ -113,26 +113,24 @@
   }
 
   &__pane-scroll-cue {
-    // Sticky bottom-fade band. The whole BAND is the affordance —
-    // no chrome border, no shadow, no pill shape. A subtle
-    // theme-aware gradient fades into the pane background, with a
-    // small muted "More below ↓" sitting near the bottom-right
-    // corner. The cue should read as a layout edge effect, not as
-    // a button.
+    // Anchored to the bottom of the pane frame. The pane is the
+    // scrolling container AND the offset parent (position: relative
+    // set on __left-pane / __write-col), so `position: absolute;
+    // bottom: 0` lands the band flush against the pane's bottom
+    // padding edge — i.e., the bottom of the visible pane frame.
     //
-    // Sits AT THE END of the pane's natural flow (last child); the
-    // sticky `bottom` value pins it to the bottom edge of the
-    // scroll viewport when scrolled away from the end. The pane's
-    // own `padding-bottom` is what gives the trailing content
-    // breathing room above the footer — the cue itself rides above
-    // that padding because of the negative `bottom` value, so the
-    // band visually meets the bottom of the pane frame.
-    position: sticky;
-    bottom: -2.5em;
-    align-self: stretch;
-    margin: 0;
-    padding: 1.5em 0.6em 0.5em;
-    width: 100%;
+    // Sticky was tried earlier and kept landing the band mid-flow on
+    // shorter viewports because the pane's flex layout shifted the
+    // natural position. Absolute positioning sidesteps that: the cue
+    // sits at the frame edge regardless of scroll position or flex
+    // stretching, and conditional rendering (`{{#if hasMore}}`) on
+    // the modal side keeps it hidden whenever the sentinel
+    // intersects the viewport.
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 1.75em 0.7em 0.5em;
     border: none;
     background: linear-gradient(
       to bottom,
@@ -151,6 +149,7 @@
     z-index: 4;
     text-align: right;
     transition: color 0.12s ease;
+    pointer-events: auto;
 
     &:hover {
       color: var(--tertiary);
