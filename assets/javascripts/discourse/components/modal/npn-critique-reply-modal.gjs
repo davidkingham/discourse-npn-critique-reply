@@ -6900,6 +6900,9 @@ export default class NpnCritiqueReplyModal extends Component {
                   }}
                   {{on "click" (fn this.scrollPaneDown "left")}}
                 >
+                  <span class="npn-critique-reply-modal__pane-scroll-cue-text">
+                    {{i18n "npn_critique_reply.modal.scroll_more_below_label"}}
+                  </span>
                   {{dIcon "chevron-down"}}
                 </button>
               {{/if}}
@@ -7280,6 +7283,9 @@ export default class NpnCritiqueReplyModal extends Component {
                 }}
                 {{on "click" (fn this.scrollPaneDown "right")}}
               >
+                <span class="npn-critique-reply-modal__pane-scroll-cue-text">
+                  {{i18n "npn_critique_reply.modal.scroll_more_below_label"}}
+                </span>
                 {{dIcon "chevron-down"}}
               </button>
             {{/if}}

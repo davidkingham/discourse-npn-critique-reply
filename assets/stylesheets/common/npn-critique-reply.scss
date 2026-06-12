@@ -113,36 +113,43 @@
   }
 
   &__pane-scroll-cue {
-    // Sticky-bottom inside the scroll container so the chevron
-    // tracks the visible viewport edge while content scrolls above
-    // it. `bottom: 0.6em` keeps it just inside the pane's
-    // padding-bottom so it never sits flush against the modal
-    // footer.
+    // Sticky bottom-fade band. The whole BAND is the affordance —
+    // no chrome border, no shadow, no pill shape. A subtle
+    // theme-aware gradient fades into the pane background, with a
+    // small muted "More below ↓" sitting near the bottom-right
+    // corner. The cue should read as a layout edge effect, not as
+    // a button.
     position: sticky;
-    bottom: 0.6em;
-    align-self: center;
-    // Pull the cue out of the natural flow gap so it overlaps the
-    // bottom edge of the content rather than adding an extra row.
-    margin-top: -2.5em;
-    // Compact circular pill with the down-chevron icon. The fade
-    // gradient is on the ::before pseudo so the button's hit area
-    // matches its visible shape (not the wider gradient strip).
-    width: 2em;
-    height: 2em;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: 1px solid var(--primary-low);
-    border-radius: 50%;
-    background: var(--secondary);
+    // Pull the band up over the pane's padding-bottom so it sits
+    // INSIDE the scroll viewport (otherwise sticky has nothing to
+    // stick to once the content's natural end is reached).
+    bottom: 0;
+    align-self: stretch;
+    // Negative margin lifts the band so it overlaps the trailing
+    // content edge rather than adding a row. Height is intentionally
+    // shallow so the affordance feels like a soft horizon, not a
+    // chrome bar.
+    margin: -3.25em 0 0;
+    padding: 1.75em 0.5em 0.4em;
+    width: 100%;
+    border: none;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      var(--secondary) 55%,
+      var(--secondary) 100%
+    );
     color: var(--primary-medium);
-    box-shadow: 0 2px 6px var(--primary-low);
     cursor: pointer;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 0.25em;
+    font-size: var(--font-down-1);
+    line-height: 1;
     z-index: 4;
-    transition:
-      color 0.12s ease,
-      transform 0.12s ease;
+    text-align: right;
+    transition: color 0.12s ease;
 
     &:hover {
       color: var(--tertiary);
@@ -151,37 +158,22 @@
       outline: 2px solid var(--tertiary);
       outline-offset: 2px;
     }
-    &:active {
-      transform: translateY(1px);
-    }
 
     .d-icon {
-      // The icon is the affordance — size + color come from the
-      // button. Leave no margins so it centers cleanly.
+      // Down-chevron sits next to the text; size matches the
+      // muted-medium font weight so neither dominates.
       margin: 0;
+      font-size: 0.95em;
     }
+  }
 
-    // Subtle fade behind the chevron so the affordance reads as
-    // "there's content under this fold". Uses the modal's secondary
-    // (panel background) so it blends with both light and dark
-    // themes. Sits ABOVE the content via z-index but BELOW the
-    // chevron via stacking order.
-    &::before {
-      content: "";
-      position: absolute;
-      left: 50%;
-      bottom: -0.4em;
-      width: 14em;
-      height: 3em;
-      transform: translateX(-50%);
-      background: linear-gradient(
-        to bottom,
-        transparent,
-        var(--secondary) 70%
-      );
-      pointer-events: none;
-      z-index: -1;
-    }
+  // Inner text node. Sits next to the chevron on the right edge of
+  // the bottom band. Muted weight + slightly tracked letters so the
+  // hint reads as a small label, not a primary control.
+  &__pane-scroll-cue-text {
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    text-transform: none;
   }
 
   // -- Visual Focus Mode --------------------------------------------------
