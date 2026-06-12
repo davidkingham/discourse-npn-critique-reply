@@ -119,24 +119,25 @@
     // small muted "More below ↓" sitting near the bottom-right
     // corner. The cue should read as a layout edge effect, not as
     // a button.
+    //
+    // Sits AT THE END of the pane's natural flow (last child); the
+    // sticky `bottom` value pins it to the bottom edge of the
+    // scroll viewport when scrolled away from the end. The pane's
+    // own `padding-bottom` is what gives the trailing content
+    // breathing room above the footer — the cue itself rides above
+    // that padding because of the negative `bottom` value, so the
+    // band visually meets the bottom of the pane frame.
     position: sticky;
-    // Pull the band up over the pane's padding-bottom so it sits
-    // INSIDE the scroll viewport (otherwise sticky has nothing to
-    // stick to once the content's natural end is reached).
-    bottom: 0;
+    bottom: -2.5em;
     align-self: stretch;
-    // Negative margin lifts the band so it overlaps the trailing
-    // content edge rather than adding a row. Height is intentionally
-    // shallow so the affordance feels like a soft horizon, not a
-    // chrome bar.
-    margin: -3.25em 0 0;
-    padding: 1.75em 0.5em 0.4em;
+    margin: 0;
+    padding: 1.5em 0.6em 0.5em;
     width: 100%;
     border: none;
     background: linear-gradient(
       to bottom,
       transparent 0%,
-      var(--secondary) 55%,
+      var(--secondary) 60%,
       var(--secondary) 100%
     );
     color: var(--primary-medium);
