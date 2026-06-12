@@ -524,7 +524,7 @@ export async function createAnnotationStage({
   // Eye Path interaction mode — "stroke" (default, drag-to-trace)
   // or "points" (click-to-add ordered stops). In stroke mode a
   // short tap is ignored; in points mode a drag is ignored.
-  eyePathMode = "stroke",
+  eyePathInteractionMode = "stroke",
   // Retrace targets: when set, the next path-shape drag in the
   // matching tool mode REPLACES that marker's points instead of
   // creating a new marker. Cleared on commit, cancel, or any of the
@@ -641,7 +641,7 @@ export async function createAnnotationStage({
     attentionPullEditEnabled,
     strongAreaEditEnabled,
     areaShapeMode,
-    eyePathMode,
+    eyePathInteractionMode,
     retracingAttentionPullId,
     retracingStrongAreaId,
   };
@@ -3984,7 +3984,7 @@ export async function createAnnotationStage({
       // intended Stroke if they wanted that). In Stroke mode a
       // longer drag commits as a stroke; a short press is ignored
       // so taps near the canvas don't drop accidental stops.
-      if (state.eyePathMode === "points") {
+      if (state.eyePathInteractionMode === "points") {
         if (isShortPress) {
           const xPct = Math.max(0, Math.min(100, (drag.startX / sw) * 100));
           const yPct = Math.max(0, Math.min(100, (drag.startY / sh) * 100));
@@ -4103,7 +4103,7 @@ export async function createAnnotationStage({
       attentionPullEditEnabled,
       strongAreaEditEnabled,
       areaShapeMode,
-      eyePathMode,
+      eyePathInteractionMode,
       retracingAttentionPullId,
       retracingStrongAreaId,
     } = {}) {
@@ -4217,10 +4217,10 @@ export async function createAnnotationStage({
         }
       }
       if (
-        eyePathMode !== undefined &&
-        eyePathMode !== state.eyePathMode
+        eyePathInteractionMode !== undefined &&
+        eyePathInteractionMode !== state.eyePathInteractionMode
       ) {
-        state.eyePathMode = eyePathMode;
+        state.eyePathInteractionMode = eyePathInteractionMode;
         // Cancel any in-flight eye-path drag so the user doesn't
         // accidentally commit a stroke after switching to points
         // mid-press.
