@@ -299,6 +299,14 @@ module DiscourseNpnCritiqueReply
       base
     end
 
+    # Eye-path interaction modes. "stroke" is drag-to-trace (the
+    # long-standing legacy behavior); "points" is click-to-add stops
+    # with numbered markers. Anything unrecognized (including a
+    # legacy entry with no mode at all) falls back to "stroke" so
+    # old paths render identically post-migration.
+    EYE_PATH_MODES = %w[stroke points].freeze
+    DEFAULT_EYE_PATH_MODE = "stroke"
+
     def normalize_eye_path(entry)
       raw_points = entry["points"] || entry[:points]
       return nil unless raw_points.is_a?(Array)
@@ -315,13 +323,16 @@ module DiscourseNpnCritiqueReply
       end
       return nil if points.length < 2
 
+      raw_mode = (entry["mode"] || entry[:mode]).to_s
+      mode = EYE_PATH_MODES.include?(raw_mode) ? raw_mode : DEFAULT_EYE_PATH_MODE
+
       # Position-aware fallback id when the client didn't supply one.
       # MAX_EYE_PATH_COUNT lets multiple paths coexist in a single
       # payload, so a static default like "eye_path_1" would collide
       # via the seen_ids dedup. Random suffix mirrors the pattern
       # used by normalize_rect for crop / attention_pull / strong_area.
       id = normalize_string(entry["id"] || entry[:id]) || "eye_path_#{rand(1_000_000)}"
-      out = { "id" => id, "kind" => "eye_path", "points" => points }
+      out = { "id" => id, "kind" => "eye_path", "mode" => mode, "points" => points }
       label = normalize_string(entry["label"] || entry[:label])
       out["label"] = label if label
       note = normalize_string(entry["note"] || entry[:note])

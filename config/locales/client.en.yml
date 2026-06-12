@@ -363,7 +363,19 @@ en:
         # Eye path / Visual Flow tool
         eye_path: "Eye path"
         eye_path_done: "Done with eye path"
+        # Generic hint kept for backward compat with any cached
+        # client copies; the active surface uses the mode-specific
+        # variants below.
         eye_path_hint: "Click the image in the order your eye moves through it."
+        eye_path_hint_stroke: "Draw the path your eye follows through the image."
+        eye_path_hint_points: "Click the main stops in the order your eye notices them."
+        # Stroke / Points sub-toggle copy. Default mode is "stroke"
+        # — the long-standing drag-to-trace flowing line. "Points"
+        # is the click-to-add ordered stops variant.
+        eye_path_mode:
+          label: "Eye Path mode"
+          stroke: "Stroke"
+          points: "Points"
         eye_path_clear: "Clear eye path"
         eye_path_clear_all: "Clear all eye paths"
         eye_path_remove: "Remove eye path"

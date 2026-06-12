@@ -884,6 +884,42 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
     }
   }
 
+  // Points-mode numbered stop markers — exported version of the
+  // editor's "always-visible numbered badges" decoration. Each
+  // clicked stop renders as a small filled circle with a centered
+  // white digit. Stroke-mode paths render no stop badges (their
+  // start dot + label badge above carry the affordance).
+  if (eyePath.mode === "points" && points.length >= 1) {
+    const stopFontSize = Math.max(10, Math.round(shortEdge * 0.014));
+    const stopR = Math.max(8, Math.round(shortEdge * 0.0085));
+    const stopHaloR = stopR + Math.max(2, Math.round(stopR * 0.35));
+    ctx.font = `600 ${stopFontSize}px sans-serif`;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
+    for (let i = 0; i < points.length; i++) {
+      const wp = points[i];
+      // Halo
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = secondary;
+      ctx.beginPath();
+      ctx.arc(wp.x, wp.y, stopHaloR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Filled stop
+      ctx.fillStyle = tertiary;
+      ctx.beginPath();
+      ctx.arc(wp.x, wp.y, stopR, 0, Math.PI * 2);
+      ctx.fill();
+      // Number
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(String(i + 1), wp.x, wp.y + 0.5);
+    }
+    // Restore the per-path text alignment defaults the rest of the
+    // function expects.
+    ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "start";
+  }
+
   // Terminal arrowhead at the last point — slightly larger than the
   // in-segment chevrons so the path's end reads as a landing point.
   if (points.length >= 2) {

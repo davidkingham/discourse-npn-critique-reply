@@ -102,6 +102,9 @@ function cloneEyePath(eyePath) {
     // near the start dot. Dropping it (the original shape did) made
     // the badge silently disappear after the first state sync.
     label: eyePath.label ?? null,
+    // Mode drives Stroke vs Points rendering — must round-trip
+    // through the clone or the renderer falls back to the default.
+    mode: eyePath.mode ?? null,
     points: eyePath.points.map((p) => ({
       number: p.number,
       xPct: p.xPct,
@@ -124,6 +127,9 @@ function sameEyePath(a, b) {
     return false;
   }
   if ((a.label ?? null) !== (b.label ?? null)) {
+    return false;
+  }
+  if ((a.mode ?? null) !== (b.mode ?? null)) {
     return false;
   }
   const ap = a.points ?? [];
@@ -515,6 +521,10 @@ export async function createAnnotationStage({
   // "path" (default) or "oval". When "path" + visualMode is
   // attention_pull or strong_area, drag-to-draw is active.
   areaShapeMode = "path",
+  // Eye Path interaction mode — "stroke" (default, drag-to-trace)
+  // or "points" (click-to-add ordered stops). In stroke mode a
+  // short tap is ignored; in points mode a drag is ignored.
+  eyePathMode = "stroke",
   // Retrace targets: when set, the next path-shape drag in the
   // matching tool mode REPLACES that marker's points instead of
   // creating a new marker. Cleared on commit, cancel, or any of the
@@ -631,6 +641,7 @@ export async function createAnnotationStage({
     attentionPullEditEnabled,
     strongAreaEditEnabled,
     areaShapeMode,
+    eyePathMode,
     retracingAttentionPullId,
     retracingStrongAreaId,
   };
@@ -2033,27 +2044,59 @@ export async function createAnnotationStage({
         // arrows still carry the directional cue there.
       }
 
-      // Interior waypoint markers — editor-only visual cue so the
-      // critic can see exactly where the draggable handles are
-      // without hovering to find the "move" cursor. Skipped for the
-      // start (already has its own dot) and end (already has its
-      // own arrowhead). NOT drawn in the exported JPEG —
-      // `drawEyePathOnCanvas` in npn-critique-reply-visual-notes.js
-      // is a separate code path that intentionally renders only
-      // line + arrows + start dot + terminal arrow, so the posted
-      // image stays free of editing UI.
-      //
-      // Only rendered when the path is selected. Hiding the dots in
-      // the unselected state is the primary selected-vs-unselected
-      // visual cue for the eye path (the other annotation kinds get
-      // theirs from fill opacity / outer ring / dash → solid; the
-      // eye path's stroke colour and tension don't lend themselves
-      // to a comparable swap). Curve-hit-zone selection still works
-      // — users see the line, click it, the dots appear.
-      if (pts.length >= 3 && isSelected) {
-        // Floor bumped (3 → 4) so the dots are easier to mouse-target
-        // on smaller stages. Still smaller than the start dot's
-        // radius (~5+ px) so the start still reads as the path origin.
+      // Points mode: always render small numbered badges at every
+      // clicked stop (1..N). The numbers are sequence cues for the
+      // critic; they do NOT become inline post badges (the textarea
+      // reference remains [E1] regardless). Stroke mode falls back
+      // to the legacy interior waypoint dots — visible only when
+      // selected — so its "editor handles" cue stays unobtrusive.
+      const isPointsMode = path.mode === "points";
+      if (isPointsMode && pts.length >= 1) {
+        const stopFontSize = Math.max(10, Math.round(shortEdge * 0.014));
+        const stopPadding = Math.max(2, Math.round(stopFontSize * 0.28));
+        const stopR = Math.max(8, Math.round(shortEdge * 0.0085));
+        const stopHaloR = stopR + Math.max(2, Math.round(stopR * 0.35));
+        for (let i = 0; i < pts.length; i++) {
+          const wp = pts[i];
+          // Halo + filled circle so the digit reads on light AND
+          // dark backgrounds.
+          decorationsGroup.add(
+            new Konva.Circle({
+              x: wp.x,
+              y: wp.y,
+              radius: stopHaloR,
+              fill: secondary,
+              opacity: 0.92,
+              listening: false,
+            })
+          );
+          decorationsGroup.add(
+            new Konva.Circle({
+              x: wp.x,
+              y: wp.y,
+              radius: stopR,
+              fill: isSelected ? tertiaryHover : tertiary,
+              listening: false,
+            })
+          );
+          // Number text. We sample the text dimensions from Konva via
+          // a fresh Text node so the centering is exact regardless of
+          // glyph metrics.
+          const numberText = new Konva.Text({
+            text: String(i + 1),
+            fontSize: stopFontSize,
+            fontStyle: "600",
+            fill: "#ffffff",
+            padding: stopPadding,
+            listening: false,
+          });
+          numberText.x(wp.x - numberText.width() / 2);
+          numberText.y(wp.y - numberText.height() / 2);
+          decorationsGroup.add(numberText);
+        }
+      } else if (pts.length >= 3 && isSelected) {
+        // Stroke-mode legacy behavior: interior waypoint dots only
+        // when selected — these signal the draggable editing handles.
         const waypointR = Math.max(4, Math.round(shortEdge * 0.0045));
         const waypointHaloR =
           waypointR + Math.max(2, Math.round(waypointR * 0.5));
@@ -3931,20 +3974,26 @@ export async function createAnnotationStage({
       if (!pos || sw === 0 || sh === 0) {
         return;
       }
-      // Distance from mousedown to pointerup. Below the drag
-      // threshold, treat as a click → single point via the
-      // existing addEyePathPoint flow so click-to-drop still
-      // works for users who prefer dropping individual points.
       const dx = pos.x - drag.startX;
       const dy = pos.y - drag.startY;
       const totalDist = Math.sqrt(dx * dx + dy * dy);
-      if (
-        totalDist < EYE_PATH_DRAG_THRESHOLD_PX ||
-        drag.points.length < 2
-      ) {
-        const xPct = Math.max(0, Math.min(100, (drag.startX / sw) * 100));
-        const yPct = Math.max(0, Math.min(100, (drag.startY / sh) * 100));
-        onAddEyePathPoint?.(xPct, yPct);
+      const isShortPress =
+        totalDist < EYE_PATH_DRAG_THRESHOLD_PX || drag.points.length < 2;
+      // Mode-gated dispatch. In Points mode a short press becomes
+      // a click-to-add stop; a longer drag is discarded (the user
+      // intended Stroke if they wanted that). In Stroke mode a
+      // longer drag commits as a stroke; a short press is ignored
+      // so taps near the canvas don't drop accidental stops.
+      if (state.eyePathMode === "points") {
+        if (isShortPress) {
+          const xPct = Math.max(0, Math.min(100, (drag.startX / sw) * 100));
+          const yPct = Math.max(0, Math.min(100, (drag.startY / sh) * 100));
+          onAddEyePathPoint?.(xPct, yPct);
+        }
+        return;
+      }
+      // Stroke mode: drop short presses; only commit longer drags.
+      if (isShortPress) {
         return;
       }
       // Make sure the very last pointer position is captured so
@@ -4054,6 +4103,7 @@ export async function createAnnotationStage({
       attentionPullEditEnabled,
       strongAreaEditEnabled,
       areaShapeMode,
+      eyePathMode,
       retracingAttentionPullId,
       retracingStrongAreaId,
     } = {}) {
@@ -4163,6 +4213,19 @@ export async function createAnnotationStage({
           strongDrag = null;
           attentionPathDrag = null;
           strongPathDrag = null;
+          clearPreview();
+        }
+      }
+      if (
+        eyePathMode !== undefined &&
+        eyePathMode !== state.eyePathMode
+      ) {
+        state.eyePathMode = eyePathMode;
+        // Cancel any in-flight eye-path drag so the user doesn't
+        // accidentally commit a stroke after switching to points
+        // mid-press.
+        if (eyePathDrag) {
+          eyePathDrag = null;
           clearPreview();
         }
       }

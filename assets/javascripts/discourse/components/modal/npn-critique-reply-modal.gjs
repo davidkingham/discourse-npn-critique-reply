@@ -417,6 +417,18 @@ export default class NpnCritiqueReplyModal extends Component {
   // to Strong Area and vice versa.
   @tracked areaShapeMode = "path";
 
+  // -- Eye Path interaction mode (Stroke vs Points) --------------------
+  //
+  // Stroke: drag-to-trace a flowing line through the image (the
+  //   long-standing legacy interaction).
+  // Points: click-to-add ordered stops connected by a smoothed curve;
+  //   each stop renders a small numbered marker.
+  // Both modes produce a single `eye_path` annotation; only the
+  // serialized `mode` field and the rendered point markers change.
+  // Default "stroke" preserves the long-standing behavior so old
+  // workflows feel unchanged.
+  @tracked eyePathMode = "stroke";
+
   // -- Retrace (path-shape only) ----------------------------------------
   //
   // When the user has a path-shape Attention / Strong Area marker
@@ -2788,7 +2800,16 @@ export default class NpnCritiqueReplyModal extends Component {
 
     const newId = nextEyePathId(this.eyePaths.map((p) => p.id));
     const newLabel = nextEyePathLabel(this.eyePaths.map((p) => p.label));
-    const newPath = { id: newId, label: newLabel, points: trimmed };
+    // commitEyePath fires from drag-to-trace → always a stroke path
+    // regardless of the toggle. The toggle position is the user's
+    // intent for the NEXT interaction; this callback comes from an
+    // interaction that already completed in stroke form.
+    const newPath = {
+      id: newId,
+      label: newLabel,
+      mode: "stroke",
+      points: trimmed,
+    };
 
     this.eyePaths = [...this.eyePaths, newPath];
     this._activeEyePathId = newId;
@@ -2842,9 +2863,13 @@ export default class NpnCritiqueReplyModal extends Component {
       }
       const newId = nextEyePathId(this.eyePaths.map((p) => p.id));
       const newLabel = nextEyePathLabel(this.eyePaths.map((p) => p.label));
+      // Click-to-add → tag with the current eyePathMode. In Stroke
+      // mode the Konva stage shouldn't fire this callback at all,
+      // but if it does (defensive), the path is created as Points.
       activePath = {
         id: newId,
         label: newLabel,
+        mode: "points",
         points: [],
       };
       this.eyePaths = [...this.eyePaths, activePath];
@@ -3132,6 +3157,22 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] area-shape-mode", { mode });
+    }
+  }
+
+  // Eye Path mode toggle (Stroke / Points). Switching mid-session
+  // doesn't touch existing paths — already-committed paths keep
+  // their stored `mode`. The next new path takes the freshly-
+  // selected mode.
+  @action
+  setEyePathMode(mode) {
+    if (mode !== "stroke" && mode !== "points") {
+      return;
+    }
+    this.eyePathMode = mode;
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] eye-path-mode", { mode });
     }
   }
 
@@ -5546,6 +5587,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @crop={{this.crop}}
                 @visualMode={{this.visualMode}}
                 @areaShapeMode={{this.areaShapeMode}}
+                @eyePathMode={{this.eyePathMode}}
                 @selectedNumber={{this.selectedPinNumber}}
                 @cropSelected={{this.cropSelected}}
                 @onImageClick={{this.addPin}}
@@ -6083,6 +6125,49 @@ export default class NpnCritiqueReplyModal extends Component {
                         only shown when 2+ paths exist so it doesn't
                         duplicate the single-path remove. }}
                     {{#if this.eyePathMode}}
+                      {{! Stroke / Points sub-toggle. Visible
+                          whenever Eye Path is active so the user
+                          can pick how the next path will be
+                          captured. Existing paths keep their
+                          stored mode regardless of the toggle. }}
+                      <div
+                        class="npn-critique-reply-modal__area-shape-toggle"
+                        role="group"
+                        aria-label={{i18n
+                          "npn_critique_reply.visual_notes.eye_path_mode.label"
+                        }}
+                      >
+                        <button
+                          type="button"
+                          class="npn-critique-reply-modal__area-shape-toggle-button
+                            {{if (eq this.eyePathMode 'stroke') 'is-selected'}}"
+                          aria-pressed={{if
+                            (eq this.eyePathMode "stroke")
+                            "true"
+                            "false"
+                          }}
+                          {{on "click" (fn this.setEyePathMode "stroke")}}
+                        >
+                          {{i18n
+                            "npn_critique_reply.visual_notes.eye_path_mode.stroke"
+                          }}
+                        </button>
+                        <button
+                          type="button"
+                          class="npn-critique-reply-modal__area-shape-toggle-button
+                            {{if (eq this.eyePathMode 'points') 'is-selected'}}"
+                          aria-pressed={{if
+                            (eq this.eyePathMode "points")
+                            "true"
+                            "false"
+                          }}
+                          {{on "click" (fn this.setEyePathMode "points")}}
+                        >
+                          {{i18n
+                            "npn_critique_reply.visual_notes.eye_path_mode.points"
+                          }}
+                        </button>
+                      </div>
                       {{#if this.eyePaths.length}}
                         {{#if this.focusedEyePath}}
                           {{#unless this.eyePathsAtMax}}
@@ -6121,7 +6206,13 @@ export default class NpnCritiqueReplyModal extends Component {
                         <p
                           class="npn-critique-reply-modal__tool-hint"
                           aria-live="polite"
-                        >{{i18n "npn_critique_reply.visual_notes.eye_path_hint"}}</p>
+                        >{{i18n
+                            (if
+                              (eq this.eyePathMode "points")
+                              "npn_critique_reply.visual_notes.eye_path_hint_points"
+                              "npn_critique_reply.visual_notes.eye_path_hint_stroke"
+                            )
+                          }}</p>
                       {{/if}}
                     {{/if}}
 

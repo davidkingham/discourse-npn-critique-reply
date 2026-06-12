@@ -475,6 +475,22 @@ export function normalizeCropAnnotation(raw) {
 //     don't have to repair gaps introduced by upstream removal.
 //   • Excess points beyond MAX_EYE_PATH_POINTS truncated from the end
 //     (oldest survives; matches how the modal builds the path).
+// Eye-path interaction modes — discriminator on the persisted
+// annotation. "stroke" is the drag-to-trace flowing line (the
+// long-standing legacy behavior); "points" is the click-to-add
+// numbered stops variant. Missing/unknown values fall back to
+// "stroke" so any annotation written before the mode field
+// existed renders identically to before.
+export const EYE_PATH_MODES = Object.freeze(["stroke", "points"]);
+export const DEFAULT_EYE_PATH_MODE = "stroke";
+
+function normalizeEyePathMode(raw) {
+  if (typeof raw !== "string") {
+    return DEFAULT_EYE_PATH_MODE;
+  }
+  return EYE_PATH_MODES.includes(raw) ? raw : DEFAULT_EYE_PATH_MODE;
+}
+
 export function normalizeEyePathAnnotation(raw) {
   if (!raw || typeof raw !== "object") {
     return null;
@@ -515,10 +531,12 @@ export function normalizeEyePathAnnotation(raw) {
     typeof rawLabel === "string" && EYE_PATH_LABEL_PATTERN.test(rawLabel)
       ? rawLabel
       : null;
+  const mode = normalizeEyePathMode(raw.mode);
   return {
     id,
     kind: ANNOTATION_KINDS.EYE_PATH,
     label,
+    mode,
     points,
   };
 }
@@ -531,13 +549,15 @@ export function eyePathToAnnotation(eyePath) {
   if (!eyePath || !Array.isArray(eyePath.points)) {
     return null;
   }
-  // id/label preserved as-supplied (typically the modal generates
-  // unique values per path); normalizeAnnotationsArray dedupes if
-  // anything slips through without a unique id/label.
+  // id/label/mode preserved as-supplied (typically the modal
+  // generates unique values per path and tags each new path with
+  // the active mode); normalizeAnnotationsArray dedupes if anything
+  // slips through without a unique id/label.
   return normalizeEyePathAnnotation({
     id: eyePath.id ?? null,
     label: eyePath.label ?? null,
     kind: ANNOTATION_KINDS.EYE_PATH,
+    mode: eyePath.mode,
     points: eyePath.points.map((p) => ({
       number: p.number,
       x_pct: p.xPct,
@@ -570,6 +590,10 @@ export function annotationToEyePath(annotation) {
   return {
     id: annotation.id,
     label: annotation.label,
+    // Preserve mode when present; missing mode (legacy entries)
+    // falls back to the default ("stroke") so old paths render
+    // identically to before the mode split.
+    mode: normalizeEyePathMode(annotation.mode),
     points: annotation.points.map((p) => ({
       number: p.number,
       xPct: p.x_pct,
