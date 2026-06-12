@@ -604,8 +604,9 @@
   }
 
   // Large processing-example image frame. Mirrors the reference
-  // image's max-height cap (set on __image-col) so the modal
-  // doesn't grow when you switch views.
+  // image's clamp() cap so the column doesn't jump height when
+  // toggling between views. Kept in lockstep with __img above —
+  // any change there should mirror here.
   &__processing-example-large {
     margin: 0;
     display: flex;
@@ -615,10 +616,7 @@
     border: 1px solid var(--primary-low);
     border-radius: var(--d-border-radius, 4px);
     overflow: hidden;
-    // Cap matches the reference-image frame so the column doesn't
-    // jump height when toggling between views. The image itself
-    // resolves its dimensions against this container.
-    max-height: calc(80vh - 4em);
+    max-height: clamp(380px, calc(60vh - 4em), 660px);
   }
 
   &__processing-example-large-img {
@@ -1821,14 +1819,30 @@
   &__img {
     display: block;
     max-width: 100%;
-    // Pixel ceiling matched to image-col's cap minus the column's
-    // chrome (header row, visual tools toolbar + secondary, a11y
-    // list, "Showing X" caption, gaps, padding ≈ 200px). On tall
-    // monitors the IMG can render up to ~780px now (vs ~600px
-    // before) — about 30% larger without bleeding past the modal
-    // body. Visual Focus Mode overrides this with a higher cap
-    // when the writing pane is hidden.
-    max-height: min(calc(70vh - 4em), 780px);
+    // Rebalanced ceiling so Optional Visual Notes is visible above
+    // the fold at 1920×1080 — the most common desktop resolution —
+    // without shrinking the image on taller monitors. Formula:
+    //
+    //   clamp(380px, calc(60vh - 4em), 660px)
+    //
+    // At 1080p the modal body has ~800px of usable content. With
+    // ~200px reserved below the image for the "Showing X" status
+    // line, Optional Visual Notes heading/helper, the tool button
+    // row, and the pane's padding-bottom, this cap lands the image
+    // at ~580px — large enough to feel like a workspace photo,
+    // small enough that the tool row sits well above the sticky
+    // footer.
+    //
+    // At 1440p (864px) the cap is ~660px. At 4K, also 660px. The
+    // 380px floor keeps the image legible on cramped laptops
+    // (1366×768, 1280×720). Visual Focus Mode overrides this with
+    // a higher cap when the writing pane is hidden.
+    //
+    // Konva alignment: the image element is what ResizeObserver
+    // watches, so the stage tracks the new bounds automatically.
+    // Annotation coordinates are percent-based, so they scale to
+    // the resized image without drift.
+    max-height: clamp(380px, calc(60vh - 4em), 660px);
     width: auto;
     height: auto;
     margin: 0 auto;
