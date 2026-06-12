@@ -1790,15 +1790,33 @@ export default class NpnCritiqueReplyModal extends Component {
   // the pane element — when the sentinel is intersecting the pane's
   // visible viewport, the user is at the bottom (or there's nothing
   // to scroll). Otherwise there's more content below the fold.
+  //
+  // Resolves the root via `element.closest(...)` instead of reading
+  // `this._leftPaneElement`. Glimmer fires modifiers bottom-up, so
+  // the sentinel's did-insert can run BEFORE the pane element's
+  // did-insert sets the ref — closest() gives us the right node
+  // synchronously regardless of ordering. setupLeftPane /
+  // setupRightPane still cache the pane refs for the scroll-down
+  // action.
   @action
   setupPaneSentinel(key, element) {
     if (!element || typeof IntersectionObserver === "undefined") {
       return;
     }
-    const root =
-      key === "left" ? this._leftPaneElement : this._rightPaneElement;
+    const paneClass =
+      key === "left"
+        ? ".npn-critique-reply-modal__left-pane"
+        : ".npn-critique-reply-modal__write-col";
+    const root = element.closest(paneClass);
     if (!root) {
       return;
+    }
+    // Cache the ref here too as a defensive fallback in case
+    // setupLeftPane/setupRightPane didn't run for any reason.
+    if (key === "left" && !this._leftPaneElement) {
+      this._leftPaneElement = root;
+    } else if (key === "right" && !this._rightPaneElement) {
+      this._rightPaneElement = root;
     }
     const observer = new IntersectionObserver(
       (entries) => {
