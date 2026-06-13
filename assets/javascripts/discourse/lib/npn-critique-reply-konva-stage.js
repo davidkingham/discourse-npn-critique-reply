@@ -1042,6 +1042,12 @@ export async function createAnnotationStage({
     });
     layer.add(halo);
 
+    // Visible fill — pure decoration now. Was previously the click
+    // target (entire interior caught selection), which felt
+    // imprecise: dragging a stage tool inside an already-placed area
+    // accidentally selected it. Made non-listening so only the stroke
+    // catches clicks; the interior is visually filled but
+    // pass-through.
     const fillBody = new Konva.Line({
       points: flat,
       closed: true,
@@ -1051,21 +1057,16 @@ export async function createAnnotationStage({
         ? AREA_FILL_OPACITY_SELECTED
         : AREA_FILL_OPACITY_UNSELECTED,
       strokeEnabled: false,
-      listening: true,
+      listening: false,
       name: `area-path-${model.id}`,
-    });
-    fillBody.on("click tap", (e) => {
-      e.cancelBubble = true;
-      onSelect?.();
-    });
-    fillBody.on("mouseenter", () => {
-      container.style.cursor = "pointer";
-    });
-    fillBody.on("mouseleave", () => {
-      applyContainerCursor();
     });
     layer.add(fillBody);
 
+    // Border stroke — visible AND the hit target. `hitStrokeWidth`
+    // widens the invisible hit zone around the stroke so users don't
+    // need pixel-perfect aim on the thin dashed line. Sized off the
+    // shortEdge so it scales with stage zoom.
+    const hitWidth = Math.max(14, strokeWidth * 4);
     const stroke = new Konva.Line({
       points: flat,
       closed: true,
@@ -1074,7 +1075,19 @@ export async function createAnnotationStage({
       dash: isSelected ? [] : [dashOn, dashOff],
       tension,
       fillEnabled: false,
-      listening: false,
+      listening: true,
+      hitStrokeWidth: hitWidth,
+      name: `area-path-stroke-${model.id}`,
+    });
+    stroke.on("click tap", (e) => {
+      e.cancelBubble = true;
+      onSelect?.();
+    });
+    stroke.on("mouseenter", () => {
+      container.style.cursor = "pointer";
+    });
+    stroke.on("mouseleave", () => {
+      applyContainerCursor();
     });
     layer.add(stroke);
 
@@ -1217,6 +1230,11 @@ export async function createAnnotationStage({
       });
       attentionPullLayer.add(haloRef);
 
+      // Fill body — listening + draggable ONLY when the marker is
+      // selected AND editable. When unselected, the interior is
+      // pass-through (the border below catches selection clicks).
+      // After selection the body becomes the drag-to-move target so
+      // the user can grab anywhere inside to reposition.
       const fillBody = new Konva.Ellipse({
         x: cx,
         y: cy,
@@ -1228,7 +1246,7 @@ export async function createAnnotationStage({
           : AREA_FILL_OPACITY_UNSELECTED,
         strokeEnabled: false,
         name: `attention-pull-${id}`,
-        listening: true,
+        listening: canEdit,
         draggable: canEdit,
         // Clamp the ellipse's CENTER such that the bounding box stays
         // inside the stage. radii are the current radii (pre-scale).
@@ -1243,14 +1261,13 @@ export async function createAnnotationStage({
           };
         },
       });
+      // Click on the body only matters in the selected+editable state
+      // — it's a no-op vs. selection (already selected) but keeps
+      // event bubbling contained.
       fillBody.on("click tap", (e) => {
         e.cancelBubble = true;
         onSelectAttentionPull?.(id);
       });
-      // "move" cursor while draggable (signals drag-to-reposition),
-      // "pointer" when only clickable (signals select-on-click). The
-      // mode-default crosshair returns on leave via
-      // applyContainerCursor.
       fillBody.on("mouseenter", () => {
         container.style.cursor = canEdit ? "move" : "pointer";
       });
@@ -1259,6 +1276,11 @@ export async function createAnnotationStage({
       });
       attentionPullLayer.add(fillBody);
 
+      // Border stroke — the click target for SELECTION. `hitStrokeWidth`
+      // widens the hit zone around the dashed/solid stroke so users
+      // don't need pixel-perfect aim on the thin line. Always
+      // listening so unselected markers can be picked by their border.
+      const hitWidth = Math.max(14, strokeWidth * 4);
       const strokeRef = new Konva.Ellipse({
         x: cx,
         y: cy,
@@ -1268,7 +1290,19 @@ export async function createAnnotationStage({
         strokeWidth,
         dash: isSelected ? [] : [dashOn, dashOff],
         fillEnabled: false,
-        listening: false,
+        listening: true,
+        hitStrokeWidth: hitWidth,
+        name: `attention-pull-stroke-${id}`,
+      });
+      strokeRef.on("click tap", (e) => {
+        e.cancelBubble = true;
+        onSelectAttentionPull?.(id);
+      });
+      strokeRef.on("mouseenter", () => {
+        container.style.cursor = "pointer";
+      });
+      strokeRef.on("mouseleave", () => {
+        applyContainerCursor();
       });
       attentionPullLayer.add(strokeRef);
 
@@ -1519,6 +1553,10 @@ export async function createAnnotationStage({
       });
       strongAreaLayer.add(haloRef);
 
+      // Fill body — listening + draggable only when the marker is
+      // selected and editable. Mirrors the attention-pull pattern:
+      // interior is pass-through for unselected markers, then becomes
+      // the drag-to-move target after selection.
       const fillBody = new Konva.Ellipse({
         x: cx,
         y: cy,
@@ -1530,7 +1568,7 @@ export async function createAnnotationStage({
           : AREA_FILL_OPACITY_UNSELECTED,
         strokeEnabled: false,
         name: `strong-area-${id}`,
-        listening: true,
+        listening: canEdit,
         draggable: canEdit,
         dragBoundFunc(pos) {
           const w = fillBody.radiusX() * fillBody.scaleX();
@@ -1558,8 +1596,10 @@ export async function createAnnotationStage({
       strongAreaLayer.add(fillBody);
 
       // SOLID stroke (no dash) — visual contrast with attention pull's
-      // dashed outline. The supportive intent reads as confident
-      // rather than tentative.
+      // dashed outline. The border is the click target for selection;
+      // hitStrokeWidth widens the hit zone so the user doesn't need
+      // pixel-perfect aim.
+      const strokeHitWidth = Math.max(14, strokeWidth * 4);
       const strokeRef = new Konva.Ellipse({
         x: cx,
         y: cy,
@@ -1568,7 +1608,19 @@ export async function createAnnotationStage({
         stroke: green,
         strokeWidth,
         fillEnabled: false,
-        listening: false,
+        listening: true,
+        hitStrokeWidth: strokeHitWidth,
+        name: `strong-area-stroke-${id}`,
+      });
+      strokeRef.on("click tap", (e) => {
+        e.cancelBubble = true;
+        onSelectStrongArea?.(id);
+      });
+      strokeRef.on("mouseenter", () => {
+        container.style.cursor = "pointer";
+      });
+      strokeRef.on("mouseleave", () => {
+        applyContainerCursor();
       });
       strongAreaLayer.add(strokeRef);
 
