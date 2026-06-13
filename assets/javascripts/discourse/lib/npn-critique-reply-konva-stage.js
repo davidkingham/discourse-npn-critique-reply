@@ -2030,6 +2030,14 @@ export async function createAnnotationStage({
         // pattern this file already uses for the waypoint handles.
         // Listening must be enabled because the parent group has
         // it on by default and we want this node to receive clicks.
+        // In eye_path mode the user is CREATING — every click/drag
+        // should be free to start a new path even if it lands within
+        // an existing path's wide invisible hit-zone. Setting
+        // listening: false there lets the gesture fall through to the
+        // stage's mousedown/up handlers (which begin a stroke drag or
+        // add a Points-mode point). Outside eye_path mode the hit-
+        // zone is the primary way to click-to-select an existing path.
+        const hitLineListening = state.visualMode !== "eye_path";
         const hitLine = new Konva.Line({
           points: flat,
           stroke: "black",
@@ -2038,44 +2046,21 @@ export async function createAnnotationStage({
           lineCap: "round",
           lineJoin: "round",
           tension: EYE_PATH_SMOOTH ? EYE_PATH_SMOOTH_TENSION : 0,
-          listening: true,
+          listening: hitLineListening,
           name: "eye-path-curve-hit",
         });
-        hitLine.on("mouseenter", () => {
-          container.style.cursor = "pointer";
-        });
-        hitLine.on("mouseleave", () => {
-          applyContainerCursor();
-        });
-        // Plain click on the curve = select the path, matching
-        // the click-on-handle behavior. cancelBubble stops the
-        // stage-level click handler from also firing (which would
-        // add a new point in eye_path creation mode).
-        //
-        // Exception: when we're actively in eye_path Points-mode the
-        // user expects every click to add a new point — selecting an
-        // existing path's curve would silently swallow the click and
-        // read as a no-op. Forward to onAddEyePathPoint instead so
-        // the modal can either extend the active session or start a
-        // fresh path (whichever its state warrants).
-        hitLine.on("click tap", (e) => {
-          e.cancelBubble = true;
-          if (
-            state.visualMode === "eye_path" &&
-            state.eyePathInteractionMode === "points"
-          ) {
-            const pos = stage.getPointerPosition();
-            const sw = stage.width();
-            const sh = stage.height();
-            if (pos && sw > 0 && sh > 0) {
-              const xPct = Math.max(0, Math.min(100, (pos.x / sw) * 100));
-              const yPct = Math.max(0, Math.min(100, (pos.y / sh) * 100));
-              onAddEyePathPoint?.(xPct, yPct);
-              return;
-            }
-          }
-          onSelectEyePath?.(path.id);
-        });
+        if (hitLineListening) {
+          hitLine.on("mouseenter", () => {
+            container.style.cursor = "pointer";
+          });
+          hitLine.on("mouseleave", () => {
+            applyContainerCursor();
+          });
+          hitLine.on("click tap", (e) => {
+            e.cancelBubble = true;
+            onSelectEyePath?.(path.id);
+          });
+        }
         hitGroup.add(hitLine);
 
         // White halo for readability over dark image areas.
@@ -2359,7 +2344,13 @@ export async function createAnnotationStage({
     // where the handles ARE; these are the underlying hit areas.
     // Handles are added AFTER the decorations group so they sit on
     // top in the hit canvas.
+    // Handles are inert during eye_path creation mode for the same
+    // reason the curve hit-line is — a click/drag starting near an
+    // existing waypoint should begin a new path or point, not get
+    // captured by Konva's drag-to-reshape. Reshape stays available
+    // whenever the user is in any non-eye_path mode.
     const handleHitR = Math.max(10, Math.round(shortEdge * 0.014));
+    const handlesListening = state.visualMode !== "eye_path";
     for (let i = 0; i < livePts.length; i++) {
       const p = livePts[i];
       const pointNumber = path.points[i].number ?? i + 1;
@@ -2370,7 +2361,8 @@ export async function createAnnotationStage({
         radius: handleHitR,
         fill: tertiary,
         opacity: 0,
-        draggable: true,
+        draggable: handlesListening,
+        listening: handlesListening,
         name: `eye-path-handle-${pointNumber}`,
         dragBoundFunc(pos) {
           const stageW = stage.width();
@@ -2381,6 +2373,11 @@ export async function createAnnotationStage({
           };
         },
       });
+
+      if (!handlesListening) {
+        eyePathLayer.add(handle);
+        continue;
+      }
 
       handle.on("mouseenter", () => {
         container.style.cursor = "move";
@@ -2437,30 +2434,11 @@ export async function createAnnotationStage({
         onMoveEyePathPoint?.(path.id, pointNumber, newXPct, newYPct);
       });
 
-      // Plain click without movement → select the path.
-      //
-      // Same exception as the curve hit-line above: in eye_path Points
-      // creation mode, forward the click to onAddEyePathPoint so the
-      // user can keep dropping points without having to dodge prior
-      // paths' invisible handles. Drag-to-reshape still works because
-      // Konva fires dragmove/dragend (not click) when the pointer moves
-      // before release.
+      // Plain click without movement → select the path. (This branch
+      // only runs when handlesListening is true — see the early
+      // continue above for the eye_path-mode inert case.)
       handle.on("click tap", (e) => {
         e.cancelBubble = true;
-        if (
-          state.visualMode === "eye_path" &&
-          state.eyePathInteractionMode === "points"
-        ) {
-          const pos = stage.getPointerPosition();
-          const sw = stage.width();
-          const sh = stage.height();
-          if (pos && sw > 0 && sh > 0) {
-            const xPct = Math.max(0, Math.min(100, (pos.x / sw) * 100));
-            const yPct = Math.max(0, Math.min(100, (pos.y / sh) * 100));
-            onAddEyePathPoint?.(xPct, yPct);
-            return;
-          }
-        }
         onSelectEyePath?.(path.id);
       });
 
@@ -4430,6 +4408,13 @@ export async function createAnnotationStage({
         // attribute takes effect.
         if (state.crop) {
           cropChanged = true;
+        }
+        // Existing eye paths' hit-line + waypoint handles flip their
+        // listening attribute based on whether the user is in eye_path
+        // creation mode. Mark them stale on every mode crossing so the
+        // next render picks up the right listen/draggable state.
+        if (Array.isArray(state.eyePaths) && state.eyePaths.length > 0) {
+          eyePathChanged = true;
         }
       }
 
