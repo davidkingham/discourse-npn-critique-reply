@@ -10,6 +10,7 @@ import { modifier } from "ember-modifier";
 import { eq } from "discourse/truth-helpers";
 import { i18n } from "discourse-i18n";
 import { createAnnotationStage } from "../lib/npn-critique-reply-konva-stage";
+import { recordPluginError } from "../lib/npn-critique-reply-error-bus";
 
 // Wraps the OP's primary image inside the Critique Helper modal and
 // hosts the Visual Notes overlay.
@@ -261,11 +262,19 @@ export default class NpnCritiqueImageReference extends Component {
       //   • vendored konva.min.js missing → loadScript 404
       //   • CSP blocking the script tag
       //   • Konva loaded but constructor threw
-      // All resolve to: log under debug, flag failed, fall back to HTML.
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[npn-critique-reply] Konva init failed — falling back to HTML pin overlay",
-        e
+      // All resolve to: record on the plugin error bus, flag failed,
+      // fall back to HTML overlay. The modal's listener picks the
+      // entry up so the next "Copy diagnostic" report carries this.
+      recordPluginError(
+        "konva_stage_init",
+        e,
+        {
+          hasImage: !!this._imageElement,
+          imageNaturalWidth: this._imageElement?.naturalWidth ?? null,
+          imageNaturalHeight: this._imageElement?.naturalHeight ?? null,
+          imageSrc: this.args.imageUrl ?? null,
+        },
+        "warn"
       );
       this._konvaFailed = true;
     } finally {

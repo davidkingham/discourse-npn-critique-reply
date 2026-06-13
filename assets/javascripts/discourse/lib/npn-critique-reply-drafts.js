@@ -18,6 +18,7 @@
 // per-topic debounce timer.
 
 import { ajax } from "discourse/lib/ajax";
+import { recordPluginError } from "./npn-critique-reply-error-bus";
 
 export const DRAFT_AUTOSAVE_DEBOUNCE_MS = 1500;
 
@@ -143,6 +144,19 @@ export class DraftAutosaver {
       return result;
     } catch (error) {
       this._inflight = null;
+      // Record the actual save failure on the plugin error bus so the
+      // diagnostic report carries the network response / message —
+      // the modal's _onDraftSaveStatus only sees the DRAFT_STATUS
+      // enum, not the underlying error.
+      recordPluginError(
+        "draft_autosave_save",
+        error,
+        {
+          topicId: this.topicId,
+          status: error?.jqXHR?.status ?? null,
+        },
+        "warn"
+      );
       if (!this._destroyed) {
         this.onStatus(DRAFT_STATUS.ERROR, error);
       }

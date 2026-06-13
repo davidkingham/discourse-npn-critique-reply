@@ -30,6 +30,10 @@ import {
 } from "../../lib/npn-critique-reply-labels";
 import { getQuestionsToConsider } from "../../lib/npn-critique-reply-prompts";
 import {
+  NPN_ERROR_EVENT,
+  recentPluginErrors,
+} from "../../lib/npn-critique-reply-error-bus";
+import {
   postCritique as postCritiqueRequest,
   updateCritique as updateCritiqueRequest,
 } from "../../lib/npn-critique-reply-api";
@@ -637,6 +641,25 @@ export default class NpnCritiqueReplyModal extends Component {
     if (typeof window === "undefined") {
       return;
     }
+    // Pull anything the error bus already recorded BEFORE the modal
+    // mounted — e.g. prompt-tree generation errors that fired on the
+    // topic page before the user clicked "Start a Critique".
+    try {
+      for (const entry of recentPluginErrors()) {
+        this._appendBusEntry(entry, { backfill: true });
+      }
+    } catch {
+      // ignore — diagnostic only
+    }
+    // Live subscription. Any plugin code (component, helper, lib)
+    // that calls `recordPluginError(...)` from the bus module fires
+    // a CustomEvent here and lands in our history without needing a
+    // direct handle to the modal.
+    this._pluginErrorBusHandler = (event) => {
+      this._appendBusEntry(event?.detail, { backfill: false });
+    };
+    window.addEventListener(NPN_ERROR_EVENT, this._pluginErrorBusHandler);
+
     this._unhandledRejectionHandler = (event) => {
       const reason = event?.reason ?? event;
       if (!this._errorMentionsPlugin(reason)) {
@@ -687,7 +710,45 @@ export default class NpnCritiqueReplyModal extends Component {
       window.removeEventListener("error", this._windowErrorHandler);
       this._windowErrorHandler = null;
     }
+    if (this._pluginErrorBusHandler) {
+      window.removeEventListener(
+        NPN_ERROR_EVENT,
+        this._pluginErrorBusHandler
+      );
+      this._pluginErrorBusHandler = null;
+    }
   }
+
+  // Append a bus-recorded entry into our local history. Mirrors the
+  // shape `_recordError` produces so the "Copy diagnostic" report
+  // treats backfilled + live entries uniformly. We DON'T promote
+  // these to `_lastFailureReport` — bus entries come from collaborator
+  // components, and the modal's own user-visible failure banner is
+  // what should populate the report. The bus entries enrich
+  // `recentErrors` in the report so chained failures are visible.
+  _appendBusEntry(entry, { backfill }) {
+    if (!entry || typeof entry !== "object") {
+      return;
+    }
+    const normalized = {
+      timestamp: entry.timestamp ?? new Date().toISOString(),
+      context: entry.context ?? "plugin_error_bus",
+      severity: entry.severity ?? "warn",
+      error: entry.error ?? {
+        name: null,
+        message: String(entry),
+        stack: null,
+      },
+      extra: entry.extra ?? null,
+      via: backfill ? "bus_backfill" : "bus_live",
+    };
+    this._errorHistory.push(normalized);
+    if (this._errorHistory.length > 20) {
+      this._errorHistory.shift();
+    }
+  }
+
+  _pluginErrorBusHandler = null;
 
   // Filters global error events to ones that look like they came from
   // this plugin. Checks both the message and the stack trace for the
