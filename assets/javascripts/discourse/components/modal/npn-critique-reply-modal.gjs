@@ -1376,14 +1376,28 @@ export default class NpnCritiqueReplyModal extends Component {
       // Debug-only diagnostics so beta users can share canvas/blob
       // sizes when an upload fails server-side. Logged unconditionally
       // — opt-in is via the site setting, and the values are small
-      // and entirely about the in-flight export.
+      // and entirely about the in-flight export. Magic bytes confirm
+      // the server-side sniffer will recognize the upload as an
+      // image (JPEG: FF D8 FF / PNG: 89 50 4E 47).
       if (this.siteSettings.npn_critique_reply_debug_enabled) {
+        let magic = null;
+        try {
+          if (blob && blob.size >= 8) {
+            const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+            magic = Array.from(head)
+              .map((b) => b.toString(16).padStart(2, "0"))
+              .join(" ");
+          }
+        } catch {
+          // ignore — diagnostic only
+        }
         // eslint-disable-next-line no-console
         console.info("[npn-critique-reply] visual-notes export ready", {
           canvasWidth: canvas?.width ?? null,
           canvasHeight: canvas?.height ?? null,
           blobSize: blob?.size ?? null,
           blobType: blob?.type ?? null,
+          blobMagicBytes: magic,
           filename: this._visualNotesFilename(),
         });
       }

@@ -1202,6 +1202,23 @@ function drawPinsOnCanvas(ctx, pins, width, height) {
 //     Chrome when GPU encoding silently fails). Reject both so the
 //     failure surfaces as an export-stage error with diagnostic
 //     dimensions, instead of a generic upload-stage server error.
+// Magic-byte signatures for the two formats we encode. FastImage on
+// the server uses the same sniffing to detect format; if the blob's
+// header doesn't match either, the server rejects with "couldn't
+// determine the size of the image".
+const JPEG_MAGIC = [0xff, 0xd8, 0xff];
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47];
+
+async function blobLooksLikeImage(blob) {
+  if (!blob || blob.size < 4) {
+    return false;
+  }
+  // Read just the first 8 bytes — plenty for both signatures.
+  const header = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+  const matches = (sig) => sig.every((byte, i) => header[i] === byte);
+  return matches(JPEG_MAGIC) || matches(PNG_MAGIC);
+}
+
 export function exportCanvasToBlob(
   canvas,
   { type = "image/jpeg", quality = JPEG_QUALITY } = {}
@@ -1215,17 +1232,27 @@ export function exportCanvasToBlob(
     );
   }
   // Tries the preferred type/quality first; if the encoder returns
-  // null or an empty blob (some Chrome/Safari versions silently fail
-  // on large composites with the JPEG encoder), falls back to
-  // image/png which is the most reliable canvas export format.
-  // PNGs are larger but still well under Discourse's default upload
-  // ceiling for 1600x1600 composites.
+  // null/empty OR a blob that doesn't sniff as a recognizable image
+  // (some browsers' JPEG encoders silently produce non-conformant
+  // bytes on heavy composites — same symptom as a corrupt source),
+  // falls back to image/png which is the most reliable canvas
+  // export format. PNGs are larger but still well under Discourse's
+  // default upload ceiling for 1600x1600 composites.
   const attempt = (encodeType, encodeQuality) =>
     new Promise((resolve, reject) => {
       try {
         canvas.toBlob(
-          (blob) => {
+          async (blob) => {
             if (!blob || blob.size === 0) {
+              resolve(null);
+              return;
+            }
+            // Server-side FastImage sniffs the file header. If our
+            // blob doesn't start with JPEG (FF D8 FF) or PNG (89 50
+            // 4E 47), the server will reject with size_not_found —
+            // so reject here instead and let the fallback try PNG.
+            const ok = await blobLooksLikeImage(blob);
+            if (!ok) {
               resolve(null);
               return;
             }
@@ -1246,8 +1273,9 @@ export function exportCanvasToBlob(
     if (blob) {
       return blob;
     }
-    // First attempt produced null / 0-byte. Try PNG once before giving
-    // up so a flaky JPEG encoder doesn't block the user's post.
+    // First attempt produced null / 0-byte / unrecognizable bytes.
+    // Try PNG once before giving up so a flaky JPEG encoder doesn't
+    // block the user's post.
     if (type !== "image/png") {
       return attempt("image/png").then((pngBlob) => {
         if (pngBlob) {
