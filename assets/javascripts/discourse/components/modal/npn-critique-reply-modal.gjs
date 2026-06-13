@@ -2754,14 +2754,14 @@ export default class NpnCritiqueReplyModal extends Component {
     // unselected (and the new tool may not even support retrace).
     this.retracingAttentionPullId = null;
     this.retracingStrongAreaId = null;
-    // Eye-path session tracking. Each entry into eye_path mode is
-    // one path session: the first click creates a new path (up to
-    // the per-critique cap) and subsequent clicks extend it. Leaving
-    // the mode finalises the path. Re-entering eye_path mode starts
-    // a fresh session by clearing the active-path pointer so the
-    // next click creates another path instead of appending to the
-    // previous one. `_eyePathStarterInserted` resets too so each
-    // session can trigger its own description popover at point 2.
+    // Eye-path session tracking. A path session ends when its
+    // description popover is dismissed (Confirm or Skip) or when the
+    // user leaves eye_path mode — at that point the next click /
+    // drag begins a new path. Stroke mode commits a whole path per
+    // drag, so the popover opens immediately and dismissal moves on
+    // to the next path. Points mode keeps the session open across
+    // clicks; dismissing the popover finalises the current path.
+    // Re-entering eye_path mode also resets the session pointer.
     if (mode === "eye_path" && previousMode !== "eye_path") {
       this._activeEyePathId = null;
       this._eyePathStarterInserted = false;
@@ -3002,18 +3002,17 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // ---- Eye path / Visual Flow ----------------------------------------
 
-  // Fired by the Konva stage on a click while in eye_path mode. The
-  // first click of a mode-entry session creates a NEW path (subject
-  // to the per-critique cap); subsequent clicks within the same
-  // session append points to that path. Re-entering eye_path mode
-  // resets the session so the next click creates another new path
-  // rather than extending the previous one.
   // Commit a multi-point eye-path in one state mutation. Used by the
-  // drag-to-trace gesture in the Konva stage: the stage samples
-  // many points during a single pointer drag and hands them all to
-  // this action on pointerup. Calling addEyePathPoint N times would
-  // also work but would trigger N tracked-state reflows; this path
-  // is one update for the whole shape.
+  // drag-to-trace gesture in the Konva stage: the stage samples many
+  // points during a single pointer drag and hands them all to this
+  // action on pointerup. Calling addEyePathPoint N times would also
+  // work but would trigger N tracked-state reflows; this path is one
+  // update for the whole shape.
+  //
+  // Stroke is a one-shot gesture: each drag commits a complete path,
+  // immediately clears the active-session pointer, and opens the
+  // description popover. Dismissing the popover ends the path session
+  // so the next gesture (in either mode) starts a brand-new path.
   //
   // Caps + dedup happen here so the stage stays dumb:
   //   • bail when at MAX_EYE_PATH_COUNT (no more paths allowed)
@@ -3052,21 +3051,24 @@ export default class NpnCritiqueReplyModal extends Component {
     };
 
     this.eyePaths = [...this.eyePaths, newPath];
-    this._activeEyePathId = newId;
+    // Stroke is a one-shot gesture — the drag IS the whole path. Clear
+    // the active-session pointer immediately so the next gesture (in
+    // either mode) starts a new path. Selection still points at the
+    // just-committed path so the popover's `selectedEyePath` fallback
+    // attaches noteText to the right shape.
+    this._activeEyePathId = null;
     this.selectedEyePathId = newId;
 
     // Same description popover trigger the click flow uses — opens
-    // once per eye_path mode session at the end of the just-drawn
-    // path.
-    if (!this._eyePathStarterInserted) {
-      this._eyePathStarterInserted = true;
-      const last = trimmed[trimmed.length - 1];
-      this.pendingEyePathPopover = {
-        anchorXPct: last.xPct,
-        anchorYPct: last.yPct,
-      };
-      this.pendingEyePathPopoverText = "";
-    }
+    // at the end of the just-drawn path so the user can label it.
+    // Anchored to the path's last point.
+    const last = trimmed[trimmed.length - 1];
+    this.pendingEyePathPopover = {
+      anchorXPct: last.xPct,
+      anchorYPct: last.yPct,
+    };
+    this.pendingEyePathPopoverText = "";
+    this._eyePathStarterInserted = true;
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] commit-eye-path", {
@@ -4400,12 +4402,23 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this.pendingEyePathPopover = null;
     this.pendingEyePathPopoverText = "";
+    // Treat popover dismissal as "I'm done with this path." Clearing
+    // the session pointers means the next click / drag in eye_path
+    // mode starts a fresh path with its own description popover,
+    // matching the user's mental model that finishing one path moves
+    // on to the next.
+    this._activeEyePathId = null;
+    this._eyePathStarterInserted = false;
   }
 
   @action
   skipPendingEyePathPopover() {
     this.pendingEyePathPopover = null;
     this.pendingEyePathPopoverText = "";
+    // See confirmPendingEyePathPopover — dismissing without text still
+    // ends the path session so the next gesture starts a new one.
+    this._activeEyePathId = null;
+    this._eyePathStarterInserted = false;
   }
 
   // ---- Crop popover -------------------------------------------------
