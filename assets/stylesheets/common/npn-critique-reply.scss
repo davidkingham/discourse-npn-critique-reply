@@ -2413,13 +2413,20 @@
 
 .npn-critique-reply-invitation-panel {
   display: flex;
-  gap: 0.9em;
+  gap: 1em;
   align-items: center;
-  margin: 0 0 1em;
-  padding: 0.85em 1em;
-  background: var(--primary-very-low);
-  border: 1px solid var(--primary-low);
-  border-radius: 6px;
+  margin: 0.25em 0 1em;
+  padding: 1.05em 1.2em 1.05em 1em;
+  // Tint the card with the same tertiary family that the
+  // "Start a Critique" button uses, plus a left accent stripe and a
+  // soft shadow. The pair (tinted background + colored stripe) reads
+  // as a featured callout so the workspace CTA stops disappearing
+  // into the page chrome at the bottom of a post.
+  background: var(--tertiary-very-low);
+  border: 1px solid var(--tertiary-low);
+  border-left: 4px solid var(--tertiary);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   // Make sure inherited topic-level styles (e.g., centered headings)
   // don't bleed in.
   text-align: left;
@@ -2431,9 +2438,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.5em;
-    height: 1.5em;
-    color: var(--tertiary);
+    width: 2em;
+    height: 2em;
+    border-radius: 50%;
+    background: var(--tertiary);
+    color: var(--secondary);
     font-size: var(--font-up-1);
 
     .d-icon {
@@ -2449,10 +2458,11 @@
 
   &__title {
     margin: 0 0 0.2em;
-    font-size: var(--font-up-1);
-    font-weight: 600;
+    font-size: var(--font-up-2);
+    font-weight: 700;
     color: var(--primary);
     line-height: 1.25;
+    letter-spacing: -0.005em;
   }
 
   &__description {
