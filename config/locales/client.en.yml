@@ -17,7 +17,7 @@ en:
       # only carries the one action.
       invitation_panel:
         title: "Critique Workspace"
-        description: "Open a dedicated workspace for your critique, with the image, request, and photographer’s notes close at hand."
+        description: "Open a dedicated workspace for your critique, with the image, request, and photographer’s notes close at hand — and optionally mark up the image with visual notes."
         aria_label: "Open the critique workspace"
         # Counterparts shown when a saved server draft exists for this
         # user/topic. The panel keeps its same shape; only the copy
