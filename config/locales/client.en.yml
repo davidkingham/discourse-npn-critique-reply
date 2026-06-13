@@ -234,6 +234,15 @@ en:
         # the export/upload pipeline fails.
         post_without_visual_notes: "Post without visual notes"
         continue_without_visual_notes: "Continue without visual notes"
+        # Self-service diagnostic copy. The error banner shows a small
+        # "Copy diagnostic" button on every failure that snapshots
+        # pipeline state, browser info, server response, etc. into a
+        # markdown JSON block on the clipboard — replaces back-and-
+        # forth devtools walkthroughs for remote debugging.
+        copy_diagnostic: "Copy diagnostic"
+        copy_diagnostic_title: "Copy a diagnostic report to the clipboard. Paste it back so we can debug the failure."
+        diagnostic_copied: "Diagnostic copied to clipboard."
+        diagnostic_copy_failed: "Couldn’t copy automatically — see the browser console for the diagnostic object."
         # Edit in Composer: shown when the composer already has unsaved
         # text (in-memory or saved draft). Three buttons handle the merge.
         edit_existing_message: "The composer already has text. How would you like to combine it with your critique?"

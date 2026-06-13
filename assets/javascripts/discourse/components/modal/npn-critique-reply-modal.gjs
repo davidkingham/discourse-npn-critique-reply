@@ -350,6 +350,24 @@ export default class NpnCritiqueReplyModal extends Component {
   // new action attempt and on success.
   @tracked visualNotesFailureContext = null;
 
+  // ---- Self-service diagnostics --------------------------------------
+  //
+  // When the user hits a failure that's hard to diagnose remotely (visual
+  // notes upload, post creation, draft restore, …), the modal stashes a
+  // structured snapshot here. The error banner exposes a small "Copy
+  // diagnostic" button that copies a markdown code block of the whole
+  // report — the user pastes it back to us in one click instead of us
+  // walking them through opening devtools + reading the console.
+  //
+  // Snapshot rolls forward as the user works:
+  //   • _lastExportDiagnostic   — set by the visual-notes export step
+  //   • _lastUploadDiagnostic   — set by the upload step
+  //   • _lastFailureReport      — populated when something throws; the
+  //                                copy button reads from this
+  @tracked _lastFailureReport = null;
+  _lastExportDiagnostic = null;
+  _lastUploadDiagnostic = null;
+
   // -- Processing Example state ----------------------------------------
   //
   // Workflow: critic downloads the reference image, processes it
@@ -1373,33 +1391,40 @@ export default class NpnCritiqueReplyModal extends Component {
         throw this._wrapVisualNotesError("export", e);
       }
 
-      // Debug-only diagnostics so beta users can share canvas/blob
-      // sizes when an upload fails server-side. Logged unconditionally
-      // — opt-in is via the site setting, and the values are small
-      // and entirely about the in-flight export. Magic bytes confirm
-      // the server-side sniffer will recognize the upload as an
-      // image (JPEG: FF D8 FF / PNG: 89 50 4E 47).
-      if (this.siteSettings.npn_critique_reply_debug_enabled) {
-        let magic = null;
-        try {
-          if (blob && blob.size >= 8) {
-            const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
-            magic = Array.from(head)
-              .map((b) => b.toString(16).padStart(2, "0"))
-              .join(" ");
-          }
-        } catch {
-          // ignore — diagnostic only
+      // Diagnostic snapshot of the export step. Captured ALWAYS (not
+      // gated on the debug site setting) so the "Copy diagnostic"
+      // button on the error banner has something useful even when
+      // debug logging is off. Magic bytes confirm the server-side
+      // sniffer will recognize the upload (JPEG: FF D8 FF / PNG:
+      // 89 50 4E 47); a mismatch points at a flaky canvas encoder.
+      let magic = null;
+      try {
+        if (blob && blob.size >= 8) {
+          const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+          magic = Array.from(head)
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join(" ");
         }
+      } catch {
+        // ignore — diagnostic only
+      }
+      this._lastExportDiagnostic = {
+        canvasWidth: canvas?.width ?? null,
+        canvasHeight: canvas?.height ?? null,
+        blobSize: blob?.size ?? null,
+        blobType: blob?.type ?? null,
+        blobMagicBytes: magic,
+        filename: this._visualNotesFilename(),
+        imageNaturalWidth: image?.naturalWidth ?? null,
+        imageNaturalHeight: image?.naturalHeight ?? null,
+        imageSrc: url ?? null,
+      };
+      if (this.siteSettings.npn_critique_reply_debug_enabled) {
         // eslint-disable-next-line no-console
-        console.info("[npn-critique-reply] visual-notes export ready", {
-          canvasWidth: canvas?.width ?? null,
-          canvasHeight: canvas?.height ?? null,
-          blobSize: blob?.size ?? null,
-          blobType: blob?.type ?? null,
-          blobMagicBytes: magic,
-          filename: this._visualNotesFilename(),
-        });
+        console.info(
+          "[npn-critique-reply] visual-notes export ready",
+          this._lastExportDiagnostic
+        );
       }
 
       this.statusMessage = i18n(
@@ -1411,7 +1436,26 @@ export default class NpnCritiqueReplyModal extends Component {
           blob,
           this._visualNotesFilename()
         );
+        this._lastUploadDiagnostic = {
+          uploadId: visualUpload?.id ?? null,
+          shortUrl: visualUpload?.short_url ?? null,
+          width: visualUpload?.width ?? null,
+          height: visualUpload?.height ?? null,
+        };
       } catch (e) {
+        // Capture the server-side reject before re-throwing so the
+        // diagnostic report carries the upload response details.
+        this._lastUploadDiagnostic = {
+          status: e?.jqXHR?.status ?? null,
+          statusText: e?.jqXHR?.statusText ?? null,
+          serverErrors:
+            (Array.isArray(e?.jqXHR?.responseJSON?.errors)
+              ? e.jqXHR.responseJSON.errors
+              : null) ??
+            (typeof e?.jqXHR?.responseJSON?.error === "string"
+              ? [e.jqXHR.responseJSON.error]
+              : null),
+        };
         throw this._wrapVisualNotesError("upload", e);
       }
 
@@ -4452,6 +4496,9 @@ export default class NpnCritiqueReplyModal extends Component {
     this.validationMessage = null;
     this.errorMessage = null;
     this.visualNotesFailureContext = null;
+    this._lastFailureReport = null;
+    this._lastExportDiagnostic = null;
+    this._lastUploadDiagnostic = null;
     this.isPosting = true;
     this.statusMessage = null;
 
@@ -4587,16 +4634,19 @@ export default class NpnCritiqueReplyModal extends Component {
         this.visualNotesFailureContext = null;
       }
 
-      if (this.siteSettings.npn_critique_reply_debug_enabled) {
-        // eslint-disable-next-line no-console
-        console.warn("[npn-critique-reply] post-critique failed", {
-          topicId,
-          stage: error?.stage,
-          error,
-          message: this.errorMessage,
-          fallbackAvailable: this.visualNotesFailureContext === "post",
-        });
-      }
+      this._lastFailureReport = this._buildFailureReport(
+        "post_critique",
+        error
+      );
+      // Always log to console.warn (not gated on debug setting) so
+      // that even users without admin access leave a breadcrumb in
+      // their devtools. The "Copy diagnostic" button on the error
+      // banner pulls from `_lastFailureReport` for one-click sharing.
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[npn-critique-reply] post-critique failed",
+        this._lastFailureReport
+      );
     } finally {
       if (!this._destroyed) {
         this.isPosting = false;
@@ -4614,6 +4664,151 @@ export default class NpnCritiqueReplyModal extends Component {
       return json.error;
     }
     return i18n("npn_critique_reply.modal.post_failed");
+  }
+
+  // ---- Self-service diagnostic report --------------------------------
+
+  // Builds a structured snapshot of the failed pipeline. Called from
+  // the post-critique / edit-in-composer catch blocks; the result is
+  // stashed on `_lastFailureReport` so the error banner's "Copy
+  // diagnostic" button can format and copy it. Synchronous — all the
+  // inputs are already known to the modal.
+  _buildFailureReport(context, error) {
+    const cause = error?.cause ?? null;
+    const jqXHR = cause?.jqXHR ?? error?.jqXHR ?? null;
+    const responseJSON = jqXHR?.responseJSON ?? null;
+    return {
+      timestamp: new Date().toISOString(),
+      context,
+      mode: this.isEditing ? "edit" : "new",
+      topicId: this.topic?.id ?? null,
+      editingPostId: this.editingPost?.id ?? null,
+      stage: error?.stage ?? null,
+      error: {
+        name: error?.name ?? null,
+        message: error?.message ?? String(error ?? ""),
+        stack: error?.stack ?? null,
+      },
+      cause: cause
+        ? {
+            name: cause?.name ?? null,
+            message: cause?.message ?? String(cause),
+            stack: cause?.stack ?? null,
+          }
+        : null,
+      server: jqXHR
+        ? {
+            status: jqXHR.status ?? null,
+            statusText: jqXHR.statusText ?? null,
+            errors: Array.isArray(responseJSON?.errors)
+              ? responseJSON.errors
+              : null,
+            errorString:
+              typeof responseJSON?.error === "string"
+                ? responseJSON.error
+                : null,
+          }
+        : null,
+      visualNotes: this.hasVisualAnnotations
+        ? {
+            pinCount: this.notes?.length ?? 0,
+            cropPresent: !!this.crop,
+            eyePathCount: this.eyePaths?.length ?? 0,
+            attentionPullCount: this.attentionPulls?.length ?? 0,
+            strongAreaCount: this.strongAreas?.length ?? 0,
+            directionArrowCount: this.directionArrows?.length ?? 0,
+            relationshipArrowCount: this.relationshipArrows?.length ?? 0,
+          }
+        : null,
+      selectedVersionKey: this.selectedVersionKey ?? null,
+      hasProcessingExample: !!this.processingExample,
+      lastExport: this._lastExportDiagnostic ?? null,
+      lastUpload: this._lastUploadDiagnostic ?? null,
+      browser: this._collectBrowserInfo(),
+      pluginCommit:
+        (this.siteSettings?.npn_critique_reply_plugin_version ?? null) ||
+        null,
+    };
+  }
+
+  _collectBrowserInfo() {
+    if (typeof navigator === "undefined") {
+      return null;
+    }
+    return {
+      userAgent: navigator.userAgent ?? null,
+      language: navigator.language ?? null,
+      platform: navigator.platform ?? null,
+      viewportWidth: window.innerWidth ?? null,
+      viewportHeight: window.innerHeight ?? null,
+      devicePixelRatio: window.devicePixelRatio ?? null,
+    };
+  }
+
+  // Action wired to the error banner's "Copy diagnostic" button.
+  // Serializes `_lastFailureReport` into a markdown code block and
+  // copies it to the clipboard. Surfaces a toast for confirmation.
+  @action
+  async copyFailureDiagnostic() {
+    if (!this._lastFailureReport) {
+      return;
+    }
+    const body =
+      "```json\n" +
+      JSON.stringify(this._lastFailureReport, null, 2) +
+      "\n```";
+    let copied = false;
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(body);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+    }
+    if (!copied) {
+      // Fallback for older browsers / non-secure contexts.
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = body;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+    }
+    if (copied) {
+      this.toasts.success({
+        duration: "short",
+        data: {
+          message: i18n(
+            "npn_critique_reply.modal.diagnostic_copied"
+          ),
+        },
+      });
+    } else {
+      // Final fallback: log to console so the user can copy from there.
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[npn-critique-reply] diagnostic — clipboard unavailable, " +
+          "copy from this object:",
+        this._lastFailureReport
+      );
+      this.toasts.error?.({
+        duration: "short",
+        data: {
+          message: i18n(
+            "npn_critique_reply.modal.diagnostic_copy_failed"
+          ),
+        },
+      });
+    }
   }
 
   // ---- Edit in Composer ------------------------------------------------
@@ -4647,6 +4842,9 @@ export default class NpnCritiqueReplyModal extends Component {
     this.errorMessage = null;
     this.validationMessage = null;
     this.visualNotesFailureContext = null;
+    this._lastFailureReport = null;
+    this._lastExportDiagnostic = null;
+    this._lastUploadDiagnostic = null;
     this.isPosting = true;
     this.statusMessage = null;
 
@@ -4685,16 +4883,15 @@ export default class NpnCritiqueReplyModal extends Component {
         this.visualNotesFailureContext = null;
       }
 
-      if (this.siteSettings.npn_critique_reply_debug_enabled) {
-        // eslint-disable-next-line no-console
-        console.warn("[npn-critique-reply] edit-in-composer failed", {
-          topicId: this.topic?.id,
-          stage: error?.stage,
-          error,
-          message: this.errorMessage,
-          fallbackAvailable: this.visualNotesFailureContext === "edit",
-        });
-      }
+      this._lastFailureReport = this._buildFailureReport(
+        "edit_in_composer",
+        error
+      );
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[npn-critique-reply] edit-in-composer failed",
+        this._lastFailureReport
+      );
     } finally {
       if (!this._destroyed) {
         this.isPosting = false;
@@ -7007,6 +7204,23 @@ export default class NpnCritiqueReplyModal extends Component {
                       class="btn-small btn-flat npn-critique-reply-modal__fallback-action"
                       @action={{this.retryEditWithoutVisualNotes}}
                       @label="npn_critique_reply.modal.continue_without_visual_notes"
+                      @disabled={{this.isPosting}}
+                    />
+                  {{/if}}
+                  {{! Always-on diagnostic copy button. Snapshots
+                      pipeline state, browser info, server response,
+                      and the last export/upload diagnostics into a
+                      markdown JSON block on the clipboard. One-click
+                      sharing replaces the back-and-forth of asking
+                      the user to open devtools + paste console
+                      output. }}
+                  {{#if this._lastFailureReport}}
+                    <DButton
+                      class="btn-small btn-flat npn-critique-reply-modal__diagnostic-action"
+                      @icon="clipboard"
+                      @action={{this.copyFailureDiagnostic}}
+                      @label="npn_critique_reply.modal.copy_diagnostic"
+                      @title="npn_critique_reply.modal.copy_diagnostic_title"
                       @disabled={{this.isPosting}}
                     />
                   {{/if}}
