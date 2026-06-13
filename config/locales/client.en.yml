@@ -2,7 +2,7 @@ en:
   js:
     npn_critique_reply:
       start_button: "Start a Critique"
-      start_button_title: "Start a guided critique"
+      start_button_title: "Open the critique workspace"
       # Shown on the same footer button + invitation panel when the
       # topic serializer reports a saved server-side draft for the
       # current user. Signals at a glance that there's work waiting,
@@ -16,9 +16,9 @@ en:
       # and the native Reply button remain in place too, so this panel
       # only carries the one action.
       invitation_panel:
-        title: "Start a thoughtful critique"
-        description: "Keep the image and request in view while you write, with optional visual notes if helpful."
-        aria_label: "Start a thoughtful critique"
+        title: "Start a Critique"
+        description: "Keep the image, request, and photographer’s notes in view while you write. Add visual notes only if they help."
+        aria_label: "Open the critique workspace"
         # Counterparts shown when a saved server draft exists for this
         # user/topic. The panel keeps its same shape; only the copy
         # and the action label change.
