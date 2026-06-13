@@ -364,9 +364,16 @@ export default class NpnCritiqueReplyModal extends Component {
   //   • _lastUploadDiagnostic   — set by the upload step
   //   • _lastFailureReport      — populated when something throws; the
   //                                copy button reads from this
+  //   • _errorHistory           — last N recorded errors so chained
+  //                                failures (e.g. draft autosave failing
+  //                                BEFORE post submit) are all visible
+  //                                in the report
   @tracked _lastFailureReport = null;
   _lastExportDiagnostic = null;
   _lastUploadDiagnostic = null;
+  _errorHistory = [];
+  _unhandledRejectionHandler = null;
+  _windowErrorHandler = null;
 
   // -- Processing Example state ----------------------------------------
   //
@@ -610,6 +617,91 @@ export default class NpnCritiqueReplyModal extends Component {
     this.teardownPhotographersNotes();
     // Drop pane scroll-cue observers.
     this._teardownPaneSentinels();
+    // Drop window-level error capture.
+    this._teardownGlobalErrorCapture();
+  }
+
+  // ---- Global error capture ------------------------------------------
+  //
+  // Browser-wide `error` and `unhandledrejection` listeners so failures
+  // in async paths that didn't explicitly catch still leave a
+  // breadcrumb in `_errorHistory` (and in the console). Scoped to the
+  // modal's lifetime — installed when the modal mounts, torn down in
+  // willDestroy — so we don't leak listeners across reopens.
+  //
+  // The handlers are deliberately conservative: they filter to events
+  // whose error chain mentions the plugin (`npn-critique-reply` in
+  // either the message OR the stack trace) so we don't capture
+  // unrelated errors from other plugins / Discourse core.
+  _setupGlobalErrorCapture() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    this._unhandledRejectionHandler = (event) => {
+      const reason = event?.reason ?? event;
+      if (!this._errorMentionsPlugin(reason)) {
+        return;
+      }
+      this._recordError(
+        "unhandled_rejection",
+        reason instanceof Error ? reason : new Error(String(reason)),
+        null,
+        "warn"
+      );
+    };
+    this._windowErrorHandler = (event) => {
+      const err = event?.error ?? event?.message ?? null;
+      if (!this._errorMentionsPlugin(err)) {
+        return;
+      }
+      this._recordError(
+        "window_error",
+        err instanceof Error ? err : new Error(String(err ?? event?.message)),
+        {
+          filename: event?.filename ?? null,
+          lineno: event?.lineno ?? null,
+          colno: event?.colno ?? null,
+        },
+        "warn"
+      );
+    };
+    window.addEventListener(
+      "unhandledrejection",
+      this._unhandledRejectionHandler
+    );
+    window.addEventListener("error", this._windowErrorHandler);
+  }
+
+  _teardownGlobalErrorCapture() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (this._unhandledRejectionHandler) {
+      window.removeEventListener(
+        "unhandledrejection",
+        this._unhandledRejectionHandler
+      );
+      this._unhandledRejectionHandler = null;
+    }
+    if (this._windowErrorHandler) {
+      window.removeEventListener("error", this._windowErrorHandler);
+      this._windowErrorHandler = null;
+    }
+  }
+
+  // Filters global error events to ones that look like they came from
+  // this plugin. Checks both the message and the stack trace for the
+  // plugin name. Conservative — false negatives are preferred over
+  // capturing unrelated noise.
+  _errorMentionsPlugin(thing) {
+    if (!thing) {
+      return false;
+    }
+    const text =
+      typeof thing === "string"
+        ? thing
+        : `${thing?.message ?? ""}\n${thing?.stack ?? ""}`;
+    return text.includes("npn-critique-reply") || text.includes("npn_critique_reply");
   }
 
   // -- Textarea wiring: @mention autocomplete + Insert link helper -------
@@ -650,11 +742,7 @@ export default class NpnCritiqueReplyModal extends Component {
         );
       }
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[discourse-npn-critique-reply] mention autocomplete unavailable:",
-        e
-      );
+      this._recordError("mention_autocomplete_setup", e, null, "warn");
     }
   }
 
@@ -789,11 +877,7 @@ export default class NpnCritiqueReplyModal extends Component {
       this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
       this.#textarea?.focus();
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[discourse-npn-critique-reply] insert link failed:",
-        e
-      );
+      this._recordError("insert_link", e, null, "warn");
     }
   }
 
@@ -801,6 +885,12 @@ export default class NpnCritiqueReplyModal extends Component {
     super(...arguments);
     // Restore prompt visibility preferences from a previous session.
     this.moreIdeasExpanded = readBool(STORAGE_KEY_MORE_IDEAS, false);
+
+    // Set up window-level error capture so async failures that bypass
+    // our explicit try/catch sites still leave a breadcrumb in
+    // _errorHistory. Scoped to modal lifetime (torn down in
+    // willDestroy).
+    this._setupGlobalErrorCapture();
 
     if (this.isEditing) {
       // Edit flow: restore directly from the post's saved metadata
@@ -1754,13 +1844,12 @@ export default class NpnCritiqueReplyModal extends Component {
         return;
       }
       this._opCookedError = true;
-      if (this.siteSettings.npn_critique_reply_debug_enabled) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          "[npn-critique-reply] failed to load OP cooked for Photographer's Notes",
-          { topicId: topic?.id, error: e }
-        );
-      }
+      this._recordError(
+        "photographers_notes_fetch",
+        e,
+        { topicId: topic?.id, firstPostId },
+        "warn"
+      );
     } finally {
       if (!this._destroyed) {
         this._opCookedLoading = false;
@@ -2097,11 +2186,7 @@ export default class NpnCritiqueReplyModal extends Component {
         tm.insertText(payload);
       } catch (e) {
         // Last-resort fallback — append to end.
-        // eslint-disable-next-line no-console
-        console.warn(
-          "[npn-critique-reply] quote insert via text-manipulation failed:",
-          e
-        );
+        this._recordError("quote_insert", e, null, "warn");
         this._appendToTextarea(quoteText);
       }
     }
@@ -2342,10 +2427,7 @@ export default class NpnCritiqueReplyModal extends Component {
         stage,
         message: this._processingExampleErrorMessage(stage),
       };
-      if (this.siteSettings.npn_critique_reply_debug_enabled) {
-        // eslint-disable-next-line no-console
-        console.warn("[npn-critique-reply] processing-example upload failed", e);
-      }
+      this._recordError("processing_example_upload", e, { stage }, "warn");
     } finally {
       if (!this._destroyed) {
         this.processingExampleUploading = false;
@@ -4634,19 +4716,11 @@ export default class NpnCritiqueReplyModal extends Component {
         this.visualNotesFailureContext = null;
       }
 
-      this._lastFailureReport = this._buildFailureReport(
-        "post_critique",
-        error
-      );
-      // Always log to console.warn (not gated on debug setting) so
-      // that even users without admin access leave a breadcrumb in
-      // their devtools. The "Copy diagnostic" button on the error
-      // banner pulls from `_lastFailureReport` for one-click sharing.
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[npn-critique-reply] post-critique failed",
-        this._lastFailureReport
-      );
+      // Route through the central recorder: builds the report,
+      // promotes it to _lastFailureReport (so the "Copy diagnostic"
+      // button picks it up), pushes onto _errorHistory, and logs to
+      // console.warn unconditionally.
+      this._recordError("post_critique", error, { topicId });
     } finally {
       if (!this._destroyed) {
         this.isPosting = false;
@@ -4673,7 +4747,66 @@ export default class NpnCritiqueReplyModal extends Component {
   // stashed on `_lastFailureReport` so the error banner's "Copy
   // diagnostic" button can format and copy it. Synchronous — all the
   // inputs are already known to the modal.
-  _buildFailureReport(context, error) {
+  // Central error recorder. Any catch site in the modal (or any
+  // collaborator that has a handle to the modal) can call this to:
+  //   • snapshot a structured failure report
+  //   • promote it to `_lastFailureReport` so the "Copy diagnostic"
+  //     button picks it up
+  //   • append to `_errorHistory` (capped) so chained failures stay
+  //     visible
+  //   • always log to console.warn (no debug-setting gate)
+  //
+  // `extra` is merged into the report verbatim — call sites use it
+  // to attach extra context (e.g. {postId: 42} on post-fetch
+  // failures, {url} on photographer's-notes fetch failures, etc.)
+  // so a single report carries everything we'd want to ask about.
+  //
+  // Severity is a string: "error" | "warn" | "info". "warn" and
+  // "info" don't override `_lastFailureReport` (we want the COPY
+  // button to surface the actual failure, not a transient noisy
+  // warning), but they DO end up in `_errorHistory`.
+  _recordError(context, error, extra = null, severity = "error") {
+    let report;
+    try {
+      report = this._buildFailureReport(context, error, extra);
+    } catch (buildErr) {
+      // Belt-and-suspenders: a broken builder shouldn't swallow the
+      // original failure. Fall back to a minimal report.
+      report = {
+        timestamp: new Date().toISOString(),
+        context,
+        severity,
+        builderError: {
+          name: buildErr?.name ?? null,
+          message: buildErr?.message ?? String(buildErr ?? ""),
+        },
+        error: {
+          name: error?.name ?? null,
+          message: error?.message ?? String(error ?? ""),
+        },
+        extra: extra ?? null,
+      };
+    }
+    report.severity = severity;
+
+    // Bound history so a long-lived session doesn't pile up forever.
+    this._errorHistory.push(report);
+    if (this._errorHistory.length > 20) {
+      this._errorHistory.shift();
+    }
+
+    if (severity === "error") {
+      this._lastFailureReport = report;
+    }
+
+    // eslint-disable-next-line no-console
+    const method = severity === "info" ? "info" : "warn";
+    // eslint-disable-next-line no-console
+    console[method](`[npn-critique-reply] ${context} failed`, report);
+    return report;
+  }
+
+  _buildFailureReport(context, error, extra = null) {
     const cause = error?.cause ?? null;
     const jqXHR = cause?.jqXHR ?? error?.jqXHR ?? null;
     const responseJSON = jqXHR?.responseJSON ?? null;
@@ -4724,6 +4857,16 @@ export default class NpnCritiqueReplyModal extends Component {
       hasProcessingExample: !!this.processingExample,
       lastExport: this._lastExportDiagnostic ?? null,
       lastUpload: this._lastUploadDiagnostic ?? null,
+      // Slimmed-down history of the last few recorded errors so
+      // chained failures appear together (e.g. a draft autosave that
+      // started failing before the post submit).
+      recentErrors: this._errorHistory.slice(-5).map((entry) => ({
+        context: entry.context,
+        severity: entry.severity,
+        timestamp: entry.timestamp,
+        errorMessage: entry.error?.message ?? null,
+      })),
+      extra: extra ?? null,
       browser: this._collectBrowserInfo(),
       pluginCommit:
         (this.siteSettings?.npn_critique_reply_plugin_version ?? null) ||
@@ -4883,15 +5026,9 @@ export default class NpnCritiqueReplyModal extends Component {
         this.visualNotesFailureContext = null;
       }
 
-      this._lastFailureReport = this._buildFailureReport(
-        "edit_in_composer",
-        error
-      );
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[npn-critique-reply] edit-in-composer failed",
-        this._lastFailureReport
-      );
+      this._recordError("edit_in_composer", error, {
+        topicId: this.topic?.id,
+      });
     } finally {
       if (!this._destroyed) {
         this.isPosting = false;
@@ -5138,10 +5275,11 @@ export default class NpnCritiqueReplyModal extends Component {
         this._restoreDraft(draft);
         this.draftHasSaved = true;
       }
-    } catch (_e) {
+    } catch (e) {
       // Restore failures are non-fatal — the modal still opens, the
       // user can type, and the next autosave will overwrite whatever
       // was there before. We deliberately do NOT surface a banner.
+      this._recordError("draft_restore", e, { topicId }, "warn");
     }
   }
 
@@ -5161,6 +5299,17 @@ export default class NpnCritiqueReplyModal extends Component {
       if (firstSave) {
         this._broadcastDraftChanged(true);
       }
+    }
+    // Record save failures in the diagnostic history so a chain of
+    // repeated autosave errors shows up in the next "Copy diagnostic"
+    // even when the user hasn't hit Post yet.
+    if (status === DRAFT_STATUS.ERROR) {
+      this._recordError(
+        "draft_autosave",
+        new Error("Draft autosave returned ERROR status"),
+        { topicId: this.topic?.id },
+        "warn"
+      );
     }
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
@@ -5367,16 +5516,15 @@ export default class NpnCritiqueReplyModal extends Component {
         this.critiqueText = text;
       }
     } catch (e) {
-      // Soft failure — leave the textarea empty. Surface via the
-      // debug log so QA can spot it; we deliberately don't throw a
-      // modal banner because the user can still type new content.
-      if (this.siteSettings.npn_critique_reply_debug_enabled) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          "[npn-critique-reply] failed to load post raw for edit",
-          { postId: post.id, error: e }
-        );
-      }
+      // Soft failure — leave the textarea empty. We deliberately
+      // don't throw a modal banner because the user can still type
+      // new content.
+      this._recordError(
+        "edit_load_post_raw",
+        e,
+        { postId: post.id },
+        "warn"
+      );
     }
   }
 
