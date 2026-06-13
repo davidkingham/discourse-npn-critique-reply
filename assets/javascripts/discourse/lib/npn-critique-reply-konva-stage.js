@@ -2051,8 +2051,29 @@ export async function createAnnotationStage({
         // the click-on-handle behavior. cancelBubble stops the
         // stage-level click handler from also firing (which would
         // add a new point in eye_path creation mode).
+        //
+        // Exception: when we're actively in eye_path Points-mode the
+        // user expects every click to add a new point — selecting an
+        // existing path's curve would silently swallow the click and
+        // read as a no-op. Forward to onAddEyePathPoint instead so
+        // the modal can either extend the active session or start a
+        // fresh path (whichever its state warrants).
         hitLine.on("click tap", (e) => {
           e.cancelBubble = true;
+          if (
+            state.visualMode === "eye_path" &&
+            state.eyePathInteractionMode === "points"
+          ) {
+            const pos = stage.getPointerPosition();
+            const sw = stage.width();
+            const sh = stage.height();
+            if (pos && sw > 0 && sh > 0) {
+              const xPct = Math.max(0, Math.min(100, (pos.x / sw) * 100));
+              const yPct = Math.max(0, Math.min(100, (pos.y / sh) * 100));
+              onAddEyePathPoint?.(xPct, yPct);
+              return;
+            }
+          }
           onSelectEyePath?.(path.id);
         });
         hitGroup.add(hitLine);
@@ -2417,8 +2438,29 @@ export async function createAnnotationStage({
       });
 
       // Plain click without movement → select the path.
+      //
+      // Same exception as the curve hit-line above: in eye_path Points
+      // creation mode, forward the click to onAddEyePathPoint so the
+      // user can keep dropping points without having to dodge prior
+      // paths' invisible handles. Drag-to-reshape still works because
+      // Konva fires dragmove/dragend (not click) when the pointer moves
+      // before release.
       handle.on("click tap", (e) => {
         e.cancelBubble = true;
+        if (
+          state.visualMode === "eye_path" &&
+          state.eyePathInteractionMode === "points"
+        ) {
+          const pos = stage.getPointerPosition();
+          const sw = stage.width();
+          const sh = stage.height();
+          if (pos && sw > 0 && sh > 0) {
+            const xPct = Math.max(0, Math.min(100, (pos.x / sw) * 100));
+            const yPct = Math.max(0, Math.min(100, (pos.y / sh) * 100));
+            onAddEyePathPoint?.(xPct, yPct);
+            return;
+          }
+        }
         onSelectEyePath?.(path.id);
       });
 
