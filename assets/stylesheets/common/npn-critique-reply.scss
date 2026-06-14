@@ -208,12 +208,44 @@
     display: none;
   }
 
+  // Subtle tint behind the centered preview card so the card reads as
+  // a contained "post" sitting on a page rather than as content
+  // sprawled across the full modal width. Limited to the body slot.
+  &.npn-critique-reply-modal--preview .d-modal__body {
+    background: var(--primary-very-low);
+  }
+
+  // Centered card. max-width caps the readable line length to ~62em
+  // (typical post-column treatment) so the right edge isn't a wall of
+  // whitespace; margin: 0 auto centers it. The card itself is the
+  // page-color background with a soft border + shadow so it lifts
+  // off the tinted body behind it.
   &__preview {
     display: flex;
     flex-direction: column;
-    gap: 1em;
-    padding: 0.25em 0.25em 0.5em;
-    max-width: 100%;
+    gap: 1.25em;
+    margin: 0.5em auto;
+    padding: 1.5em 1.75em 1.75em;
+    width: 100%;
+    max-width: 62em;
+    background: var(--secondary);
+    border: 1px solid var(--primary-low);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  @media (max-width: 720px) {
+    &__preview {
+      // On phones the modal is already near full-width — drop the
+      // card chrome so we don't burn 1.75em of inner padding on each
+      // side. Keeps the body tint but lets content reach closer to
+      // the edges.
+      margin: 0;
+      padding: 1em 0.85em;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+    }
   }
 
   &__preview-header {
