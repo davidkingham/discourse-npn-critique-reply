@@ -293,14 +293,16 @@
     color: var(--primary);
   }
 
-  // Match the size the cooked post will actually render at — Discourse
-  // inline images sit around a 400px-wide thumbnail by default rather
-  // than spanning the column. Tester feedback: the preview previously
-  // showed the image at nearly the full card width, which was much
-  // larger than the eventual post and made the preview misleading.
+  // Match the size the cooked post will actually render at. Discourse's
+  // server-side image-resize defaults (`max_image_width` 690 px,
+  // `max_image_height` 500 px) cap inline post images at the smaller
+  // of those constraints — for portrait photos the height cap binds
+  // and produces a column ~330 px wide, exactly what testers see in
+  // the cooked post. Mirroring both caps here keeps the preview in
+  // step with the live render without hard-coding a single dimension.
   &__preview-image {
-    max-width: min(100%, 420px);
-    max-height: 380px;
+    max-width: min(100%, 690px);
+    max-height: 500px;
     width: auto;
     height: auto;
     border-radius: 4px;
