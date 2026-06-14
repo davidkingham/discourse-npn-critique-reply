@@ -278,11 +278,18 @@
     color: var(--primary);
     font-size: var(--font-0);
     line-height: 1.55;
-    // Preserve line breaks + paragraph spacing without round-tripping
-    // through a markdown parser. The cooked post will wrap paragraphs
-    // properly; this just gives the user a sane visual approximation.
-    white-space: pre-wrap;
     word-wrap: break-word;
+  }
+
+  // Paragraphs inside the preview text. Real <p> elements (built by
+  // buildPreviewTextHtml) rather than pre-wrap'd line breaks so the
+  // template indentation can't slip in front of an inline badge and
+  // visually offset it from surrounding prose.
+  &__preview-paragraph {
+    margin: 0 0 0.85em;
+    &:last-child {
+      margin-bottom: 0;
+    }
   }
 
   &__preview-text-empty {
@@ -1586,39 +1593,40 @@
   // Secondary accent: tonal-tertiary, sized like a regular footer
   // button. Signals "intentional helper action" without competing with
   // the primary blue Post Critique CTA next to it.
+  // Standard-composer hand-off, rendered as a subtle text link rather
+  // than a peer of the post / preview buttons. Beta feedback: most
+  // users won't take this path, so it should feel ancillary — a quiet
+  // "or use the standard composer" affordance, not a competing CTA.
   &__edit-composer.npn-critique-reply-modal__edit-composer {
-    background: var(--tertiary-low);
+    background: transparent;
+    border: none;
+    box-shadow: none;
     color: var(--tertiary);
-    border: 1px solid var(--tertiary-low);
-    font-weight: 600;
-    transition:
-      background-color 0.15s ease,
-      border-color 0.15s ease,
-      color 0.15s ease;
+    font-weight: normal;
+    font-size: var(--font-down-1);
+    padding: 0.25em 0.4em;
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
 
     .d-icon {
-      color: currentColor;
-      margin-right: 0.4em;
+      display: none;
     }
 
     &:hover,
     &:focus {
-      background: var(--tertiary);
-      color: var(--secondary);
-      border-color: var(--tertiary);
+      background: transparent;
+      color: var(--tertiary-hover, var(--tertiary));
+      text-decoration: underline;
     }
     &:focus-visible {
       outline: 2px solid var(--tertiary);
       outline-offset: 2px;
-    }
-    &:active {
-      background: var(--tertiary-hover, var(--tertiary));
-      border-color: var(--tertiary-hover, var(--tertiary));
-      color: var(--secondary);
+      border-radius: 3px;
     }
     &:disabled {
-      opacity: 0.6;
+      opacity: 0.5;
       cursor: not-allowed;
+      text-decoration: none;
     }
   }
 

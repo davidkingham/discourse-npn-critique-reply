@@ -204,37 +204,63 @@ function badgeVariantForLabel(label) {
   }
 }
 
-// Walk the critique text and split it into `text` / `badge` fragments.
-// The preview template renders each fragment inline — badges become
-// styled spans, text segments stay plain. White-space is preserved on
-// the container (CSS `pre-wrap`), so blank lines and indentation look
-// the same as they will in the cooked post.
-function parsePreviewTextFragments(text) {
+// Build the preview's annotated-text HTML directly so template
+// whitespace can't leak into a `pre-wrap` container and visually
+// indent badges relative to the surrounding prose. Paragraphs split
+// on blank lines (`\n\n+`); single newlines inside a paragraph
+// become `<br>`. Badges become styled <span>s with the same .npn-
+// annotation-badge classes the cooked-post decorator uses, so the
+// preview reads as a faithful approximation of the final post.
+function buildPreviewTextHtml(text) {
+  const paragraphs = text.split(/\n{2,}/);
+  return paragraphs
+    .map(buildPreviewParagraphHtml)
+    .filter((p) => p && p.length > 0)
+    .join("");
+}
+
+function buildPreviewParagraphHtml(paragraph) {
+  if (!paragraph.trim()) {
+    return "";
+  }
   PREVIEW_TOKEN_PATTERN.lastIndex = 0;
-  const fragments = [];
+  const parts = [];
   let cursor = 0;
-  for (const match of text.matchAll(PREVIEW_TOKEN_PATTERN)) {
+  for (const match of paragraph.matchAll(PREVIEW_TOKEN_PATTERN)) {
     const variant = badgeVariantForLabel(match[1]);
     if (!variant) {
       continue;
     }
     if (match.index > cursor) {
-      fragments.push({ type: "text", value: text.slice(cursor, match.index) });
+      parts.push(escapePreviewHtml(paragraph.slice(cursor, match.index)));
     }
-    fragments.push({
-      type: "badge",
-      label: match[1],
-      variant,
-    });
+    const label = match[1];
+    parts.push(
+      `<span class="npn-annotation-badge npn-annotation-badge--${variant}"` +
+        ` data-label="${escapePreviewAttr(label)}">` +
+        `${escapePreviewHtml(label)}</span>`
+    );
     cursor = match.index + match[0].length;
   }
-  if (cursor < text.length) {
-    fragments.push({ type: "text", value: text.slice(cursor) });
+  if (cursor < paragraph.length) {
+    parts.push(escapePreviewHtml(paragraph.slice(cursor)));
   }
-  if (fragments.length === 0 && text.length > 0) {
-    fragments.push({ type: "text", value: text });
+  if (parts.length === 0) {
+    parts.push(escapePreviewHtml(paragraph));
   }
-  return fragments;
+  const inner = parts.join("").replace(/\n/g, "<br>");
+  return `<p class="npn-critique-reply-modal__preview-paragraph">${inner}</p>`;
+}
+
+function escapePreviewHtml(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapePreviewAttr(text) {
+  return escapePreviewHtml(text).replace(/"/g, "&quot;");
 }
 
 export default class NpnCritiqueReplyModal extends Component {
@@ -4838,17 +4864,22 @@ export default class NpnCritiqueReplyModal extends Component {
     this._previewSnapshot = null;
   }
 
-  // Parsed text fragments for the preview body. Annotation references
-  // ([1], [E1], [A1], [Crop], …) become styled inline badges so the
-  // preview matches what the cooked post will show. Plain text in
-  // between is preserved verbatim, and `white-space: pre-wrap` on the
-  // container handles line breaks without a markdown round-trip.
-  get previewTextFragments() {
+  // Preview body HTML for the critique text section. Built directly
+  // (rather than via {{#each}} fragments) so template-source whitespace
+  // can't leak into the rendered DOM and indent badges relative to
+  // the surrounding prose. Paragraphs split on blank lines; tokens like
+  // [1] / [E1] / [A1] / [Crop] become the same styled spans the cooked-
+  // post decorator emits.
+  get previewTextHtml() {
     const text = this._previewSnapshot?.textBody ?? "";
     if (!text) {
-      return [];
+      return null;
     }
-    return parsePreviewTextFragments(text);
+    return htmlSafe(buildPreviewTextHtml(text));
+  }
+
+  get previewHasText() {
+    return !!this._previewSnapshot?.textBody;
   }
 
   @action
@@ -8052,18 +8083,10 @@ export default class NpnCritiqueReplyModal extends Component {
                     "npn_critique_reply.modal.preview_section_critique"
                   }}
                 </h3>
-                {{#if this.previewTextFragments.length}}
-                  <div class="npn-critique-reply-modal__preview-text">
-                    {{#each this.previewTextFragments as |frag|}}
-                      {{#if (eq frag.type "badge")}}
-                        <span
-                          class="npn-annotation-badge
-                            npn-annotation-badge--{{frag.variant}}"
-                          data-label={{frag.label}}
-                        >{{frag.label}}</span>
-                      {{else}}{{frag.value}}{{/if}}
-                    {{/each}}
-                  </div>
+                {{#if this.previewHasText}}
+                  <div
+                    class="npn-critique-reply-modal__preview-text"
+                  >{{this.previewTextHtml}}</div>
                 {{else}}
                   <p
                     class="npn-critique-reply-modal__preview-text-empty"
@@ -8078,20 +8101,21 @@ export default class NpnCritiqueReplyModal extends Component {
       </:body>
 
       <:footer>
-        {{! Primary action — POST in new-critique mode, PUT in edit
-            mode. In edit (non-preview) state the button instead enters
-            preview; the actual post / update only fires from the
-            preview footer below. Label changes to "Update critique"
-            while editing. }}
+        {{! Primary action is always Post / Update — the critic can
+            submit directly without a forced preview gate. In preview
+            state the same button confirms; in edit state Preview is
+            offered as a quieter secondary option for users who DO
+            want to look first. Label changes to "Update critique"
+            in edit-existing-post mode. }}
+        <DButton
+          class="btn-primary npn-critique-reply-modal__post"
+          @action={{this.postCritique}}
+          @icon="reply"
+          @label={{this.postButtonLabel}}
+          @disabled={{this.isPosting}}
+          @isLoading={{this.isPosting}}
+        />
         {{#if this.previewMode}}
-          <DButton
-            class="btn-primary npn-critique-reply-modal__post"
-            @action={{this.postCritique}}
-            @icon="reply"
-            @label={{this.postButtonLabel}}
-            @disabled={{this.isPosting}}
-            @isLoading={{this.isPosting}}
-          />
           <DButton
             class="npn-critique-reply-modal__back-to-edit"
             @action={{this.exitPreview}}
@@ -8101,7 +8125,7 @@ export default class NpnCritiqueReplyModal extends Component {
           />
         {{else}}
           <DButton
-            class="btn-primary npn-critique-reply-modal__preview"
+            class="btn-default npn-critique-reply-modal__preview-button"
             @action={{this.enterPreview}}
             @icon="eye"
             @label={{this.previewButtonLabel}}
@@ -8113,16 +8137,15 @@ export default class NpnCritiqueReplyModal extends Component {
             @isLoading={{this.previewBuilding}}
           />
         {{/if}}
-        {{! Secondary action only applies to the new-critique flow.
-            Edit mode posts straight back to the same reply, so the
-            "transfer to composer" escape hatch has no analogue. Hidden
-            in preview state so the footer is just Post / Back. }}
+        {{! Standard-composer hand-off is intentionally muted — most
+            users won't need it, so render as a flat text-link rather
+            than a button. Hidden in preview state and in edit-existing-
+            post mode (existing replies don't have the escape hatch). }}
         {{#unless this.isEditing}}
           {{#unless this.previewMode}}
             <DButton
-              class="npn-critique-reply-modal__edit-composer"
+              class="btn-flat npn-critique-reply-modal__edit-composer"
               @action={{this.editInComposer}}
-              @icon="far-pen-to-square"
               @label="npn_critique_reply.modal.edit_in_composer"
               @title="npn_critique_reply.modal.edit_in_composer_title"
               @disabled={{this.isPosting}}
