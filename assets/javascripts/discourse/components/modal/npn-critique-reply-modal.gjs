@@ -173,6 +173,70 @@ function writeBool(key, value) {
 // without waiting for a page navigation. Payload: `{ topicId, hasDraft }`.
 export const DRAFT_CHANGED_EVENT = "npn-critique-reply:draft-changed";
 
+// Annotation token shape — mirrors the cooked-post decorator's
+// TOKEN_PATTERN so the preview shows references using the same family
+// of badge styles. Variants resolve to CSS classes named in
+// `npn-critique-reply.scss` (.npn-annotation-badge--{variant}).
+const PREVIEW_TOKEN_PATTERN =
+  /\[([1-9]\d{0,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
+
+function badgeVariantForLabel(label) {
+  if (/^\d/.test(label)) {
+    return "note";
+  }
+  if (label === "Crop" || label === "CROP") {
+    return "crop";
+  }
+  const prefix = label[0];
+  switch (prefix) {
+    case "A":
+      return "attention";
+    case "S":
+      return "strong-area";
+    case "D":
+      return "direction";
+    case "R":
+      return "relationship";
+    case "E":
+      return "eye-path";
+    default:
+      return null;
+  }
+}
+
+// Walk the critique text and split it into `text` / `badge` fragments.
+// The preview template renders each fragment inline — badges become
+// styled spans, text segments stay plain. White-space is preserved on
+// the container (CSS `pre-wrap`), so blank lines and indentation look
+// the same as they will in the cooked post.
+function parsePreviewTextFragments(text) {
+  PREVIEW_TOKEN_PATTERN.lastIndex = 0;
+  const fragments = [];
+  let cursor = 0;
+  for (const match of text.matchAll(PREVIEW_TOKEN_PATTERN)) {
+    const variant = badgeVariantForLabel(match[1]);
+    if (!variant) {
+      continue;
+    }
+    if (match.index > cursor) {
+      fragments.push({ type: "text", value: text.slice(cursor, match.index) });
+    }
+    fragments.push({
+      type: "badge",
+      label: match[1],
+      variant,
+    });
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < text.length) {
+    fragments.push({ type: "text", value: text.slice(cursor) });
+  }
+  if (fragments.length === 0 && text.length > 0) {
+    fragments.push({ type: "text", value: text });
+  }
+  return fragments;
+}
+
 export default class NpnCritiqueReplyModal extends Component {
   @service siteSettings;
   @service currentUser;
@@ -215,6 +279,17 @@ export default class NpnCritiqueReplyModal extends Component {
   // above the textarea on failure so the user's draft is preserved.
   @tracked isPosting = false;
   @tracked errorMessage = null;
+
+  // Preview Critique state. The primary footer action enters this
+  // intermediate view before any post / update request fires, so the
+  // critic can see the composed result first. `_previewSnapshot` holds
+  // the locally-rendered preview payload (flattened visual notes as an
+  // object URL, processing example URL, trimmed text) so we don't have
+  // to re-export on every render. `previewBuilding` gates the button
+  // while the canvas export runs.
+  @tracked previewMode = false;
+  @tracked previewBuilding = false;
+  @tracked _previewSnapshot = null;
   // Inline validation message (shown when user clicks Post Critique with
   // empty textarea — distinct from server errors).
   @tracked validationMessage = null;
@@ -623,6 +698,9 @@ export default class NpnCritiqueReplyModal extends Component {
     this._teardownPaneSentinels();
     // Drop window-level error capture.
     this._teardownGlobalErrorCapture();
+    // Revoke any in-flight preview snapshot's object URL so we don't
+    // leak the flattened-canvas Blob.
+    this._teardownPreviewSnapshot();
   }
 
   // ---- Global error capture ------------------------------------------
@@ -995,7 +1073,11 @@ export default class NpnCritiqueReplyModal extends Component {
     return !!this.editingPost;
   }
 
-  // Footer primary-action label — swaps on edit / posting state.
+  // Footer primary-action label in PREVIEW mode — the actual post /
+  // update gate. Swaps on edit / posting state. In edit mode (non-
+  // preview), the primary button instead reads "Preview Critique" via
+  // `previewButtonLabel` below — Post / Update only happens after the
+  // user confirms from the preview view.
   get postButtonLabel() {
     if (this.isPosting) {
       return this.isEditing
@@ -1005,6 +1087,28 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.isEditing
       ? "npn_critique_reply.modal.update_critique"
       : "npn_critique_reply.modal.post_critique";
+  }
+
+  // Primary footer label while editing (non-preview). Always "Preview
+  // Critique" — Post / Update is the second click, fired from the
+  // preview footer. `previewBuilding` swaps in a transient label
+  // while the canvas export runs.
+  get previewButtonLabel() {
+    if (this.previewBuilding) {
+      return "npn_critique_reply.modal.preparing_visual_notes";
+    }
+    return "npn_critique_reply.modal.preview_critique";
+  }
+
+  // A preview is allowed any time the workspace has content — text,
+  // visual notes, or a processing example. Stays in sync with the
+  // existing Post-Critique validation so the gate behaves the same.
+  get canPreview() {
+    return (
+      this.hasUnsavedText ||
+      this.hasVisualAnnotations ||
+      this.hasProcessingExample
+    );
   }
 
   // ---- Image versions --------------------------------------------------
@@ -4621,6 +4725,132 @@ export default class NpnCritiqueReplyModal extends Component {
     writeBool(STORAGE_KEY_MORE_IDEAS, this.moreIdeasExpanded);
   }
 
+  // ---- Preview Critique ------------------------------------------------
+  //
+  // Edit-mode primary action. Builds a local snapshot of the composed
+  // critique so the critic can review what they're about to send before
+  // committing. Visual notes are flattened into a Blob and surfaced via
+  // an object URL — there's no server upload yet, so going Back to Edit
+  // doesn't waste a Discourse upload slot. The eventual Post Critique
+  // action re-runs the export+upload pipeline as a single transaction
+  // (preview snapshot is intentionally throwaway).
+  @action
+  async enterPreview() {
+    if (this.isPosting || this.previewMode) {
+      return;
+    }
+    if (!this.canPreview) {
+      this.validationMessage = i18n(
+        "npn_critique_reply.modal.validation_empty"
+      );
+      const el = document.getElementById("npn-critique-reply-textarea");
+      el?.focus?.();
+      return;
+    }
+    this.validationMessage = null;
+    this.errorMessage = null;
+    this.visualNotesFailureContext = null;
+
+    this.previewBuilding = true;
+    let visualNotesObjectUrl = null;
+    let visualNotesError = null;
+
+    if (this.hasVisualAnnotations && this.effectiveImageUrl) {
+      try {
+        const image = await loadImageForExport(this.effectiveImageUrl);
+        const canvas = buildVisualNotesCanvas({
+          image,
+          pins: this.notes,
+          crop: this.crop,
+          eyePaths: this.eyePaths,
+          attentionPulls: this.attentionPulls,
+          strongAreas: this.strongAreas,
+          directionArrows: this.directionArrows,
+          relationshipArrows: this.relationshipArrows,
+        });
+        const blob = await exportCanvasToBlob(canvas);
+        visualNotesObjectUrl = URL.createObjectURL(blob);
+      } catch (e) {
+        // Preview is best-effort: if the flatten fails we still want
+        // the critic to see text + processing example. The actual
+        // Post Critique step will re-run the export and surface a
+        // real error banner if it's truly broken.
+        visualNotesError = e;
+        this._recordError("preview_visual_notes_export", e, {}, "warn");
+      }
+    }
+
+    if (this._destroyed) {
+      if (visualNotesObjectUrl) {
+        URL.revokeObjectURL(visualNotesObjectUrl);
+      }
+      return;
+    }
+
+    this._previewSnapshot = {
+      visualNotesObjectUrl,
+      visualNotesError,
+      processingExampleUrl: this.processingExample?.url ?? null,
+      processingExampleFilename:
+        this.processingExample?.filename ?? null,
+      textBody: this.critiqueText.trim(),
+      hasVisualNotes: !!visualNotesObjectUrl,
+      hasProcessingExample: !!this.processingExample,
+    };
+    this.previewBuilding = false;
+    this.previewMode = true;
+
+    // Move focus into the preview region so screen readers and
+    // keyboard users land on the new view. Falls back gracefully if
+    // the element isn't mounted yet.
+    setTimeout(() => {
+      if (this._destroyed) {
+        return;
+      }
+      const heading = document.getElementById(
+        "npn-critique-reply-preview-heading"
+      );
+      heading?.focus?.();
+    }, 0);
+  }
+
+  @action
+  exitPreview() {
+    this._teardownPreviewSnapshot();
+    this.previewMode = false;
+    setTimeout(() => {
+      if (this._destroyed) {
+        return;
+      }
+      const el = document.getElementById("npn-critique-reply-textarea");
+      el?.focus?.();
+    }, 0);
+  }
+
+  _teardownPreviewSnapshot() {
+    if (this._previewSnapshot?.visualNotesObjectUrl) {
+      try {
+        URL.revokeObjectURL(this._previewSnapshot.visualNotesObjectUrl);
+      } catch (_e) {
+        // Already revoked / never created — fine.
+      }
+    }
+    this._previewSnapshot = null;
+  }
+
+  // Parsed text fragments for the preview body. Annotation references
+  // ([1], [E1], [A1], [Crop], …) become styled inline badges so the
+  // preview matches what the cooked post will show. Plain text in
+  // between is preserved verbatim, and `white-space: pre-wrap` on the
+  // container handles line breaks without a markdown round-trip.
+  get previewTextFragments() {
+    const text = this._previewSnapshot?.textBody ?? "";
+    if (!text) {
+      return [];
+    }
+    return parsePreviewTextFragments(text);
+  }
+
   @action
   async postCritique() {
     return this._doPostCritique({ skipVisualNotes: false });
@@ -5205,17 +5435,19 @@ export default class NpnCritiqueReplyModal extends Component {
       });
     }
 
-    // Edit in Composer transfers the critique into the composer →
-    // the saved draft has done its job; clear it. Reply Normally has
-    // no replyText and intentionally keeps the workspace draft.
-    if (replyText) {
-      this._clearDraftAfterSuccess();
-    } else {
-      // Reply Normally: cancel pending autosave but DON'T delete —
-      // the user explicitly asked to escape to the normal composer
-      // without losing the workspace draft.
-      this._autosaver?.cancel?.();
-    }
+    // Switching to the standard composer is reversible — the user may
+    // come back to the workspace to finish editing visual notes or
+    // restart from where they left off. Preserve the workspace draft
+    // (including its visual annotations) rather than silently deleting
+    // it; the user can discard explicitly via the workspace's Discard
+    // Draft button. Cancel any pending autosave so the just-rendered
+    // post hand-off isn't immediately overwritten by a final flush.
+    //
+    // Trade-off: if the user posts via the standard composer, the
+    // workspace will show "Resume Critique" on its entry button next
+    // time. That's better than silently destroying their visual-notes
+    // work in the workspace draft.
+    this._autosaver?.cancel?.();
 
     this.args.closeModal();
 
@@ -5936,7 +6168,8 @@ export default class NpnCritiqueReplyModal extends Component {
       class="npn-critique-reply-modal --workspace
         {{unless this.hasImage 'npn-critique-reply-modal--no-image'}}
         {{if this.visualFocusMode 'npn-critique-reply-modal--visual-focus'}}
-        {{if this.cropMode 'npn-critique-reply-modal--crop-mode'}}"
+        {{if this.cropMode 'npn-critique-reply-modal--crop-mode'}}
+        {{if this.previewMode 'npn-critique-reply-modal--preview'}}"
     >
       <:body>
         {{! Hidden autosave anchor. didUpdate fires whenever any
@@ -7744,31 +7977,157 @@ export default class NpnCritiqueReplyModal extends Component {
           </div>
 
         </div>
+
+        {{! Preview Critique overlay. Rendered as a sibling to the edit
+            UI rather than replacing it so the Konva stage, autocomplete,
+            and other long-lived state survive a round-trip into preview
+            and back. CSS gates visibility from the modal's --preview
+            class (see npn-critique-reply.scss). }}
+        {{#if this.previewMode}}
+          <section
+            class="npn-critique-reply-modal__preview"
+            role="region"
+            aria-labelledby="npn-critique-reply-preview-heading"
+          >
+            <header class="npn-critique-reply-modal__preview-header">
+              <h2
+                id="npn-critique-reply-preview-heading"
+                class="npn-critique-reply-modal__preview-title"
+                tabindex="-1"
+              >{{i18n
+                  "npn_critique_reply.modal.preview_header_title"
+                }}</h2>
+              <p class="npn-critique-reply-modal__preview-subtitle">{{i18n
+                  "npn_critique_reply.modal.preview_header_subtitle"
+                }}</p>
+            </header>
+
+            <div class="npn-critique-reply-modal__preview-body">
+              {{#if this._previewSnapshot.hasVisualNotes}}
+                <section
+                  class="npn-critique-reply-modal__preview-section
+                    npn-critique-reply-modal__preview-section--visual-notes"
+                >
+                  <h3 class="npn-critique-reply-modal__preview-section-title">
+                    {{i18n
+                      "npn_critique_reply.modal.preview_section_visual_notes"
+                    }}
+                  </h3>
+                  <img
+                    class="npn-critique-reply-modal__preview-image"
+                    src={{this._previewSnapshot.visualNotesObjectUrl}}
+                    alt={{i18n
+                      "npn_critique_reply.modal.preview_section_visual_notes"
+                    }}
+                  />
+                </section>
+              {{/if}}
+
+              {{#if this._previewSnapshot.hasProcessingExample}}
+                <section
+                  class="npn-critique-reply-modal__preview-section
+                    npn-critique-reply-modal__preview-section--processing-example"
+                >
+                  <h3 class="npn-critique-reply-modal__preview-section-title">
+                    {{i18n
+                      "npn_critique_reply.modal.preview_section_processing_example"
+                    }}
+                  </h3>
+                  <img
+                    class="npn-critique-reply-modal__preview-image"
+                    src={{this._previewSnapshot.processingExampleUrl}}
+                    alt={{i18n
+                      "npn_critique_reply.modal.preview_section_processing_example"
+                    }}
+                  />
+                </section>
+              {{/if}}
+
+              <section
+                class="npn-critique-reply-modal__preview-section
+                  npn-critique-reply-modal__preview-section--critique"
+              >
+                <h3 class="npn-critique-reply-modal__preview-section-title">
+                  {{i18n
+                    "npn_critique_reply.modal.preview_section_critique"
+                  }}
+                </h3>
+                {{#if this.previewTextFragments.length}}
+                  <div class="npn-critique-reply-modal__preview-text">
+                    {{#each this.previewTextFragments as |frag|}}
+                      {{#if (eq frag.type "badge")}}
+                        <span
+                          class="npn-annotation-badge
+                            npn-annotation-badge--{{frag.variant}}"
+                          data-label={{frag.label}}
+                        >{{frag.label}}</span>
+                      {{else}}{{frag.value}}{{/if}}
+                    {{/each}}
+                  </div>
+                {{else}}
+                  <p
+                    class="npn-critique-reply-modal__preview-text-empty"
+                  >{{i18n
+                      "npn_critique_reply.modal.preview_empty_text"
+                    }}</p>
+                {{/if}}
+              </section>
+            </div>
+          </section>
+        {{/if}}
       </:body>
 
       <:footer>
         {{! Primary action — POST in new-critique mode, PUT in edit
-            mode. Label changes to "Update critique" while editing. }}
-        <DButton
-          class="btn-primary npn-critique-reply-modal__post"
-          @action={{this.postCritique}}
-          @icon="reply"
-          @label={{this.postButtonLabel}}
-          @disabled={{this.isPosting}}
-          @isLoading={{this.isPosting}}
-        />
-        {{! Secondary action only applies to the new-critique flow.
-            Edit mode posts straight back to the same reply, so the
-            "transfer to composer" escape hatch has no analogue. }}
-        {{#unless this.isEditing}}
+            mode. In edit (non-preview) state the button instead enters
+            preview; the actual post / update only fires from the
+            preview footer below. Label changes to "Update critique"
+            while editing. }}
+        {{#if this.previewMode}}
           <DButton
-            class="npn-critique-reply-modal__edit-composer"
-            @action={{this.editInComposer}}
-            @icon="far-pen-to-square"
-            @label="npn_critique_reply.modal.edit_in_composer"
-            @title="npn_critique_reply.modal.edit_in_composer_title"
+            class="btn-primary npn-critique-reply-modal__post"
+            @action={{this.postCritique}}
+            @icon="reply"
+            @label={{this.postButtonLabel}}
+            @disabled={{this.isPosting}}
+            @isLoading={{this.isPosting}}
+          />
+          <DButton
+            class="npn-critique-reply-modal__back-to-edit"
+            @action={{this.exitPreview}}
+            @icon="arrow-left"
+            @label="npn_critique_reply.modal.preview_back_to_edit"
             @disabled={{this.isPosting}}
           />
+        {{else}}
+          <DButton
+            class="btn-primary npn-critique-reply-modal__preview"
+            @action={{this.enterPreview}}
+            @icon="eye"
+            @label={{this.previewButtonLabel}}
+            @title={{unless
+              this.canPreview
+              "npn_critique_reply.modal.preview_critique_disabled_title"
+            }}
+            @disabled={{this.previewBuilding}}
+            @isLoading={{this.previewBuilding}}
+          />
+        {{/if}}
+        {{! Secondary action only applies to the new-critique flow.
+            Edit mode posts straight back to the same reply, so the
+            "transfer to composer" escape hatch has no analogue. Hidden
+            in preview state so the footer is just Post / Back. }}
+        {{#unless this.isEditing}}
+          {{#unless this.previewMode}}
+            <DButton
+              class="npn-critique-reply-modal__edit-composer"
+              @action={{this.editInComposer}}
+              @icon="far-pen-to-square"
+              @label="npn_critique_reply.modal.edit_in_composer"
+              @title="npn_critique_reply.modal.edit_in_composer_title"
+              @disabled={{this.isPosting}}
+            />
+          {{/unless}}
         {{/unless}}
 
         {{! Server-side draft status + Discard action. Quiet — sits in

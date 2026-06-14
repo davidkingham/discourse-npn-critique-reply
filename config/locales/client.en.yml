@@ -133,8 +133,8 @@ en:
         # editable in the standard composer, so the stronger variant
         # also nudges the user to preview first.
         edit_in_composer_confirm_title: "Switch to standard composer?"
-        edit_in_composer_confirm_message_text_only: "Your critique text will open in the standard Discourse composer. Visual workspace tools and preview aren't available there."
-        edit_in_composer_confirm_message_with_visuals: "Your written critique will open in the standard composer. Visual notes and processing examples aren't editable there. Preview your critique first if you want to check the final layout."
+        edit_in_composer_confirm_message_text_only: "Your critique text will open in the standard Discourse composer. Visual workspace tools and preview aren't available there. Your workspace draft is kept — you can return any time."
+        edit_in_composer_confirm_message_with_visuals: "Your written critique will open in the standard composer. Visual notes and processing examples aren't editable there. Your workspace draft is kept — return to the workspace to finish them, or preview first to check the final layout."
         edit_in_composer_confirm_continue: "Use Standard Composer"
         # Preview-Critique step. The primary footer button now opens an
         # in-modal preview of the composed reply rather than posting
