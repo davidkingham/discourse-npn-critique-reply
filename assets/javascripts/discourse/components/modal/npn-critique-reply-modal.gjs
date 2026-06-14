@@ -5039,9 +5039,34 @@ export default class NpnCritiqueReplyModal extends Component {
   // minimized) or saved as a server-side draft — we ask append / replace
   // / cancel rather than silently overwrite the user's earlier work.
 
+  // The standard-composer escape hatch. Beta feedback: jumping into the
+  // composer without warning made it unclear that visual workspace
+  // tools / preview don't follow along, and that visual notes already
+  // marked up may not be re-editable there. Confirm before the hand-off
+  // — strongly when visual annotations or a processing example exist,
+  // calmly when the workspace only has written text. Empty workspaces
+  // skip the confirmation (the action is just "open the composer").
   @action
   async editInComposer() {
-    return this._doEditInComposer({ skipVisualNotes: false });
+    const hasContent =
+      this.hasUnsavedText ||
+      this.hasVisualAnnotations ||
+      this.hasProcessingExample;
+    if (!hasContent) {
+      return this._doEditInComposer({ skipVisualNotes: false });
+    }
+    const hasVisuals =
+      this.hasVisualAnnotations || this.hasProcessingExample;
+    const messageKey = hasVisuals
+      ? "npn_critique_reply.modal.edit_in_composer_confirm_message_with_visuals"
+      : "npn_critique_reply.modal.edit_in_composer_confirm_message_text_only";
+    this.dialog.confirm({
+      title: i18n("npn_critique_reply.modal.edit_in_composer_confirm_title"),
+      message: i18n(messageKey),
+      confirmButtonLabel:
+        "npn_critique_reply.modal.edit_in_composer_confirm_continue",
+      didConfirm: () => this._doEditInComposer({ skipVisualNotes: false }),
+    });
   }
 
   @action
@@ -6397,6 +6422,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       "npn_critique_reply.visual_notes.done"
                       "npn_critique_reply.visual_notes.numbered_notes"
                     }}
+                    @title="npn_critique_reply.visual_notes.numbered_notes_title"
                     @disabled={{this.isPosting}}
                   />
                   <DButton
@@ -6408,6 +6434,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       "npn_critique_reply.visual_notes.crop_done"
                       "npn_critique_reply.visual_notes.crop_suggestion"
                     }}
+                    @title="npn_critique_reply.visual_notes.crop_suggestion_title"
                     @disabled={{this.isPosting}}
                   />
                   <DButton
@@ -6419,6 +6446,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       "npn_critique_reply.visual_notes.eye_path_done"
                       "npn_critique_reply.visual_notes.eye_path"
                     }}
+                    @title="npn_critique_reply.visual_notes.eye_path_title"
                     @disabled={{this.isPosting}}
                   />
                   {{! Unified Area tool. Internally still routes
@@ -7738,6 +7766,7 @@ export default class NpnCritiqueReplyModal extends Component {
             @action={{this.editInComposer}}
             @icon="far-pen-to-square"
             @label="npn_critique_reply.modal.edit_in_composer"
+            @title="npn_critique_reply.modal.edit_in_composer_title"
             @disabled={{this.isPosting}}
           />
         {{/unless}}

@@ -101,7 +101,7 @@ en:
         optional_visual_notes_heading: "Optional Visual Notes"
         optional_visual_notes_helper: "Add marks only when they help clarify your critique."
         optional_processing_example_heading: "Optional Processing Example"
-        optional_processing_example_helper: "Download the reference image if you want to demonstrate a processing idea."
+        optional_processing_example_helper: "Upload an edited example only when it helps demonstrate a possible direction."
         image_alt: "Image being critiqued"
         image_alt_with_title: "Image being critiqued: %{title}"
         image_alt_versioned: "%{label} image being critiqued"
@@ -119,7 +119,35 @@ en:
         update_critique: "Update critique"
         updating: "Updating…"
         critique_updated: "Critique updated."
-        edit_in_composer: "Edit in Composer"
+        # The standard-composer escape hatch. Renamed from "Edit in
+        # Composer" → "Use Standard Composer" so the action reads as
+        # "leave the workspace and switch to the normal Discourse
+        # composer" rather than "open yet another editor". A short
+        # fallback label is available for tight layouts.
+        edit_in_composer: "Use Standard Composer"
+        edit_in_composer_short: "Standard Composer"
+        edit_in_composer_title: "Move this reply to the standard Discourse composer"
+        # Transition confirmation shown when the user clicks "Use
+        # Standard Composer". Copy varies depending on whether visual
+        # notes / processing examples exist — those workflows aren't
+        # editable in the standard composer, so the stronger variant
+        # also nudges the user to preview first.
+        edit_in_composer_confirm_title: "Switch to standard composer?"
+        edit_in_composer_confirm_message_text_only: "Your critique text will open in the standard Discourse composer. Visual workspace tools and preview aren't available there."
+        edit_in_composer_confirm_message_with_visuals: "Your written critique will open in the standard composer. Visual notes and processing examples aren't editable there. Preview your critique first if you want to check the final layout."
+        edit_in_composer_confirm_continue: "Use Standard Composer"
+        # Preview-Critique step. The primary footer button now opens an
+        # in-modal preview of the composed reply rather than posting
+        # directly; Post Critique fires only from the preview's footer.
+        preview_critique: "Preview Critique"
+        preview_critique_disabled_title: "Add critique text, visual notes, or a processing example before previewing."
+        preview_header_title: "Preview Critique"
+        preview_header_subtitle: "Review how your critique will appear before posting."
+        preview_back_to_edit: "Back to Edit"
+        preview_section_visual_notes: "Visual Notes"
+        preview_section_processing_example: "Processing Example"
+        preview_section_critique: "Critique"
+        preview_empty_text: "No written critique yet."
         cancel: "Cancel"
         critique_posted: "Critique posted."
         critique_posted_with_notes: "Critique posted with visual notes."
@@ -337,16 +365,22 @@ en:
         # appears in tooltips / a11y labels now). Internal schema kind
         # stays `pin`.
         numbered_notes: "Notes"
+        numbered_notes_title: "Place numbered notes on specific parts of the image"
         done: "Done with notes"
         clear: "Clear notes"
-        hint: "Click the image to add numbered visual notes."
+        # Hint copy intentionally describes WHAT each tool is for, not
+        # only HOW to use it — beta testers reported the tools weren't
+        # self-explanatory. Keep the tone calm and optional; the
+        # workspace shouldn't read as a tutorial wall.
+        hint: "Place numbered notes on specific parts of the image."
         pin_label: "Visual note %{number}"
         remove_note: "Remove note %{number}"
         # Crop suggestion. Toolbar label shortened to "Crop"; tooltip
         # keeps the descriptive form.
         crop_suggestion: "Crop"
+        crop_suggestion_title: "Suggest a crop visually — the photographer's image isn't changed"
         crop_done: "Done with crop"
-        crop_hint: "Drag to suggest a crop."
+        crop_hint: "Suggest a crop visually — the photographer's image isn't changed."
         crop_present_hint: "The full image will be posted with this crop overlay."
         crop_clear: "Clear crop"
         crop_remove: "Remove crop"
@@ -374,13 +408,14 @@ en:
         crop_ratio_free: "Free"
         # Eye path / Visual Flow tool
         eye_path: "Eye path"
+        eye_path_title: "Show how your eye moves through the image"
         eye_path_done: "Done with eye path"
         # Generic hint kept for backward compat with any cached
         # client copies; the active surface uses the mode-specific
         # variants below.
-        eye_path_hint: "Click the image in the order your eye moves through it."
-        eye_path_hint_stroke: "Draw the path your eye follows through the image."
-        eye_path_hint_points: "Click the main stops in the order your eye notices them."
+        eye_path_hint: "Show how your eye moves through the image."
+        eye_path_hint_stroke: "Drag along the image to draw the flow of your eye movement."
+        eye_path_hint_points: "Click the main stops in the order your eye visits them."
         # Stroke / Points sub-toggle copy. Default mode is "stroke"
         # — the long-standing drag-to-trace flowing line. "Points"
         # is the click-to-add ordered stops variant.
@@ -431,9 +466,9 @@ en:
         # annotations, drafts, exports, and posts keep working without
         # a migration. Only the user-facing copy changes.
         area_note: "Area"
-        area_note_title: "Area note — mark an area you want to discuss"
+        area_note_title: "Mark a region you want to discuss"
         area_note_done: "Done with area"
-        area_note_hint: "Drag on the image to mark an area you want to discuss."
+        area_note_hint: "Mark a region you want to discuss. Use an oval, or draw the area's outline."
         area_note_remove: "Remove selected"
         area_note_clear: "Clear area notes"
         area_note_a11y_label: "Area %{label}"
@@ -484,9 +519,9 @@ en:
         # Distinct from Eye Path (curve through 2+ points) and from
         # Attention Pull (bounded area with an A<N> label).
         direction_arrow: "Arrow"
-        direction_arrow_title: "Draw a one-way arrow showing direction or visual pull"
+        direction_arrow_title: "Point toward a detail or direction you want to discuss"
         direction_arrow_done: "Done with arrow"
-        direction_arrow_hint: "Drag from start to end to mark direction or visual pull."
+        direction_arrow_hint: "Point toward a detail or direction you want to discuss."
         direction_arrow_remove: "Remove selected"
         direction_arrow_clear: "Clear arrows"
         direction_arrow_a11y_label: "Arrow %{label}"
@@ -497,9 +532,9 @@ en:
         # Relationship Arrow — two-way arrow for "these areas relate
         # / echo / balance / compete with each other."
         relationship_arrow: "Relationship"
-        relationship_arrow_title: "Draw a two-way arrow showing a relationship between areas"
+        relationship_arrow_title: "Show a visual connection between two parts of the image"
         relationship_arrow_done: "Done with relationship"
-        relationship_arrow_hint: "Drag between two areas to mark a relationship, echo, or tension."
+        relationship_arrow_hint: "Show a visual connection between two parts of the image."
         relationship_arrow_remove: "Remove selected"
         relationship_arrow_clear: "Clear relationships"
         relationship_arrow_a11y_label: "Relationship %{label}"
