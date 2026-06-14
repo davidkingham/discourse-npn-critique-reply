@@ -293,12 +293,17 @@
     color: var(--primary);
   }
 
+  // Match the size the cooked post will actually render at — Discourse
+  // inline images sit around a 400px-wide thumbnail by default rather
+  // than spanning the column. Tester feedback: the preview previously
+  // showed the image at nearly the full card width, which was much
+  // larger than the eventual post and made the preview misleading.
   &__preview-image {
-    max-width: 100%;
-    max-height: 55vh;
+    max-width: min(100%, 420px);
+    max-height: 380px;
     width: auto;
     height: auto;
-    border-radius: 6px;
+    border-radius: 4px;
     border: 1px solid var(--primary-low);
     background: var(--primary-very-low);
     object-fit: contain;
