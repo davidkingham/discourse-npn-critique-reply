@@ -215,11 +215,12 @@
     background: var(--primary-very-low);
   }
 
-  // Centered card. max-width caps the readable line length to ~62em
-  // (typical post-column treatment) so the right edge isn't a wall of
-  // whitespace; margin: 0 auto centers it. The card itself is the
-  // page-color background with a soft border + shadow so it lifts
-  // off the tinted body behind it.
+  // Centered card. max-width matches the actual cooked-post column
+  // width (Discourse's default `.post-stream` column caps inline
+  // content around 760px), so the preview's visible width is the
+  // same as what the user will see after they post. margin: 0 auto
+  // centers it. The card itself is the page-color background with a
+  // soft border + shadow so it lifts off the tinted body behind it.
   &__preview {
     display: flex;
     flex-direction: column;
@@ -227,7 +228,7 @@
     margin: 0.5em auto;
     padding: 1.5em 1.75em 1.75em;
     width: 100%;
-    max-width: 62em;
+    max-width: 760px;
     background: var(--secondary);
     border: 1px solid var(--primary-low);
     border-radius: 8px;
