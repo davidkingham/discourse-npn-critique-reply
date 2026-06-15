@@ -345,6 +345,28 @@ en:
       visual_notes:
         # Toolbar group + numbered-notes (pins)
         toolbar_label: "Visual annotation tools"
+        # Single contextual help line rendered below the visual tools
+        # toolbar (and any active sub-tool controls). Replaces the
+        # per-mode inline hints that used to scatter through the
+        # secondary toolbar — beta feedback was that the help should be
+        # ONE consistent place that updates when the user selects a
+        # tool or sub-mode.
+        tools_help:
+          default: "Visual notes are optional. Select a tool to point out something specific."
+          notes: "Place numbered notes on specific parts of the image."
+          crop: "Suggest a crop visually. This does not change the photographer's image."
+          crop_free: "Draw a crop suggestion freely."
+          crop_named_ratio: "Draw a %{ratio} crop suggestion."
+          crop_aspect_ratio: "Draw a crop suggestion using this aspect ratio."
+          eye_path: "Show how your eye moves through the image."
+          eye_path_stroke: "Draw the flow of your eye movement."
+          eye_path_points: "Click the main stops in the order your eye visits them."
+          area: "Mark a region you want to discuss."
+          area_oval: "Drag an oval around the area you want to discuss."
+          area_draw: "Draw a custom area around the part of the image you want to discuss."
+          arrow: "Point toward a detail or direction you want to discuss."
+          relationship: "Show a visual connection between two parts of the image."
+          retrace: "Draw a new outline to replace this shape."
         # Area-shape sub-toggle. Shown only while the Area tool is
         # active. "Draw Area" (default) is the closed-polyline variant;
         # "Oval" is the geometric fallback.

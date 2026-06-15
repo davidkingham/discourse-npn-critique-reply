@@ -2396,18 +2396,32 @@
   }
 }
 
-// Empty-state hint shown in the secondary toolbar before the user
-// creates the first annotation of the active tool. Reads as a
-// quiet caption (muted, italic) so it doesn't compete with the
-// action buttons that replace it once any annotation exists.
-.npn-critique-reply-modal__tool-hint {
+// Unified contextual help line for the visual tools. Lives below
+// the secondary toolbar and updates as the user selects a tool or
+// sub-mode. Subtle by design — muted color, no border, no warning
+// affordance — so it reads as quiet guidance rather than as an
+// error or validation message. Works on light + dark themes because
+// it pulls from --primary-medium / --primary-very-low.
+.npn-visual-tools-help {
+  margin: 0.4em 0 0;
+  padding: 0.4em 0.65em;
+  background: var(--primary-very-low);
+  border-radius: 4px;
   color: var(--primary-medium);
-  font-style: italic;
-  margin: 0;
-  // Slight vertical padding so the height matches the surrounding
-  // button row and the secondary toolbar's reserved min-height
-  // isn't visibly taller than the hint text.
-  padding: 0.25em 0;
+  font-size: var(--font-down-1);
+  line-height: 1.4;
+
+  &__text {
+    display: block;
+  }
+
+  @media (max-width: 720px) {
+    // On phones the help line is meaningful but space is tight —
+    // drop the background tint so it reads as inline caption text
+    // rather than a panel.
+    background: transparent;
+    padding: 0.25em 0;
+  }
 }
 
 .npn-critique-reply-modal__crop-ratio-label {

@@ -2791,6 +2791,66 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.visualMode === "relationship_arrow";
   }
 
+  // Unified contextual help line for the visual tools. Replaces the
+  // per-mode inline hints that used to sit inside each tool's
+  // secondary-toolbar branch. Beta feedback: testers wanted ONE
+  // consistent place that explains what the current tool / sub-tool
+  // does, updating as they pick things. Order matters here — sub-tool
+  // states are checked before the parent tool so Eye Path / Area /
+  // Crop sub-mode copy takes precedence over the generic tool copy.
+  get activeToolHelpText() {
+    // Retrace is a transient sub-action; same hint applies whether
+    // it's an attention pull or a strong area being retraced.
+    if (this.retracingAttentionPullId || this.retracingStrongAreaId) {
+      return i18n("npn_critique_reply.visual_notes.tools_help.retrace");
+    }
+    if (this.eyePathMode) {
+      if (this.eyePathInteractionMode === "points") {
+        return i18n(
+          "npn_critique_reply.visual_notes.tools_help.eye_path_points"
+        );
+      }
+      if (this.eyePathInteractionMode === "stroke") {
+        return i18n(
+          "npn_critique_reply.visual_notes.tools_help.eye_path_stroke"
+        );
+      }
+      return i18n("npn_critique_reply.visual_notes.tools_help.eye_path");
+    }
+    if (this.attentionPullMode || this.strongAreaMode) {
+      if (this.areaShapeMode === "oval") {
+        return i18n("npn_critique_reply.visual_notes.tools_help.area_oval");
+      }
+      if (this.areaShapeMode === "path") {
+        return i18n("npn_critique_reply.visual_notes.tools_help.area_draw");
+      }
+      return i18n("npn_critique_reply.visual_notes.tools_help.area");
+    }
+    if (this.cropMode) {
+      const ratio = this.cropAspectRatio;
+      if (!ratio || ratio === "free") {
+        return i18n("npn_critique_reply.visual_notes.tools_help.crop_free");
+      }
+      // Named ratio (e.g. 4:5) — drop the ratio name into the copy so
+      // the help line tells the user exactly what they're about to
+      // draw.
+      return i18n(
+        "npn_critique_reply.visual_notes.tools_help.crop_named_ratio",
+        { ratio }
+      );
+    }
+    if (this.noteMode) {
+      return i18n("npn_critique_reply.visual_notes.tools_help.notes");
+    }
+    if (this.directionArrowMode) {
+      return i18n("npn_critique_reply.visual_notes.tools_help.arrow");
+    }
+    if (this.relationshipArrowMode) {
+      return i18n("npn_critique_reply.visual_notes.tools_help.relationship");
+    }
+    return i18n("npn_critique_reply.visual_notes.tools_help.default");
+  }
+
   @action
   toggleNoteMode() {
     this._setVisualMode(this.noteMode ? null : "numbered_notes");
@@ -6823,11 +6883,6 @@ export default class NpnCritiqueReplyModal extends Component {
                           @label="npn_critique_reply.visual_notes.clear"
                           @disabled={{this.isPosting}}
                         />
-                      {{else}}
-                        <p
-                          class="npn-critique-reply-modal__tool-hint"
-                          aria-live="polite"
-                        >{{i18n "npn_critique_reply.visual_notes.hint"}}</p>
                       {{/if}}
                     {{/if}}
 
@@ -6985,17 +7040,6 @@ export default class NpnCritiqueReplyModal extends Component {
                             @disabled={{this.isPosting}}
                           />
                         {{/if}}
-                      {{else}}
-                        <p
-                          class="npn-critique-reply-modal__tool-hint"
-                          aria-live="polite"
-                        >{{i18n
-                            (if
-                              (eq this.eyePathInteractionMode "points")
-                              "npn_critique_reply.visual_notes.eye_path_hint_points"
-                              "npn_critique_reply.visual_notes.eye_path_hint_stroke"
-                            )
-                          }}</p>
                       {{/if}}
                     {{/if}}
 
@@ -7079,21 +7123,6 @@ export default class NpnCritiqueReplyModal extends Component {
                           @label="npn_critique_reply.visual_notes.area_note_clear"
                           @disabled={{this.isPosting}}
                         />
-                      {{else}}
-                        <p
-                          class="npn-critique-reply-modal__tool-hint"
-                          aria-live="polite"
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.area_note_hint"
-                          }}</p>
-                      {{/if}}
-                      {{#if this.retracingAttentionPullId}}
-                        <p
-                          class="npn-critique-reply-modal__tool-hint"
-                          aria-live="polite"
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.retrace.hint"
-                          }}</p>
                       {{/if}}
                     {{/if}}
 
@@ -7129,21 +7158,6 @@ export default class NpnCritiqueReplyModal extends Component {
                           @label="npn_critique_reply.visual_notes.strong_area_clear"
                           @disabled={{this.isPosting}}
                         />
-                      {{else}}
-                        <p
-                          class="npn-critique-reply-modal__tool-hint"
-                          aria-live="polite"
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.strong_area_hint"
-                          }}</p>
-                      {{/if}}
-                      {{#if this.retracingStrongAreaId}}
-                        <p
-                          class="npn-critique-reply-modal__tool-hint"
-                          aria-live="polite"
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.retrace.hint"
-                          }}</p>
                       {{/if}}
                     {{/if}}
 
@@ -7165,13 +7179,6 @@ export default class NpnCritiqueReplyModal extends Component {
                           @label="npn_critique_reply.visual_notes.direction_arrow_clear"
                           @disabled={{this.isPosting}}
                         />
-                      {{else}}
-                        <p
-                          class="npn-critique-reply-modal__tool-hint"
-                          aria-live="polite"
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.direction_arrow_hint"
-                          }}</p>
                       {{/if}}
                     {{/if}}
 
@@ -7193,16 +7200,26 @@ export default class NpnCritiqueReplyModal extends Component {
                           @label="npn_critique_reply.visual_notes.relationship_arrow_clear"
                           @disabled={{this.isPosting}}
                         />
-                      {{else}}
-                        <p
-                          class="npn-critique-reply-modal__tool-hint"
-                          aria-live="polite"
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.relationship_arrow_hint"
-                          }}</p>
                       {{/if}}
                     {{/if}}
                 </div>
+
+                {{! Unified contextual help line. Lives just below the
+                    secondary toolbar so it always reads as "what the
+                    selected tool / sub-tool will do here." Updates
+                    automatically as the user picks a tool, switches
+                    sub-mode, or kicks off a retrace. aria-live=polite
+                    so screen-reader users hear the change without it
+                    interrupting whatever they were focused on. }}
+                <p
+                  class="npn-visual-tools-help"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span
+                    class="npn-visual-tools-help__text"
+                  >{{this.activeToolHelpText}}</span>
+                </p>
                   </div>
                 </div>
                 {{! Closes the else branch above: toolbar + secondary
