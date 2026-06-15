@@ -8177,21 +8177,15 @@ export default class NpnCritiqueReplyModal extends Component {
             @isLoading={{this.previewBuilding}}
           />
         {{/if}}
-        {{! Standard-composer hand-off is intentionally muted — most
-            users won't need it, so render as a flat text-link rather
-            than a button. Hidden in preview state and in edit-existing-
-            post mode (existing replies don't have the escape hatch). }}
-        {{#unless this.isEditing}}
-          {{#unless this.previewMode}}
-            <DButton
-              class="btn-flat npn-critique-reply-modal__edit-composer"
-              @action={{this.editInComposer}}
-              @label="npn_critique_reply.modal.edit_in_composer"
-              @title="npn_critique_reply.modal.edit_in_composer_title"
-              @disabled={{this.isPosting}}
-            />
-          {{/unless}}
-        {{/unless}}
+        {{! The standard-composer hand-off used to live here. Beta
+            feedback: even rendered as a muted text link, "Use Standard
+            Composer" added confusion about whether the workspace was
+            optional or how drafts moved between the two surfaces.
+            Removed. The underlying editInComposer / _launchComposer
+            actions stay in place because the visual-notes failure
+            recovery path ("Continue without visual notes") still
+            uses _doEditInComposer to bail to the composer when an
+            upload fails. }}
 
         {{! Server-side draft status + Discard action. Quiet — sits in
             the middle of the footer alongside the primary buttons. }}
