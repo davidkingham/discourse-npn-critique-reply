@@ -6975,6 +6975,9 @@ export default class NpnCritiqueReplyModal extends Component {
                             "true"
                             "false"
                           }}
+                          title={{i18n
+                            "npn_critique_reply.visual_notes.eye_path_mode.stroke_title"
+                          }}
                           {{on
                             "click"
                             (fn this.setEyePathInteractionMode "stroke")
@@ -6995,6 +6998,9 @@ export default class NpnCritiqueReplyModal extends Component {
                             (eq this.eyePathInteractionMode "points")
                             "true"
                             "false"
+                          }}
+                          title={{i18n
+                            "npn_critique_reply.visual_notes.eye_path_mode.points_title"
                           }}
                           {{on
                             "click"
@@ -7065,6 +7071,9 @@ export default class NpnCritiqueReplyModal extends Component {
                             "true"
                             "false"
                           }}
+                          title={{i18n
+                            "npn_critique_reply.visual_notes.area_shape.draw_area_title"
+                          }}
                           {{on "click" (fn this.setAreaShapeMode "path")}}
                         >
                           {{i18n
@@ -7079,6 +7088,9 @@ export default class NpnCritiqueReplyModal extends Component {
                             (eq this.areaShapeMode "oval")
                             "true"
                             "false"
+                          }}
+                          title={{i18n
+                            "npn_critique_reply.visual_notes.area_shape.oval_title"
                           }}
                           {{on "click" (fn this.setAreaShapeMode "oval")}}
                         >
