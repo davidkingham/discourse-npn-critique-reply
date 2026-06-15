@@ -20,18 +20,22 @@ import {
 // shadow* properties applied to the corresponding Konva nodes in
 // `npn-critique-reply-konva-stage.js` so editor and export match.
 //
-// `withHaloShadow(ctx, fn)` sets the shadow, runs the draw, and
-// clears it — keeps the per-call try/finally noise out of every
+// `withHaloShadow(ctx, fn, blur?)` sets the shadow, runs the draw,
+// and clears it — keeps the per-call try/finally noise out of every
 // caller and prevents shadow state from leaking into subsequent
-// strokes/fills.
+// strokes/fills. `blur` is an optional override; Eye Path and
+// Relationship pass EXPORT_HALO_SHADOW_BLUR_BOOSTED because those
+// two stroke kinds tested as the weakest on pale backgrounds in
+// Phase-1.
 const EXPORT_HALO_SHADOW_BLUR = 4;
-const EXPORT_BADGE_SHADOW_BLUR = 2;
+const EXPORT_HALO_SHADOW_BLUR_BOOSTED = 6;
+const EXPORT_BADGE_SHADOW_BLUR = 3;
 
-function withHaloShadow(ctx, fn) {
+function withHaloShadow(ctx, fn, blur = EXPORT_HALO_SHADOW_BLUR) {
   const prevShadowColor = ctx.shadowColor;
   const prevShadowBlur = ctx.shadowBlur;
   ctx.shadowColor = ANNOTATION_HALO_SHADOW;
-  ctx.shadowBlur = EXPORT_HALO_SHADOW_BLUR;
+  ctx.shadowBlur = blur;
   try {
     fn();
   } finally {
@@ -183,12 +187,19 @@ export function buildVisualNotesCanvas({
   }
   if (Array.isArray(relationshipArrows)) {
     for (const arrow of relationshipArrows) {
+      // Phase-1 high-key testing flagged Relationship as the weakest
+      // mark on pale backgrounds. Three small adjustments mirror the
+      // editor: strokeWeight + baseOpacity nudged up (0.85 → 0.95,
+      // 0.8 → 0.88) so the dash holds its weight; haloShadowBoost
+      // routes the boosted blur to drawArrowOnCanvas's halo stroke;
+      // RELATIONSHIP_TAUPE itself is now a slightly darker neutral.
       drawArrowOnCanvas(ctx, arrow, targetWidth, targetHeight, {
         bothEnds: true,
         dashed: true,
         tertiary: RELATIONSHIP_TAUPE,
-        strokeWeight: 0.85,
-        baseOpacity: 0.8,
+        strokeWeight: 0.95,
+        baseOpacity: 0.88,
+        haloShadowBoost: true,
       });
     }
   }
@@ -810,14 +821,20 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
     // on. Used for both the halo and the main stroke so they
     // perfectly overlay. withHaloShadow gives the white halo a soft
     // dark outer edge so the path stays visible on snow / fog / over-
-    // exposed sky.
+    // exposed sky. Boosted blur matches the editor's eye-path halo —
+    // the pale glacial cyan tracks too close to high-key tones for
+    // the default blur to register cleanly.
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.globalAlpha = 0.9;
     ctx.strokeStyle = secondary;
     ctx.lineWidth = haloWidth;
     traceEyePath(ctx, points);
-    withHaloShadow(ctx, () => ctx.stroke());
+    withHaloShadow(
+      ctx,
+      () => ctx.stroke(),
+      EXPORT_HALO_SHADOW_BLUR_BOOSTED
+    );
 
     // Main tertiary line. Slim weight + 0.9 opacity so the photo
     // reads through and the path doesn't dominate the composition.
@@ -1043,8 +1060,15 @@ function drawArrowOnCanvas(
     tertiary = ANNOTATION_BLUE,
     strokeWeight = 1,
     baseOpacity = 0.9,
+    // When true, route the boosted halo-shadow blur (used by the
+    // Relationship arrow per the Phase-1 high-key tune-up). Direction
+    // arrows leave it false so their default blur stays subtle.
+    haloShadowBoost = false,
   }
 ) {
+  const haloBlur = haloShadowBoost
+    ? EXPORT_HALO_SHADOW_BLUR_BOOSTED
+    : EXPORT_HALO_SHADOW_BLUR;
   if (!arrow) {
     return;
   }
@@ -1077,14 +1101,15 @@ function drawArrowOnCanvas(
 
   // Halo first (under the visible stroke). Outer dark drop-shadow
   // matches the editor's shadow on the halo Line so the arrow reads
-  // on high-key images.
+  // on high-key images. `haloBlur` resolves the boosted blur for
+  // Relationship vs the default for Direction arrow.
   ctx.strokeStyle = ANNOTATION_HALO;
   ctx.lineWidth = haloWidth;
   ctx.globalAlpha = 0.9;
   ctx.beginPath();
   ctx.moveTo(lineStartX, lineStartY);
   ctx.lineTo(lineEndX, lineEndY);
-  withHaloShadow(ctx, () => ctx.stroke());
+  withHaloShadow(ctx, () => ctx.stroke(), haloBlur);
 
   // Visible stroke. Canvas's setLineDash is the dashed-stroke control;
   // restore [] for the arrowhead fill that follows.

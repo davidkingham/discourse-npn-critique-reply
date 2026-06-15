@@ -78,10 +78,14 @@ export const DIRECTION_ARROW_INDIGO = "#7478ad";
 // relational connector — a soft tie between two areas — rather
 // than as movement or attention. Warm-neutral on purpose so the
 // line never competes for attention with the actual subject of
-// the photograph; lightened from the previous deeper taupe so the
-// marker sits comfortably in the "quieter than Arrow" hierarchy
-// slot.
-export const RELATIONSHIP_TAUPE = "#bdb49f";
+// the photograph; sits comfortably in the "quieter than Arrow"
+// hierarchy slot.
+//
+// Darkened from the previous "#bdb49f" after the Phase-1 halo pass
+// found relationship marks were still the weakest on pale / high-
+// key backgrounds. Still warm-neutral, just a couple of steps
+// darker so the dashed stroke holds its own against sky / snow.
+export const RELATIONSHIP_TAUPE = "#a89c84";
 
 // Shared white halo that wraps strokes for contrast against dark
 // imagery. Plain white reads as a clean cue without picking up the
@@ -95,7 +99,12 @@ export const ANNOTATION_HALO = "#ffffff";
 // dark imagery (where the white halo and colored stroke are doing
 // all the work). Both the live Konva editor and the exported JPEG
 // apply this shadow to every halo, so editor and export match.
-export const ANNOTATION_HALO_SHADOW = "rgba(0, 0, 0, 0.32)";
+//
+// Bumped from 0.32 → 0.4 after Phase-1 testing on a high-key image —
+// the 0.32 edge was still a little fragile against pale skies. 0.4
+// adds a touch more separation without crossing into "heavy black
+// outline" territory.
+export const ANNOTATION_HALO_SHADOW = "rgba(0, 0, 0, 0.4)";
 
 // Dim overlay color for the area outside an active crop. Slightly
 // less opaque than full 0.5 so the surrounding image remains

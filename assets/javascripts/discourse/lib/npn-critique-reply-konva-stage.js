@@ -23,12 +23,19 @@ import {
 // canvas export path. Kept here so the two paths can't drift.
 const ANNOTATION_HALO_SHADOW_BLUR = 4;
 const ANNOTATION_HALO_SHADOW_OPACITY = 1;
-// Smaller, calmer drop shadow used by badge backgrounds (Konva.Tag).
-// Badges are smaller than line halos so a 2px blur is enough to give
-// the box an outer dark edge on high-key backgrounds; full opacity
-// would darken the surrounding image too much.
-const ANNOTATION_BADGE_SHADOW_BLUR = 2;
-const ANNOTATION_BADGE_SHADOW_OPACITY = 0.6;
+// Slightly heavier blur used by the two stroke kinds that tested as
+// the weakest on pale backgrounds in Phase-1: Eye Path (pale
+// glacial cyan that runs close to high-key sky tones) and
+// Relationship (dashed line in warm taupe). Same color token, same
+// opacity — just a little more blur extent so the soft dark edge
+// has more room to register against pale imagery.
+const ANNOTATION_HALO_SHADOW_BLUR_BOOSTED = 6;
+// Drop shadow used by badge backgrounds (Konva.Tag). Bumped from
+// blur 2 / opacity 0.6 → blur 3 / opacity 0.75 after Phase-1
+// testing — labels needed a touch more grounding on pale image
+// areas so the colored pill doesn't visually float.
+const ANNOTATION_BADGE_SHADOW_BLUR = 3;
+const ANNOTATION_BADGE_SHADOW_OPACITY = 0.75;
 
 // Konva-backed annotation stage.
 // =================================================================
@@ -2105,7 +2112,10 @@ export async function createAnnotationStage({
 
         // White halo for readability over dark image areas, plus a
         // soft dark outer edge so the path also reads on high-key
-        // backgrounds (snow / fog / overexposed sky).
+        // backgrounds (snow / fog / overexposed sky). Eye Path uses
+        // the boosted blur — the pale glacial cyan stroke is the
+        // closest of the family to high-key tones and benefits from
+        // a touch more soft separation.
         decorationsGroup.add(
           new Konva.Line({
             points: flat,
@@ -2119,7 +2129,7 @@ export async function createAnnotationStage({
             tension: EYE_PATH_SMOOTH ? EYE_PATH_SMOOTH_TENSION : 0,
             listening: false,
             shadowColor: ANNOTATION_HALO_SHADOW,
-            shadowBlur: ANNOTATION_HALO_SHADOW_BLUR,
+            shadowBlur: ANNOTATION_HALO_SHADOW_BLUR_BOOSTED,
             shadowOpacity: ANNOTATION_HALO_SHADOW_OPACITY,
             shadowForStrokeEnabled: true,
           })
@@ -2530,6 +2540,11 @@ export async function createAnnotationStage({
     tertiary = ANNOTATION_BLUE,
     strokeWeight = 1,
     baseOpacity = 0.9,
+    // Per-kind override for the halo's drop-shadow blur. Defaults
+    // to the standard ANNOTATION_HALO_SHADOW_BLUR; Relationship
+    // passes the boosted value so its quieter dashed stroke still
+    // gets enough soft separation on pale backgrounds.
+    haloShadowBlur = ANNOTATION_HALO_SHADOW_BLUR,
   }) {
     const shortEdge = Math.min(sw, sh);
     const secondary = ANNOTATION_HALO;
@@ -2601,7 +2616,7 @@ export async function createAnnotationStage({
           opacity: 0.9,
           listening: false,
           shadowColor: ANNOTATION_HALO_SHADOW,
-          shadowBlur: ANNOTATION_HALO_SHADOW_BLUR,
+          shadowBlur: haloShadowBlur,
           shadowOpacity: ANNOTATION_HALO_SHADOW_OPACITY,
           shadowForStrokeEnabled: true,
         })
@@ -2934,12 +2949,19 @@ export async function createAnnotationStage({
         // direction-arrow indigo. Reads as a relational tie rather
         // than movement.
         tertiary: RELATIONSHIP_TAUPE,
-        // Slightly thinner stroke (0.85×) and lower base opacity so
+        // Slightly thinner stroke and lower base opacity so
         // relationship arrows read quieter than direction arrows
         // (per the hierarchy spec — "readable but quieter than
-        // Direction Arrow").
-        strokeWeight: 0.85,
-        baseOpacity: 0.8,
+        // Direction Arrow"). After Phase-1 high-key testing the
+        // marks were the weakest of the family on pale skies, so
+        // strokeWeight + baseOpacity nudged up modestly (0.85 → 0.95,
+        // 0.8 → 0.88) and we route the boosted halo blur to give
+        // the dashed line a touch more soft separation. Combined
+        // with the darker RELATIONSHIP_TAUPE the result still reads
+        // as the quiet relational tie, just no longer washes out.
+        strokeWeight: 0.95,
+        baseOpacity: 0.88,
+        haloShadowBlur: ANNOTATION_HALO_SHADOW_BLUR_BOOSTED,
       });
     }
     annotationsLayer.batchDraw();
