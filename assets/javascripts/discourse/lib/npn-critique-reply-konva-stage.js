@@ -3,6 +3,7 @@ import loadScript from "discourse/lib/load-script";
 import {
   ANNOTATION_BLUE,
   ANNOTATION_HALO,
+  ANNOTATION_HALO_SHADOW,
   AREA_FILL_OPACITY_SELECTED,
   AREA_FILL_OPACITY_UNSELECTED,
   ATTENTION_PULL_OCHRE,
@@ -14,6 +15,20 @@ import {
   RELATIONSHIP_TAUPE,
   STRONG_AREA_SAGE,
 } from "./npn-critique-reply-colors";
+
+// Outer-shadow geometry for halo lines. Tuned to add a soft 2-3px
+// dark edge on snow/fog images without becoming visible noise on
+// dark scenes. Drawn via Konva's shadow* + shadowForStrokeEnabled
+// in the editor, and via ctx.shadowColor / shadowBlur in the
+// canvas export path. Kept here so the two paths can't drift.
+const ANNOTATION_HALO_SHADOW_BLUR = 4;
+const ANNOTATION_HALO_SHADOW_OPACITY = 1;
+// Smaller, calmer drop shadow used by badge backgrounds (Konva.Tag).
+// Badges are smaller than line halos so a 2px blur is enough to give
+// the box an outer dark edge on high-key backgrounds; full opacity
+// would darken the surrounding image too much.
+const ANNOTATION_BADGE_SHADOW_BLUR = 2;
+const ANNOTATION_BADGE_SHADOW_OPACITY = 0.6;
 
 // Konva-backed annotation stage.
 // =================================================================
@@ -1039,6 +1054,14 @@ export async function createAnnotationStage({
       tension,
       opacity: 0.85,
       listening: false,
+      // Soft dark outer edge so the white halo still reads on
+      // high-key images (snow / fog / overexposed sky). Invisible
+      // on dark backgrounds — the white halo is doing the work
+      // there and the dark blur blends into the photograph.
+      shadowColor: ANNOTATION_HALO_SHADOW,
+      shadowBlur: ANNOTATION_HALO_SHADOW_BLUR,
+      shadowOpacity: ANNOTATION_HALO_SHADOW_OPACITY,
+      shadowForStrokeEnabled: true,
     });
     layer.add(halo);
 
@@ -1107,6 +1130,9 @@ export async function createAnnotationStage({
           stroke: haloColor,
           strokeWidth: 1.5,
           opacity: isSelected ? 1 : 0.95,
+          shadowColor: ANNOTATION_HALO_SHADOW,
+          shadowBlur: ANNOTATION_BADGE_SHADOW_BLUR,
+          shadowOpacity: ANNOTATION_BADGE_SHADOW_OPACITY,
         })
       );
       badge.add(
@@ -1227,6 +1253,10 @@ export async function createAnnotationStage({
         fillEnabled: false,
         opacity: 0.85,
         listening: false,
+        shadowColor: ANNOTATION_HALO_SHADOW,
+        shadowBlur: ANNOTATION_HALO_SHADOW_BLUR,
+        shadowOpacity: ANNOTATION_HALO_SHADOW_OPACITY,
+        shadowForStrokeEnabled: true,
       });
       attentionPullLayer.add(haloRef);
 
@@ -1327,6 +1357,9 @@ export async function createAnnotationStage({
             stroke: secondary,
             strokeWidth: 1.5,
             opacity: isSelected ? 1 : 0.95,
+            shadowColor: ANNOTATION_HALO_SHADOW,
+            shadowBlur: ANNOTATION_BADGE_SHADOW_BLUR,
+            shadowOpacity: ANNOTATION_BADGE_SHADOW_OPACITY,
           })
         );
         labelRef.add(
@@ -1550,6 +1583,10 @@ export async function createAnnotationStage({
         fillEnabled: false,
         opacity: 0.85,
         listening: false,
+        shadowColor: ANNOTATION_HALO_SHADOW,
+        shadowBlur: ANNOTATION_HALO_SHADOW_BLUR,
+        shadowOpacity: ANNOTATION_HALO_SHADOW_OPACITY,
+        shadowForStrokeEnabled: true,
       });
       strongAreaLayer.add(haloRef);
 
@@ -1642,6 +1679,9 @@ export async function createAnnotationStage({
             stroke: secondary,
             strokeWidth: 1.5,
             opacity: isSelected ? 1 : 0.95,
+            shadowColor: ANNOTATION_HALO_SHADOW,
+            shadowBlur: ANNOTATION_BADGE_SHADOW_BLUR,
+            shadowOpacity: ANNOTATION_BADGE_SHADOW_OPACITY,
           })
         );
         labelRef.add(
@@ -2063,7 +2103,9 @@ export async function createAnnotationStage({
         }
         hitGroup.add(hitLine);
 
-        // White halo for readability over dark image areas.
+        // White halo for readability over dark image areas, plus a
+        // soft dark outer edge so the path also reads on high-key
+        // backgrounds (snow / fog / overexposed sky).
         decorationsGroup.add(
           new Konva.Line({
             points: flat,
@@ -2076,6 +2118,10 @@ export async function createAnnotationStage({
             // Catmull-Rom curve through every point. 0 = straight.
             tension: EYE_PATH_SMOOTH ? EYE_PATH_SMOOTH_TENSION : 0,
             listening: false,
+            shadowColor: ANNOTATION_HALO_SHADOW,
+            shadowBlur: ANNOTATION_HALO_SHADOW_BLUR,
+            shadowOpacity: ANNOTATION_HALO_SHADOW_OPACITY,
+            shadowForStrokeEnabled: true,
           })
         );
         // Main tertiary line. Slim + slightly translucent so the
@@ -2123,7 +2169,9 @@ export async function createAnnotationStage({
         for (let i = 0; i <= lastNumbered; i++) {
           const wp = pts[i];
           // Halo + filled circle so the digit reads on light AND
-          // dark backgrounds.
+          // dark backgrounds. Halo carries the same soft dark drop-
+          // shadow as the path's line halo so the stop stays visible
+          // on high-key backgrounds.
           decorationsGroup.add(
             new Konva.Circle({
               x: wp.x,
@@ -2132,6 +2180,9 @@ export async function createAnnotationStage({
               fill: secondary,
               opacity: 0.92,
               listening: false,
+              shadowColor: ANNOTATION_HALO_SHADOW,
+              shadowBlur: ANNOTATION_BADGE_SHADOW_BLUR,
+              shadowOpacity: ANNOTATION_BADGE_SHADOW_OPACITY,
             })
           );
           decorationsGroup.add(
@@ -2267,6 +2318,9 @@ export async function createAnnotationStage({
               stroke: secondary,
               strokeWidth: 1,
               opacity: isSelected ? 1 : 0.7,
+              shadowColor: ANNOTATION_HALO_SHADOW,
+              shadowBlur: ANNOTATION_BADGE_SHADOW_BLUR,
+              shadowOpacity: ANNOTATION_BADGE_SHADOW_OPACITY,
             })
           );
           labelNode.add(
@@ -2534,6 +2588,9 @@ export async function createAnnotationStage({
       const lineEndY = live.y2 - uy * trim;
 
       // Halo first (sits behind the visible line for readability).
+      // Outer dark shadow on the halo keeps the arrow visible on
+      // high-key backgrounds where a pure white halo would
+      // disappear into the photograph.
       decorationsGroup.add(
         new Konva.Line({
           points: [lineStartX, lineStartY, lineEndX, lineEndY],
@@ -2543,6 +2600,10 @@ export async function createAnnotationStage({
           lineJoin: "round",
           opacity: 0.9,
           listening: false,
+          shadowColor: ANNOTATION_HALO_SHADOW,
+          shadowBlur: ANNOTATION_HALO_SHADOW_BLUR,
+          shadowOpacity: ANNOTATION_HALO_SHADOW_OPACITY,
+          shadowForStrokeEnabled: true,
         })
       );
       decorationsGroup.add(
@@ -2661,6 +2722,9 @@ export async function createAnnotationStage({
             stroke: secondary,
             strokeWidth: 1.5,
             opacity: isSelected ? 1 : 0.95,
+            shadowColor: ANNOTATION_HALO_SHADOW,
+            shadowBlur: ANNOTATION_BADGE_SHADOW_BLUR,
+            shadowOpacity: ANNOTATION_BADGE_SHADOW_OPACITY,
           })
         );
         labelNode.add(

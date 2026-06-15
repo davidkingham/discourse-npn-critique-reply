@@ -88,6 +88,15 @@ export const RELATIONSHIP_TAUPE = "#bdb49f";
 // theme's secondary tint.
 export const ANNOTATION_HALO = "#ffffff";
 
+// Subtle dark outer drop-shadow applied to the white halo. The white
+// halo alone is invisible on snow / fog / high-key images; a thin
+// dark blur radiating outward from the halo gives marks a soft dark
+// edge that reads on those backgrounds while staying invisible on
+// dark imagery (where the white halo and colored stroke are doing
+// all the work). Both the live Konva editor and the exported JPEG
+// apply this shadow to every halo, so editor and export match.
+export const ANNOTATION_HALO_SHADOW = "rgba(0, 0, 0, 0.32)";
+
 // Dim overlay color for the area outside an active crop. Slightly
 // less opaque than full 0.5 so the surrounding image remains
 // readable while still clearly de-emphasised.

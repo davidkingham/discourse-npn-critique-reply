@@ -2,6 +2,7 @@ import { ajax } from "discourse/lib/ajax";
 import {
   ANNOTATION_BLUE,
   ANNOTATION_HALO,
+  ANNOTATION_HALO_SHADOW,
   AREA_FILL_OPACITY_UNSELECTED,
   ATTENTION_PULL_OCHRE,
   CROP_DIM_FILL,
@@ -12,6 +13,45 @@ import {
   RELATIONSHIP_TAUPE,
   STRONG_AREA_SAGE,
 } from "./npn-critique-reply-colors";
+
+// Soft dark drop-shadow applied to every halo stroke + badge box so
+// marks stay readable on high-key images (snow / fog / overexposed
+// sky) without changing the look on dark imagery. Mirrors the
+// shadow* properties applied to the corresponding Konva nodes in
+// `npn-critique-reply-konva-stage.js` so editor and export match.
+//
+// `withHaloShadow(ctx, fn)` sets the shadow, runs the draw, and
+// clears it — keeps the per-call try/finally noise out of every
+// caller and prevents shadow state from leaking into subsequent
+// strokes/fills.
+const EXPORT_HALO_SHADOW_BLUR = 4;
+const EXPORT_BADGE_SHADOW_BLUR = 2;
+
+function withHaloShadow(ctx, fn) {
+  const prevShadowColor = ctx.shadowColor;
+  const prevShadowBlur = ctx.shadowBlur;
+  ctx.shadowColor = ANNOTATION_HALO_SHADOW;
+  ctx.shadowBlur = EXPORT_HALO_SHADOW_BLUR;
+  try {
+    fn();
+  } finally {
+    ctx.shadowColor = prevShadowColor;
+    ctx.shadowBlur = prevShadowBlur;
+  }
+}
+
+function withBadgeShadow(ctx, fn) {
+  const prevShadowColor = ctx.shadowColor;
+  const prevShadowBlur = ctx.shadowBlur;
+  ctx.shadowColor = ANNOTATION_HALO_SHADOW;
+  ctx.shadowBlur = EXPORT_BADGE_SHADOW_BLUR;
+  try {
+    fn();
+  } finally {
+    ctx.shadowColor = prevShadowColor;
+    ctx.shadowBlur = prevShadowBlur;
+  }
+}
 
 // Visual Notes export/upload helpers. Used by the Critique Helper modal
 // when the critic has placed pins and is about to Post Critique or Edit
@@ -276,14 +316,16 @@ function drawAreaPathOnCanvas(ctx, marker, width, height, style) {
     y: (p.yPct / 100) * height,
   }));
 
-  // Halo (closed path, no dash).
+  // Halo (closed path, no dash). withHaloShadow gives the white
+  // halo a soft dark outer edge so the mark stays visible on
+  // high-key images.
   traceEyePath(ctx, points);
   ctx.closePath();
   ctx.setLineDash([]);
   ctx.strokeStyle = style.halo;
   ctx.lineWidth = style.haloWidth;
   ctx.globalAlpha = 0.85;
-  ctx.stroke();
+  withHaloShadow(ctx, () => ctx.stroke());
 
   // Translucent fill.
   traceEyePath(ctx, points);
@@ -324,7 +366,7 @@ function drawAreaPathOnCanvas(ctx, marker, width, height, style) {
     tracePillRect(ctx, bx, by, badgeWidth, badgeHeight, style.badgeCornerRadius);
     ctx.fillStyle = style.tertiary;
     ctx.globalAlpha = 1;
-    ctx.fill();
+    withBadgeShadow(ctx, () => ctx.fill());
     ctx.strokeStyle = style.halo;
     ctx.lineWidth = 1.5;
     ctx.stroke();
@@ -382,14 +424,15 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
       continue;
     }
 
-    // White halo stroke (under everything).
+    // White halo stroke (under everything). Outer dark drop-shadow
+    // gives the halo a soft edge that reads on high-key images.
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
     ctx.setLineDash([]);
     ctx.strokeStyle = secondary;
     ctx.lineWidth = haloWidth;
     ctx.globalAlpha = 0.85;
-    ctx.stroke();
+    withHaloShadow(ctx, () => ctx.stroke());
 
     // Translucent amber fill.
     ctx.beginPath();
@@ -429,7 +472,7 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
       );
       ctx.fillStyle = amber;
       ctx.globalAlpha = 1;
-      ctx.fill();
+      withBadgeShadow(ctx, () => ctx.fill());
       ctx.strokeStyle = secondary;
       ctx.lineWidth = 1.5;
       ctx.stroke();
@@ -492,14 +535,15 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
       continue;
     }
 
-    // White halo stroke.
+    // White halo stroke. Outer dark drop-shadow matches the editor's
+    // shadow on the halo Ellipse so editor and export look the same.
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
     ctx.setLineDash([]);
     ctx.strokeStyle = secondary;
     ctx.lineWidth = haloWidth;
     ctx.globalAlpha = 0.85;
-    ctx.stroke();
+    withHaloShadow(ctx, () => ctx.stroke());
 
     // Translucent green fill.
     ctx.beginPath();
@@ -536,7 +580,7 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
       );
       ctx.fillStyle = green;
       ctx.globalAlpha = 1;
-      ctx.fill();
+      withBadgeShadow(ctx, () => ctx.fill());
       ctx.strokeStyle = secondary;
       ctx.lineWidth = 1.5;
       ctx.stroke();
@@ -764,14 +808,16 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
     // Trace the path — straight chord-by-chord when smoothing is off,
     // Catmull-Rom curve (via cubic bezier) through every point when
     // on. Used for both the halo and the main stroke so they
-    // perfectly overlay.
+    // perfectly overlay. withHaloShadow gives the white halo a soft
+    // dark outer edge so the path stays visible on snow / fog / over-
+    // exposed sky.
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.globalAlpha = 0.9;
     ctx.strokeStyle = secondary;
     ctx.lineWidth = haloWidth;
     traceEyePath(ctx, points);
-    ctx.stroke();
+    withHaloShadow(ctx, () => ctx.stroke());
 
     // Main tertiary line. Slim weight + 0.9 opacity so the photo
     // reads through and the path doesn't dominate the composition.
@@ -879,7 +925,7 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
       tracePillRect(ctx, bx, by, badgeWidth, badgeHeight, 3);
       ctx.fillStyle = tertiary;
       ctx.globalAlpha = 0.7;
-      ctx.fill();
+      withBadgeShadow(ctx, () => ctx.fill());
       ctx.strokeStyle = secondary;
       ctx.lineWidth = 1;
       ctx.stroke();
@@ -907,12 +953,13 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
     const lastNumbered = points.length === 1 ? 0 : points.length - 2;
     for (let i = 0; i <= lastNumbered; i++) {
       const wp = points[i];
-      // Halo
+      // Halo, with the same soft dark drop-shadow as the line halo
+      // above so the numbered stop reads on high-key images.
       ctx.globalAlpha = 0.92;
       ctx.fillStyle = secondary;
       ctx.beginPath();
       ctx.arc(wp.x, wp.y, stopHaloR, 0, Math.PI * 2);
-      ctx.fill();
+      withBadgeShadow(ctx, () => ctx.fill());
       ctx.globalAlpha = 1;
       // Filled stop
       ctx.fillStyle = tertiary;
@@ -1028,14 +1075,16 @@ function drawArrowOnCanvas(
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 
-  // Halo first (under the visible stroke).
+  // Halo first (under the visible stroke). Outer dark drop-shadow
+  // matches the editor's shadow on the halo Line so the arrow reads
+  // on high-key images.
   ctx.strokeStyle = ANNOTATION_HALO;
   ctx.lineWidth = haloWidth;
   ctx.globalAlpha = 0.9;
   ctx.beginPath();
   ctx.moveTo(lineStartX, lineStartY);
   ctx.lineTo(lineEndX, lineEndY);
-  ctx.stroke();
+  withHaloShadow(ctx, () => ctx.stroke());
 
   // Visible stroke. Canvas's setLineDash is the dashed-stroke control;
   // restore [] for the arrowhead fill that follows.
@@ -1113,7 +1162,7 @@ function drawArrowOnCanvas(
     ctx.lineWidth = 1.5;
     // Rounded-rect badge background.
     tracePillRect(ctx, labelX, labelY, badgeWidth, badgeHeight, 3);
-    ctx.fill();
+    withBadgeShadow(ctx, () => ctx.fill());
     ctx.stroke();
     ctx.fillStyle = ANNOTATION_HALO;
     ctx.textBaseline = "middle";
