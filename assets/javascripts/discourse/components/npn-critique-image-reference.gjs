@@ -2,6 +2,7 @@ import Component from "@glimmer/component";
 import { fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
+import { service } from "@ember/service";
 import { tracked } from "@glimmer/tracking";
 import didInsert from "@ember/render-modifiers/modifiers/did-insert";
 import didUpdate from "@ember/render-modifiers/modifiers/did-update";
@@ -11,6 +12,7 @@ import { eq } from "discourse/truth-helpers";
 import { i18n } from "discourse-i18n";
 import { createAnnotationStage } from "../lib/npn-critique-reply-konva-stage";
 import { recordPluginError } from "../lib/npn-critique-reply-error-bus";
+import { logImageContrastProbe } from "../lib/npn-critique-reply-mark-contrast";
 
 // Wraps the OP's primary image inside the Critique Helper modal and
 // hosts the Visual Notes overlay.
@@ -32,8 +34,14 @@ const positionPin = modifier(function (element, [xPct, yPct]) {
 });
 
 export default class NpnCritiqueImageReference extends Component {
+  @service siteSettings;
+
   // DOM refs captured via didInsert.
   _imageElement = null;
+  // Feasibility-prototype gate — only run the mark-contrast probe
+  // once per image swap, regardless of how many times mountKonva is
+  // called. Plain field (not @tracked) — no UI depends on it.
+  _markContrastProbedFor = null;
 
   // Konva stage handle (returned by createAnnotationStage). `null`
   // means: not loaded, or loading, or load failed and we're on the
@@ -149,6 +157,27 @@ export default class NpnCritiqueImageReference extends Component {
 
       if (this._destroyed) {
         return;
+      }
+
+      // Feasibility-prototype probe — see
+      // npn-critique-reply-mark-contrast.js. Logs a recommended
+      // mark contrast hint ("light-mark" / "dark-mark" / "fallback")
+      // for the just-loaded image once per image source, only when
+      // the debug site setting is on. NOT user-facing — informs the
+      // decision on whether an Auto mark color is worth shipping.
+      if (
+        this.siteSettings?.npn_critique_reply_debug_enabled &&
+        this._imageElement &&
+        this._imageElement.src !== this._markContrastProbedFor
+      ) {
+        this._markContrastProbedFor = this._imageElement.src;
+        try {
+          logImageContrastProbe(this._imageElement, "reference");
+        } catch (_e) {
+          // Probe is best-effort and already swallows internal
+          // errors; this catch is belt-and-suspenders so a probe
+          // bug never blocks the Konva mount path.
+        }
       }
 
       const stage = await createAnnotationStage({
