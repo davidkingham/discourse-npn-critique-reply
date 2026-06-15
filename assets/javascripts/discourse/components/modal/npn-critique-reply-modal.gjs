@@ -1753,7 +1753,13 @@ export default class NpnCritiqueReplyModal extends Component {
     const trimmedText = this.critiqueText.trim();
     const textSection = visualBlock || exampleBlock ? trimmedText : this._textOnlyRaw();
 
-    const raw = [visualBlock, exampleBlock, textSection]
+    // Order: critique text first, then the visual-notes image, then
+    // the processing example. Beta feedback: the prior visual-first
+    // ordering surfaced the marked-up image before any context, so
+    // readers had to scroll past the image to learn what they were
+    // looking at. Text-first lets the critique introduce its own
+    // visual references before the image lands underneath.
+    const raw = [textSection, visualBlock, exampleBlock]
       .filter((part) => part && part.length > 0)
       .join("\n\n");
 
@@ -8033,7 +8039,34 @@ export default class NpnCritiqueReplyModal extends Component {
                 }}</p>
             </header>
 
+            {{! Section order mirrors the composed reply body in
+                _prepareReplyText: critique text first, then the
+                flattened visual-notes image, then the processing
+                example. Keeps the preview faithful to what the
+                cooked post will look like. }}
             <div class="npn-critique-reply-modal__preview-body">
+              <section
+                class="npn-critique-reply-modal__preview-section
+                  npn-critique-reply-modal__preview-section--critique"
+              >
+                <h3 class="npn-critique-reply-modal__preview-section-title">
+                  {{i18n
+                    "npn_critique_reply.modal.preview_section_critique"
+                  }}
+                </h3>
+                {{#if this.previewHasText}}
+                  <div
+                    class="npn-critique-reply-modal__preview-text"
+                  >{{this.previewTextHtml}}</div>
+                {{else}}
+                  <p
+                    class="npn-critique-reply-modal__preview-text-empty"
+                  >{{i18n
+                      "npn_critique_reply.modal.preview_empty_text"
+                    }}</p>
+                {{/if}}
+              </section>
+
               {{#if this._previewSnapshot.hasVisualNotes}}
                 <section
                   class="npn-critique-reply-modal__preview-section
@@ -8073,28 +8106,6 @@ export default class NpnCritiqueReplyModal extends Component {
                   />
                 </section>
               {{/if}}
-
-              <section
-                class="npn-critique-reply-modal__preview-section
-                  npn-critique-reply-modal__preview-section--critique"
-              >
-                <h3 class="npn-critique-reply-modal__preview-section-title">
-                  {{i18n
-                    "npn_critique_reply.modal.preview_section_critique"
-                  }}
-                </h3>
-                {{#if this.previewHasText}}
-                  <div
-                    class="npn-critique-reply-modal__preview-text"
-                  >{{this.previewTextHtml}}</div>
-                {{else}}
-                  <p
-                    class="npn-critique-reply-modal__preview-text-empty"
-                  >{{i18n
-                      "npn_critique_reply.modal.preview_empty_text"
-                    }}</p>
-                {{/if}}
-              </section>
             </div>
           </section>
         {{/if}}
