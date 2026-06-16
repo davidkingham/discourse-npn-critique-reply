@@ -324,9 +324,11 @@ export default class NpnCritiqueReplyModal extends Component {
   // sees progress and can tell why the modal is briefly disabled.
   @tracked statusMessage = null;
 
-  // Version selector state. Lazy-initialized to the server's `default_key`.
+  // Version selector state. null means "use the server's default
+  // key" — see `selectedVersionKey` getter for the fallback chain.
+  // Explicit selectVersion / _restoreDraft / version-aware switches
+  // write a concrete key here.
   @tracked _selectedVersionKey = null;
-  _selectedVersionInitialized = false;
 
   // Multi-image picker state. Submissions can carry up to 5 images;
   // index 0 is the primary image (and the one the version-selector
@@ -1163,12 +1165,17 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.versions.length > 1;
   }
 
+  // Effective version key: explicit user choice (when set via
+  // selectVersion / _restoreDraft) wins, otherwise fall back to the
+  // server-supplied default. This used to be a lazy-init that wrote
+  // back to the tracked `_selectedVersionKey` on first read, but
+  // modern Glimmer asserts on tracked writes during a render
+  // computation that already read the same field — the lazy-init
+  // pattern was a latent bug and started crashing once an unrelated
+  // getter (effectiveImageUrl post the multi-image picker) shifted
+  // the read order enough to surface it.
   get selectedVersionKey() {
-    if (!this._selectedVersionInitialized) {
-      this._selectedVersionKey = this.imageVersions?.default_key ?? null;
-      this._selectedVersionInitialized = true;
-    }
-    return this._selectedVersionKey;
+    return this._selectedVersionKey ?? this.imageVersions?.default_key ?? null;
   }
 
   get selectedVersion() {
@@ -2796,8 +2803,10 @@ export default class NpnCritiqueReplyModal extends Component {
     // chain doesn't surface a stale revision pointer when the critic
     // returns to image 0.
     if (index !== 0) {
+      // Drop any explicit revision pick so the chain doesn't surface
+      // a stale revision pointer when the critic returns to image 0
+      // — the selectedVersionKey getter falls back to default_key.
       this._selectedVersionKey = null;
-      this._selectedVersionInitialized = false;
     }
     this._resetAnnotationsForImageSwitch();
   }
@@ -2873,7 +2882,6 @@ export default class NpnCritiqueReplyModal extends Component {
       });
     }
     this._selectedVersionKey = key;
-    this._selectedVersionInitialized = true;
     // Always reset annotations — they're tied to the previous image's
     // pixel layout. The textarea (including [N] lines and any starter
     // text from the crop or eye-path tools) is intentionally left
@@ -6026,7 +6034,6 @@ export default class NpnCritiqueReplyModal extends Component {
       const versionKey = payload?.source?.image_version_key ?? null;
       if (versionKey && this.versions.some((v) => v.key === versionKey)) {
         this._selectedVersionKey = versionKey;
-        this._selectedVersionInitialized = true;
       }
       this._restoreAnnotations(payload.annotations, versionKey);
     }
@@ -6162,7 +6169,6 @@ export default class NpnCritiqueReplyModal extends Component {
         // alone for a "no version specified" draft).
         if (versionKey) {
           this._selectedVersionKey = versionKey;
-          this._selectedVersionInitialized = true;
         }
         this._restoreAnnotations(draft.annotations, draft.selected_image_version_key);
 
