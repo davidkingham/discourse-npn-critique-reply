@@ -6540,7 +6540,20 @@ export default class NpnCritiqueReplyModal extends Component {
       if (versionKey && this.versions.some((v) => v.key === versionKey)) {
         this._selectedVersionKey = versionKey;
       }
-      this._restoreAnnotations(payload.annotations, versionKey);
+      // Multi-image edit restore. Annotations on a post written
+      // after the multi-image rollout carry `image_index` per
+      // entry (default 0); older single-image posts don't, and
+      // _restoreAnnotationsByImage's flatAnnotations branch
+      // buckets them all into image 0 so the legacy behaviour is
+      // preserved. Active index defaults to 0 (primary image) on
+      // edit-open so the canvas mounts against the same image the
+      // post is anchored to.
+      this._selectedImageIndex = 0;
+      this._restoreAnnotationsByImage({
+        flatAnnotations: payload.annotations,
+        activeIndex: 0,
+        versionKey,
+      });
     }
 
     // Processing-example restore for the edit flow. Lives on the
@@ -6623,16 +6636,48 @@ export default class NpnCritiqueReplyModal extends Component {
     if (!raw) {
       return "";
     }
-    // Each block is `![alt](upload://...)` on its own line; the
-    // heading lives 1-2 lines before it. Match the LAST occurrence
-    // of an image-only line by exec'ing in a loop with the `g` flag
-    // — `lastIndex` of the last match tells us where the prose
-    // begins. Tolerates either 1 or 2 leading blocks (or zero, when
-    // we fall through unchanged).
-    const re = /^!\[[^\]]*\]\(upload:\/\/[^\s)]+\)\s*$/gm;
+    // Two body formats live in the database today:
+    //
+    //   NEW (text-first, multi-image): the critique text comes at
+    //   the start of the post, then one or more
+    //   "{heading}\n\n![alt](upload://...)" image blocks, then an
+    //   optional processing-example block. Text is everything
+    //   BEFORE the first image-markdown line (minus the heading
+    //   that introduces it).
+    //
+    //   OLD (visual-first, single-image): the heading + image block
+    //   come at the start, and the critique text follows after.
+    //   Text is everything AFTER the LAST image-markdown line.
+    //
+    // We try the new-format extraction first; if it yields nothing
+    // (the post has heading-then-image at the very top), we fall
+    // back to the old extraction. Text-only posts (no image
+    // markdown at all) return as-is.
+    const imageLineRe = /^!\[[^\]]*\]\(upload:\/\/[^\s)]+\)\s*$/m;
+    const firstImage = imageLineRe.exec(raw);
+    if (!firstImage) {
+      return raw;
+    }
+
+    // New-format candidate: everything up to (but not including)
+    // the heading line that introduces the first image. The line
+    // immediately above the image is the heading; strip it off
+    // and the blank line that separates it from the prose.
+    const beforeImage = raw.slice(0, firstImage.index).replace(/\s+$/, "");
+    const lastNewline = beforeImage.lastIndexOf("\n");
+    const newFormatText =
+      lastNewline >= 0
+        ? beforeImage.slice(0, lastNewline).replace(/\s+$/, "")
+        : "";
+    if (newFormatText.length > 0) {
+      return newFormatText;
+    }
+
+    // Fall back to the legacy visual-first extraction.
+    const allImagesRe = /^!\[[^\]]*\]\(upload:\/\/[^\s)]+\)\s*$/gm;
     let lastMatchEnd = -1;
     let m;
-    while ((m = re.exec(raw)) !== null) {
+    while ((m = allImagesRe.exec(raw)) !== null) {
       lastMatchEnd = m.index + m[0].length;
     }
     if (lastMatchEnd < 0) {
