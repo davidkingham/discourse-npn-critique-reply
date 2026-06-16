@@ -121,7 +121,11 @@ const ACTIVE_KINDS_V1 = Object.freeze(
 // suggestion per critique), and 100 total annotations covers the
 // foreseeable crop + arrows + circles + text + eye-path use cases.
 export const MAX_PIN_COUNT = 50;
-export const MAX_CROP_COUNT = 1;
+// One crop per submission image — submissions can carry up to 5
+// images, and the multi-image picker lets the critic add a crop
+// suggestion on each. Was 1 before the multi-image rollout; the
+// server-side cap in DraftNormalizer matches.
+export const MAX_CROP_COUNT = 5;
 export const MAX_ANNOTATION_COUNT = 100;
 
 // Tiny accidental crops should be discarded. 3% width OR height is

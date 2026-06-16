@@ -18,7 +18,12 @@ module DiscourseNpnCritiqueReply
     MAX_CRITIQUE_TEXT_LENGTH = 50_000
     MAX_ANNOTATION_COUNT = 100
     MAX_PIN_COUNT = 50
-    MAX_CROP_COUNT = 1
+    # One crop PER SUBMISSION IMAGE — submissions can carry up to 5
+    # images, and the multi-image picker lets the critic add a crop
+    # suggestion on each. Was 1 before the multi-image rollout; bump
+    # to 5 so a critic flagging crop suggestions across the whole
+    # set doesn't have any silently dropped at the seen-id dedupe.
+    MAX_CROP_COUNT = 5
     MAX_EYE_PATH_COUNT = 4
     # Bumped from 10 → 40 so drag-to-trace Eye Path captures a
     # smooth-looking curve. Old client payloads stayed under 10, so
