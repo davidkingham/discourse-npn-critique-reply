@@ -3615,8 +3615,13 @@ export default class NpnCritiqueReplyModal extends Component {
     } else if (existingCropCount >= 2) {
       cropLabel = `Crop ${existingCropCount + 1}`;
     }
+    // Tie the crop's id to the active image's index so two images
+    // each carrying a crop don't both arrive at the server as
+    // `crop_1` — the server's seen-id dedupe would drop the second
+    // one and the cooked post would lose Crop 2. Image 0's crop is
+    // still `crop_1` (matching the legacy single-image case).
     this.crop = {
-      id: "crop_1",
+      id: `crop_${this._selectedImageIndex + 1}`,
       label: cropLabel,
       xPct,
       yPct,
@@ -3799,10 +3804,15 @@ export default class NpnCritiqueReplyModal extends Component {
       yPct: p.yPct,
     }));
 
-    const newId = nextEyePathId(this.eyePaths.map((p) => p.id));
-    // Eye-path labels (E1, E2, ...) are global across all submission
-    // images so the cooked post can disambiguate "[E1] on image 1"
-    // from "[E1] on image 2".
+    // Eye-path id/label are both global across all submission images.
+    // Without the global id, two images would each get `eye_path_1`
+    // and the server's seen-id dedupe would drop the second path
+    // from the stored payload — the cooked post would then have no
+    // label for [E2] and the badge decorator would leave it as
+    // plain text.
+    const newId = nextEyePathId(
+      this._allAnnotationsAcrossImages("eyePaths").map((p) => p.id)
+    );
     const newLabel = nextEyePathLabel(this._allLabelsAcrossImages("eyePaths"));
     // commitEyePath fires from drag-to-trace → always a stroke path
     // regardless of the toggle. The toggle position is the user's
@@ -3868,8 +3878,10 @@ export default class NpnCritiqueReplyModal extends Component {
         }
         return;
       }
-      const newId = nextEyePathId(this.eyePaths.map((p) => p.id));
-      // Same global-label rule as the stroke commit path above.
+      // Same global id/label rule as the stroke commit path above.
+      const newId = nextEyePathId(
+        this._allAnnotationsAcrossImages("eyePaths").map((p) => p.id)
+      );
       const newLabel = nextEyePathLabel(
         this._allLabelsAcrossImages("eyePaths")
       );

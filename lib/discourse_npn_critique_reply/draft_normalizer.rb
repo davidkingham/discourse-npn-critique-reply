@@ -198,6 +198,13 @@ module DiscourseNpnCritiqueReply
               if n
                 ar = (entry["aspect_ratio"] || entry[:aspect_ratio]).to_s
                 n["aspect_ratio"] = ar.empty? ? "free" : ar
+                # Multi-image critiques tag each crop with "Crop 1",
+                # "Crop 2", ... so the cooked-post decorator can
+                # disambiguate. Single-crop critiques omit label —
+                # token in the prose stays "[Crop]" via the legacy
+                # fallback in buildAnnotationLabelMap.
+                label = normalize_string(entry["label"] || entry[:label])
+                n["label"] = label if label
                 crop_count += 1
               end
             end
