@@ -1389,7 +1389,90 @@ export function buildVisualAnnotationPayload({
   strongAreas,
   directionArrows,
   relationshipArrows,
+  // Multi-image extension: when the submission has 2+ images and the
+  // critic marked up more than one, the caller passes the remaining
+  // images here (image_index 1+). Each entry mirrors the per-kind
+  // arrays plus { index, sourceUrl, sourceUploadId, sourceLabel,
+  // visualUpload } describing where its annotations live and what
+  // upload was just flattened for it. The primary (image_index 0)
+  // continues to use the top-level args so existing readers see the
+  // same `source` + `visual_output` they did before.
+  additionalImages,
 } = {}) {
+  const primaryAnnotations = collectAnnotationsForImage({
+    pins,
+    crop,
+    eyePaths,
+    attentionPulls,
+    strongAreas,
+    directionArrows,
+    relationshipArrows,
+  });
+  const annotations = [...primaryAnnotations];
+  const sources = [];
+  // Always include the primary source in `sources` (image_index 0).
+  // Readers that only know about the legacy `source` field still see
+  // the same value at the top level; new readers can iterate
+  // `sources` for full multi-image fidelity.
+  sources.push({
+    image_index: 0,
+    source: normalizeSourceFromInputs({ topic, selectedVersion }),
+    visual_output: normalizeVisualOutputFromInput(visualUpload),
+  });
+
+  if (Array.isArray(additionalImages) && additionalImages.length > 0) {
+    for (const entry of additionalImages) {
+      if (!entry || typeof entry.index !== "number" || entry.index <= 0) {
+        continue;
+      }
+      const entryAnnotations = collectAnnotationsForImage(entry);
+      for (const a of entryAnnotations) {
+        annotations.push({ ...a, image_index: entry.index });
+      }
+      sources.push({
+        image_index: entry.index,
+        source: normalizeSourceFromInputs({
+          topic,
+          selectedVersion: {
+            key: `image_${entry.index}`,
+            kind: "submission_image",
+            label: entry.sourceLabel ?? null,
+            upload_id: entry.sourceUploadId ?? null,
+            url: entry.sourceUrl ?? null,
+          },
+        }),
+        visual_output: normalizeVisualOutputFromInput(entry.visualUpload),
+      });
+    }
+  }
+
+  return {
+    schema_version: VISUAL_ANNOTATION_SCHEMA_VERSION,
+    // Legacy single-image shape — `source` + `visual_output` always
+    // describe the PRIMARY image (image_index 0). Back-compat with
+    // any reader that only knows about the v1 single-image schema.
+    source: sources[0].source,
+    visual_output: sources[0].visual_output,
+    // New multi-image shape — `sources` is the canonical list when
+    // 2+ images participate. Always populated, single-entry for the
+    // legacy single-image case.
+    sources,
+    annotations,
+  };
+}
+
+// Build the annotations array for ONE image from the per-kind input
+// fields. Shared between the primary image (top-level args to
+// buildVisualAnnotationPayload) and each entry in additionalImages.
+function collectAnnotationsForImage({
+  pins,
+  crop,
+  eyePaths,
+  attentionPulls,
+  strongAreas,
+  directionArrows,
+  relationshipArrows,
+}) {
   const annotations = pinsToAnnotations(pins ?? []);
   if (crop) {
     const cropAnnotation = cropToAnnotation(crop);
@@ -1426,12 +1509,7 @@ export function buildVisualAnnotationPayload({
       annotations.push(arrowAnnotation);
     }
   }
-  return {
-    schema_version: VISUAL_ANNOTATION_SCHEMA_VERSION,
-    source: normalizeSourceFromInputs({ topic, selectedVersion }),
-    visual_output: normalizeVisualOutputFromInput(visualUpload),
-    annotations,
-  };
+  return annotations;
 }
 
 // ----- Annotations array normalizer -------------------------------

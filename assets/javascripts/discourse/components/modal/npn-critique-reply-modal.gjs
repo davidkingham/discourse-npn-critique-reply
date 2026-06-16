@@ -173,6 +173,52 @@ function writeBool(key, value) {
 // without waiting for a page navigation. Payload: `{ topicId, hasDraft }`.
 export const DRAFT_CHANGED_EVENT = "npn-critique-reply:draft-changed";
 
+// Per-image annotation snapshots. Shallow-clone each annotation array
+// so a saved snapshot doesn't share refs with the active tracked
+// state — otherwise a later push into the active array would mutate
+// the snapshot in place and corrupt the per-image cache.
+function cloneAnnotationArray(arr) {
+  if (!Array.isArray(arr)) {
+    return [];
+  }
+  return arr.map((a) => (a && typeof a === "object" ? { ...a } : a));
+}
+
+// Eye paths have a nested `points` array that needs its own clone so
+// editing the active path doesn't reach back through the snapshot.
+function cloneEyePathsForSnapshot(paths) {
+  if (!Array.isArray(paths)) {
+    return [];
+  }
+  return paths.map((p) => ({
+    ...p,
+    points: Array.isArray(p.points)
+      ? p.points.map((pt) => ({ ...pt }))
+      : [],
+  }));
+}
+
+// Used in debug logs only — quick count of annotations across all
+// arrays in a snapshot.
+function countSnapshotAnnotations(snapshot) {
+  if (!snapshot) {
+    return 0;
+  }
+  return (
+    (snapshot.notes?.length ?? 0) +
+    (snapshot.crop ? 1 : 0) +
+    (snapshot.eyePaths?.length ?? 0) +
+    (snapshot.attentionPulls?.length ?? 0) +
+    (snapshot.strongAreas?.length ?? 0) +
+    (snapshot.directionArrows?.length ?? 0) +
+    (snapshot.relationshipArrows?.length ?? 0)
+  );
+}
+
+function snapshotHasAnnotations(snapshot) {
+  return countSnapshotAnnotations(snapshot) > 0;
+}
+
 // Annotation token shape — mirrors the cooked-post decorator's
 // TOKEN_PATTERN so the preview shows references using the same family
 // of badge styles. Variants resolve to CSS classes named in
@@ -332,10 +378,19 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // Multi-image picker state. Submissions can carry up to 5 images;
   // index 0 is the primary image (and the one the version-selector
-  // chain applies to). Switching index resets annotations the same
-  // way switching versions does — the Konva stage is sized against
-  // ONE image's pixel space at a time.
+  // chain applies to). Each image keeps its own annotations — the
+  // active image's state lives in the tracked notes/crop/eyePaths
+  // etc. fields, and the per-image snapshot map below holds the
+  // others.
   @tracked _selectedImageIndex = 0;
+
+  // Per-image annotation snapshots. Map<number, AnnotationSnapshot>.
+  // Plain field (not @tracked) because the active image's tracked
+  // fields are what drive the UI; this map is cold storage that
+  // gets read/written only during image switches, draft save, draft
+  // restore, and Post Critique. AnnotationSnapshot shape matches
+  // _snapshotCurrentAnnotations.
+  _annotationsByImageIndex = new Map();
 
   // "More ideas" expansion state for the Questions-to-consider panel.
   // Single dimension now: false (default) → show only the 3 default
@@ -1141,7 +1196,7 @@ export default class NpnCritiqueReplyModal extends Component {
   get canPreview() {
     return (
       this.hasUnsavedText ||
-      this.hasVisualAnnotations ||
+      this.hasAnyImageAnnotations ||
       this.hasProcessingExample
     );
   }
@@ -1470,6 +1525,22 @@ export default class NpnCritiqueReplyModal extends Component {
     );
   }
 
+  // True when ANY submission image has annotations — the active one
+  // OR any cold-storage snapshot. Used by the post / preview gates
+  // so a critic who marked up image 2 and then flipped back to image
+  // 1 (which is empty) can still post / preview.
+  get hasAnyImageAnnotations() {
+    if (this.hasVisualAnnotations) {
+      return true;
+    }
+    for (const [idx, snap] of this._annotationsByImageIndex) {
+      if (idx !== this._selectedImageIndex && snapshotHasAnnotations(snap)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   get annotationCount() {
     return (
       this.notes.length +
@@ -1695,122 +1766,38 @@ export default class NpnCritiqueReplyModal extends Component {
   // this same path without re-trying the failed pipeline. A
   // processing example, if present, is still included in the body.
   async _prepareReplyText({ skipVisualNotes = false } = {}) {
-    const hasVisual = !skipVisualNotes && this.hasVisualAnnotations;
+    // Snapshot the active image's edits into the per-image map so
+    // we compose the post body from a consistent picture across all
+    // images (including the one the critic is currently looking at).
+    this._annotationsByImageIndex.set(
+      this._selectedImageIndex,
+      this._snapshotCurrentAnnotations()
+    );
+
+    const annotatedImages = skipVisualNotes
+      ? []
+      : this._gatherAnnotatedImagesInSubmissionOrder();
     const hasExample = this.hasProcessingExample;
 
-    let visualUpload = null;
-    let visualBlock = "";
-
-    if (hasVisual) {
-      const url = this.effectiveImageUrl;
-      if (!url) {
-        throw this._wrapVisualNotesError(
-          "load",
-          new Error("no image url available")
-        );
-      }
-
-      this.statusMessage = i18n(
-        "npn_critique_reply.modal.preparing_visual_notes"
+    // Flatten + upload each annotated image, in submission order, so
+    // the post body and the structured payload both come out in a
+    // stable order regardless of which image the critic edited
+    // first. Each iteration updates statusMessage so the modal's
+    // progress banner reflects how many images are still to go.
+    const visualBlocks = [];
+    for (let i = 0; i < annotatedImages.length; i++) {
+      const entry = annotatedImages[i];
+      this.statusMessage = this._preparingStatusMessage(
+        i + 1,
+        annotatedImages.length
       );
-
-      let image;
-      try {
-        image = await loadImageForExport(url);
-      } catch (e) {
-        throw this._wrapVisualNotesError("load", e);
-      }
-
-      let blob;
-      let canvas;
-      try {
-        canvas = buildVisualNotesCanvas({
-          image,
-          pins: this.notes,
-          crop: this.crop,
-          eyePaths: this.eyePaths,
-          attentionPulls: this.attentionPulls,
-          strongAreas: this.strongAreas,
-          directionArrows: this.directionArrows,
-          relationshipArrows: this.relationshipArrows,
-        });
-        blob = await exportCanvasToBlob(canvas);
-      } catch (e) {
-        throw this._wrapVisualNotesError("export", e);
-      }
-
-      // Diagnostic snapshot of the export step. Captured ALWAYS (not
-      // gated on the debug site setting) so the "Copy diagnostic"
-      // button on the error banner has something useful even when
-      // debug logging is off. Magic bytes confirm the server-side
-      // sniffer will recognize the upload (JPEG: FF D8 FF / PNG:
-      // 89 50 4E 47); a mismatch points at a flaky canvas encoder.
-      let magic = null;
-      try {
-        if (blob && blob.size >= 8) {
-          const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
-          magic = Array.from(head)
-            .map((b) => b.toString(16).padStart(2, "0"))
-            .join(" ");
-        }
-      } catch {
-        // ignore — diagnostic only
-      }
-      this._lastExportDiagnostic = {
-        canvasWidth: canvas?.width ?? null,
-        canvasHeight: canvas?.height ?? null,
-        blobSize: blob?.size ?? null,
-        blobType: blob?.type ?? null,
-        blobMagicBytes: magic,
-        filename: this._visualNotesFilename(),
-        imageNaturalWidth: image?.naturalWidth ?? null,
-        imageNaturalHeight: image?.naturalHeight ?? null,
-        imageSrc: url ?? null,
-      };
-      if (this.siteSettings.npn_critique_reply_debug_enabled) {
-        // eslint-disable-next-line no-console
-        console.info(
-          "[npn-critique-reply] visual-notes export ready",
-          this._lastExportDiagnostic
-        );
-      }
-
-      this.statusMessage = i18n(
-        "npn_critique_reply.modal.uploading_visual_notes"
-      );
-
-      try {
-        visualUpload = await uploadVisualNotesBlob(
-          blob,
-          this._visualNotesFilename()
-        );
-        this._lastUploadDiagnostic = {
-          uploadId: visualUpload?.id ?? null,
-          shortUrl: visualUpload?.short_url ?? null,
-          width: visualUpload?.width ?? null,
-          height: visualUpload?.height ?? null,
-        };
-      } catch (e) {
-        // Capture the server-side reject before re-throwing so the
-        // diagnostic report carries the upload response details.
-        this._lastUploadDiagnostic = {
-          status: e?.jqXHR?.status ?? null,
-          statusText: e?.jqXHR?.statusText ?? null,
-          serverErrors:
-            (Array.isArray(e?.jqXHR?.responseJSON?.errors)
-              ? e.jqXHR.responseJSON.errors
-              : null) ??
-            (typeof e?.jqXHR?.responseJSON?.error === "string"
-              ? [e.jqXHR.responseJSON.error]
-              : null),
-        };
-        throw this._wrapVisualNotesError("upload", e);
-      }
-
-      visualBlock = this._composeVisualNotesBlock(visualUpload);
+      const block = await this._flattenAndUploadImage(entry);
+      visualBlocks.push(block);
     }
 
-    const exampleBlock = hasExample ? this._composeProcessingExampleBlock() : "";
+    const exampleBlock = hasExample
+      ? this._composeProcessingExampleBlock()
+      : "";
 
     // Text section. The visual-notes heading + processing-example
     // heading both name the selected image version, so the
@@ -1818,23 +1805,290 @@ export default class NpnCritiqueReplyModal extends Component {
     // headed block is present. Strip down to the bare textarea body
     // in that case.
     const trimmedText = this.critiqueText.trim();
-    const textSection = visualBlock || exampleBlock ? trimmedText : this._textOnlyRaw();
+    const textSection =
+      visualBlocks.length > 0 || exampleBlock
+        ? trimmedText
+        : this._textOnlyRaw();
 
-    // Order: critique text first, then the visual-notes image, then
-    // the processing example. Beta feedback: the prior visual-first
-    // ordering surfaced the marked-up image before any context, so
-    // readers had to scroll past the image to learn what they were
-    // looking at. Text-first lets the critique introduce its own
-    // visual references before the image lands underneath.
-    const raw = [textSection, visualBlock, exampleBlock]
-      .filter((part) => part && part.length > 0)
-      .join("\n\n");
+    // Order: critique text first, then one section per annotated
+    // image (submission order), then the processing example. Beta
+    // feedback was that visual-first ordering forced readers to
+    // scroll past the image to learn what they were looking at —
+    // text-first lets the critique introduce its own references.
+    const parts = [textSection];
+    for (const block of visualBlocks) {
+      parts.push(this._composeVisualNotesBlockForImage(block));
+    }
+    if (exampleBlock) {
+      parts.push(exampleBlock);
+    }
+    const raw = parts.filter((p) => p && p.length > 0).join("\n\n");
 
-    // Caller still needs `upload` (the visual-notes upload reference)
-    // separately so it can build the structured visual-notes metadata
-    // for the post custom field. The processing-example upload
-    // reference is already on `this.processingExample`.
-    return { raw, upload: visualUpload };
+    // Caller uses visualBlocks to build the structured npn_visual_notes
+    // payload for the post custom field — see buildVisualAnnotationPayload
+    // in the schema module.
+    return { raw, visualBlocks };
+  }
+
+  // Walk image indices in submission order (0..N-1, plus index 0 for
+  // the legacy single-image case). Returns entries for each index
+  // whose snapshot has any annotations. Order is the order the
+  // images appear in the picker pills.
+  _gatherAnnotatedImagesInSubmissionOrder() {
+    const out = [];
+    const count = Math.max(this.submissionImages.length, 1);
+    for (let i = 0; i < count; i++) {
+      const snap = this._annotationsByImageIndex.get(i);
+      if (snapshotHasAnnotations(snap)) {
+        out.push({ index: i, snapshot: snap });
+      }
+    }
+    return out;
+  }
+
+  // Flatten one image's annotations into a JPEG, upload it, and
+  // return the upload reference + source metadata. Shared by the
+  // post-output composer above and (potentially) the preview path.
+  async _flattenAndUploadImage(entry) {
+    const sourceUrl = this._sourceUrlForImageIndex(entry.index);
+    if (!sourceUrl) {
+      throw this._wrapVisualNotesError(
+        "load",
+        new Error(`no image url for index ${entry.index}`)
+      );
+    }
+    let image;
+    try {
+      image = await loadImageForExport(sourceUrl);
+    } catch (e) {
+      throw this._wrapVisualNotesError("load", e);
+    }
+
+    let canvas;
+    let blob;
+    try {
+      canvas = buildVisualNotesCanvas({
+        image,
+        pins: entry.snapshot.notes,
+        crop: entry.snapshot.crop,
+        eyePaths: entry.snapshot.eyePaths,
+        attentionPulls: entry.snapshot.attentionPulls,
+        strongAreas: entry.snapshot.strongAreas,
+        directionArrows: entry.snapshot.directionArrows,
+        relationshipArrows: entry.snapshot.relationshipArrows,
+      });
+      blob = await exportCanvasToBlob(canvas);
+    } catch (e) {
+      throw this._wrapVisualNotesError("export", e);
+    }
+
+    // Diagnostic snapshot per image — same magic-byte sniff that
+    // the single-image path used, so the failure-report shape stays
+    // consistent. Captured for the LAST flatten (most useful one
+    // when the upload fails); the per-image upload status overwrites
+    // it as we go.
+    let magic = null;
+    try {
+      if (blob && blob.size >= 8) {
+        const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+        magic = Array.from(head)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(" ");
+      }
+    } catch {
+      // ignore — diagnostic only
+    }
+    this._lastExportDiagnostic = {
+      imageIndex: entry.index,
+      canvasWidth: canvas?.width ?? null,
+      canvasHeight: canvas?.height ?? null,
+      blobSize: blob?.size ?? null,
+      blobType: blob?.type ?? null,
+      blobMagicBytes: magic,
+      filename: this._visualNotesFilenameForImageIndex(entry.index),
+      imageNaturalWidth: image?.naturalWidth ?? null,
+      imageNaturalHeight: image?.naturalHeight ?? null,
+      imageSrc: sourceUrl ?? null,
+    };
+
+    let upload;
+    try {
+      upload = await uploadVisualNotesBlob(
+        blob,
+        this._visualNotesFilenameForImageIndex(entry.index)
+      );
+      this._lastUploadDiagnostic = {
+        imageIndex: entry.index,
+        uploadId: upload?.id ?? null,
+        shortUrl: upload?.short_url ?? null,
+        width: upload?.width ?? null,
+        height: upload?.height ?? null,
+      };
+    } catch (e) {
+      this._lastUploadDiagnostic = {
+        imageIndex: entry.index,
+        status: e?.jqXHR?.status ?? null,
+        statusText: e?.jqXHR?.statusText ?? null,
+        serverErrors:
+          (Array.isArray(e?.jqXHR?.responseJSON?.errors)
+            ? e.jqXHR.responseJSON.errors
+            : null) ??
+          (typeof e?.jqXHR?.responseJSON?.error === "string"
+            ? [e.jqXHR.responseJSON.error]
+            : null),
+      };
+      throw this._wrapVisualNotesError("upload", e);
+    }
+
+    return {
+      index: entry.index,
+      snapshot: entry.snapshot,
+      sourceUrl,
+      sourceUploadId: this._sourceUploadIdForImageIndex(entry.index),
+      sourceLabel: this._sourceLabelForImageIndex(entry.index),
+      upload,
+    };
+  }
+
+  // Image 0 routes through the existing version selector so the
+  // critic's choice of original-vs-revision still wins. Images 1+
+  // pull straight from the submission_images metadata — they don't
+  // have a revision chain today.
+  _sourceUrlForImageIndex(index) {
+    if (index === 0) {
+      return this.effectiveImageUrl;
+    }
+    const img = this.submissionImages.find((i) => i.index === index);
+    return img?.url ? getURLWithCDN(img.url) : null;
+  }
+
+  _sourceUploadIdForImageIndex(index) {
+    if (index === 0) {
+      return this.selectedVersion?.upload_id ?? null;
+    }
+    const img = this.submissionImages.find((i) => i.index === index);
+    return img?.upload_id ?? null;
+  }
+
+  _sourceLabelForImageIndex(index) {
+    if (index === 0) {
+      return this.selectedVersion?.label ?? null;
+    }
+    const img = this.submissionImages.find((i) => i.index === index);
+    return img?.label ?? null;
+  }
+
+  _visualNotesFilenameForImageIndex(index) {
+    const topicId = this.topic?.id ?? "unknown";
+    if (index === 0) {
+      const key = this.selectedVersionKey ?? "original";
+      return `npn-visual-notes-topic-${topicId}-${key}.jpg`;
+    }
+    return `npn-visual-notes-topic-${topicId}-image-${index + 1}.jpg`;
+  }
+
+  _preparingStatusMessage(current, total) {
+    if (total <= 1) {
+      return i18n("npn_critique_reply.modal.preparing_visual_notes");
+    }
+    return i18n("npn_critique_reply.modal.preparing_visual_notes_n", {
+      current,
+      total,
+    });
+  }
+
+  // Per-image visual-notes markdown section. Uses the source label
+  // (e.g. "Revision 2" for image 0 or "Image 3" for a secondary
+  // submission image) when available, otherwise the legacy
+  // "original" heading. The cooked-post inline image markdown
+  // doesn't change shape — Discourse will resolve `short_url` the
+  // same way it did before.
+  _composeVisualNotesBlockForImage({ index, sourceLabel, upload }) {
+    const heading = this._visualNotesHeadingForIndex(index, sourceLabel);
+    const altText = i18n("npn_critique_reply.modal.visual_notes_alt");
+    const shortUrl = upload?.short_url ?? upload?.url ?? "";
+    return `${heading}\n\n![${altText}](${shortUrl})`;
+  }
+
+  // Bridge between the per-image `visualBlocks` returned by
+  // _prepareReplyText and the schema-level buildVisualAnnotationPayload
+  // call. Hides the "primary image is special" logic from the caller:
+  // image_index 0 (if present) flows into the legacy top-level args,
+  // everything else goes into `additionalImages`. Returns null when
+  // there's nothing to send (no annotated images at all).
+  _buildVisualNotesPayload(visualBlocks) {
+    if (!Array.isArray(visualBlocks) || visualBlocks.length === 0) {
+      return null;
+    }
+    const primary = visualBlocks.find((b) => b.index === 0) ?? null;
+    const additional = visualBlocks
+      .filter((b) => b.index > 0)
+      .map((b) => ({
+        index: b.index,
+        sourceUrl: b.sourceUrl,
+        sourceUploadId: b.sourceUploadId,
+        sourceLabel: b.sourceLabel,
+        visualUpload: b.upload,
+        pins: b.snapshot?.notes ?? [],
+        crop: b.snapshot?.crop ?? null,
+        eyePaths: b.snapshot?.eyePaths ?? [],
+        attentionPulls: b.snapshot?.attentionPulls ?? [],
+        strongAreas: b.snapshot?.strongAreas ?? [],
+        directionArrows: b.snapshot?.directionArrows ?? [],
+        relationshipArrows: b.snapshot?.relationshipArrows ?? [],
+      }));
+
+    // When the only annotated images are non-primary, fall back to
+    // passing the FIRST entry as the "primary" so the legacy `source`
+    // field is non-empty. That entry's image_index is still > 0 in
+    // the per-annotation tag; readers that consult `sources` will see
+    // it; readers that only consult the legacy `source` get its
+    // metadata rather than null.
+    const head = primary ?? additional.shift();
+    if (!head) {
+      return null;
+    }
+    return buildVisualAnnotationPayload({
+      topic: this.topic,
+      selectedVersion:
+        head.index === 0
+          ? this.selectedVersion
+          : {
+              key: `image_${head.index}`,
+              kind: "submission_image",
+              label: head.sourceLabel ?? null,
+              upload_id: head.sourceUploadId ?? null,
+              url: head.sourceUrl ?? null,
+            },
+      visualUpload: head.upload ?? head.visualUpload,
+      pins: head.snapshot?.notes ?? head.pins ?? [],
+      crop: head.snapshot?.crop ?? head.crop ?? null,
+      eyePaths: head.snapshot?.eyePaths ?? head.eyePaths ?? [],
+      attentionPulls:
+        head.snapshot?.attentionPulls ?? head.attentionPulls ?? [],
+      strongAreas: head.snapshot?.strongAreas ?? head.strongAreas ?? [],
+      directionArrows:
+        head.snapshot?.directionArrows ?? head.directionArrows ?? [],
+      relationshipArrows:
+        head.snapshot?.relationshipArrows ?? head.relationshipArrows ?? [],
+      additionalImages: additional,
+    });
+  }
+
+  _visualNotesHeadingForIndex(index, sourceLabel) {
+    if (index === 0) {
+      const v = this.selectedVersion;
+      if (v?.kind === "revision" && v.label) {
+        return i18n(
+          "npn_critique_reply.modal.visual_notes_heading_revision",
+          { label: v.label }
+        );
+      }
+      return i18n("npn_critique_reply.modal.visual_notes_heading_original");
+    }
+    return i18n("npn_critique_reply.modal.visual_notes_heading_labeled", {
+      label: sourceLabel ?? `Image ${index + 1}`,
+    });
   }
 
   // Just the heading + image-markdown lines for the visual-notes
@@ -2740,11 +2994,12 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // ---- Actions ---------------------------------------------------------
 
-  // Switch to a different submission image (multi-image submissions
-  // can carry up to 5). Uses the same confirm-clear-annotations flow
-  // as version switching — annotations are anchored to one image's
-  // pixel space at a time. Cancel keeps the current image AND any
-  // in-flight annotations.
+  // Switch to a different submission image (submissions can carry up
+  // to 5). Annotations are PRESERVED per-image — each image keeps its
+  // own set of pins, crop, eye paths, areas, and arrows so the critic
+  // can flip back and forth without losing work. The current image's
+  // state is snapshotted on its way out and the target image's is
+  // restored on the way in. Initial visits land on an empty set.
   @action
   selectImage(index) {
     if (
@@ -2752,17 +3007,6 @@ export default class NpnCritiqueReplyModal extends Component {
       index < 0 ||
       index === this._selectedImageIndex
     ) {
-      return;
-    }
-    if (this.hasVisualAnnotations) {
-      this.dialog.confirm({
-        message: i18n(
-          "npn_critique_reply.visual_notes.confirm_clear_all_on_switch"
-        ),
-        confirmButtonLabel:
-          "npn_critique_reply.visual_notes.switch_and_clear",
-        didConfirm: () => this._switchImage(index),
-      });
       return;
     }
     this._switchImage(index);
@@ -2786,44 +3030,83 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   _switchImage(index) {
+    const oldIndex = this._selectedImageIndex;
+    // Snapshot the outgoing image's annotations so we can restore
+    // them when the critic flips back. Tracked fields stay as the
+    // active-image state; the map is the per-image cold storage.
+    this._annotationsByImageIndex.set(
+      oldIndex,
+      this._snapshotCurrentAnnotations()
+    );
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] select-image", {
         topicId: this.topic?.id,
-        from: this._selectedImageIndex,
+        from: oldIndex,
         to: index,
-        clearedNotes: this.notes.length,
-        clearedCrop: !!this.crop,
+        snapshottedAnnotations: countSnapshotAnnotations(
+          this._annotationsByImageIndex.get(oldIndex)
+        ),
       });
     }
     this._selectedImageIndex = index;
     // Switching to a non-primary image leaves the revision selector
-    // hidden. Switching BACK to the primary restores it. We also
-    // reset the version selection to the primary's default so the
-    // chain doesn't surface a stale revision pointer when the critic
-    // returns to image 0.
+    // hidden. Switching BACK to the primary restores it. Drop any
+    // explicit revision pick so the chain doesn't surface a stale
+    // revision pointer when the critic returns to image 0 — the
+    // selectedVersionKey getter falls back to default_key.
     if (index !== 0) {
-      // Drop any explicit revision pick so the chain doesn't surface
-      // a stale revision pointer when the critic returns to image 0
-      // — the selectedVersionKey getter falls back to default_key.
       this._selectedVersionKey = null;
     }
-    this._resetAnnotationsForImageSwitch();
+    // Restore the incoming image's snapshot (or empty if first visit).
+    this._restoreAnnotationsFromSnapshot(
+      this._annotationsByImageIndex.get(index)
+    );
   }
 
-  // Shared with _switchVersion — the same pixel-space reset applies
-  // whether the critic moves to a different revision or a different
-  // submission image.
-  _resetAnnotationsForImageSwitch() {
-    this.notes = [];
-    this.crop = null;
-    this.eyePaths = [];
+  // Build a plain-object snapshot of the current image's annotation
+  // state. Used both during image switches (to stash before swapping)
+  // and at draft-build time (to capture the active image's edits
+  // before serializing the per-image map). Selection IDs and pending
+  // popovers are NOT snapshotted — they're transient UI state that
+  // shouldn't survive an image switch.
+  _snapshotCurrentAnnotations() {
+    return {
+      notes: cloneAnnotationArray(this.notes),
+      crop: this.crop ? { ...this.crop } : null,
+      eyePaths: cloneEyePathsForSnapshot(this.eyePaths),
+      attentionPulls: cloneAnnotationArray(this.attentionPulls),
+      strongAreas: cloneAnnotationArray(this.strongAreas),
+      directionArrows: cloneAnnotationArray(this.directionArrows),
+      relationshipArrows: cloneAnnotationArray(this.relationshipArrows),
+    };
+  }
+
+  // Apply a snapshot (or undefined for a first-time visit) to the
+  // tracked active-image fields. Also clears all transient selection
+  // state, since the visual layer is about to re-mount around the
+  // new image.
+  _restoreAnnotationsFromSnapshot(snapshot) {
+    this.notes = snapshot?.notes ? cloneAnnotationArray(snapshot.notes) : [];
+    this.crop = snapshot?.crop ? { ...snapshot.crop } : null;
+    this.eyePaths = snapshot?.eyePaths
+      ? cloneEyePathsForSnapshot(snapshot.eyePaths)
+      : [];
+    this.attentionPulls = snapshot?.attentionPulls
+      ? cloneAnnotationArray(snapshot.attentionPulls)
+      : [];
+    this.strongAreas = snapshot?.strongAreas
+      ? cloneAnnotationArray(snapshot.strongAreas)
+      : [];
+    this.directionArrows = snapshot?.directionArrows
+      ? cloneAnnotationArray(snapshot.directionArrows)
+      : [];
+    this.relationshipArrows = snapshot?.relationshipArrows
+      ? cloneAnnotationArray(snapshot.relationshipArrows)
+      : [];
+    // Transient state always resets on image swap.
     this._activeEyePathId = null;
     this._eyePathStarterInserted = false;
-    this.attentionPulls = [];
-    this.strongAreas = [];
-    this.directionArrows = [];
-    this.relationshipArrows = [];
     this.selectedPinNumber = null;
     this.cropSelected = false;
     this.selectedEyePathId = null;
@@ -2846,6 +3129,17 @@ export default class NpnCritiqueReplyModal extends Component {
     this.pendingRelationshipArrowPopoverText = "";
     this.pendingCropPopover = null;
     this.pendingCropPopoverText = "";
+  }
+
+  // Version switch (revision change) wipes the current image's
+  // annotations — revisions share the SAME submission position so
+  // there's no separate snapshot slot for them. We also clear the
+  // per-image map's entry for this index so the cleared state
+  // sticks if the critic flips to another image and back. Multi-
+  // image picker uses the snapshot path instead — see _switchImage.
+  _resetAnnotationsForImageSwitch() {
+    this._annotationsByImageIndex.delete(this._selectedImageIndex);
+    this._restoreAnnotationsFromSnapshot(null);
   }
 
   @action
@@ -4988,49 +5282,74 @@ export default class NpnCritiqueReplyModal extends Component {
     this.visualNotesFailureContext = null;
 
     this.previewBuilding = true;
-    let visualNotesObjectUrl = null;
-    let visualNotesError = null;
+    // Snapshot the active image so the preview iterates a consistent
+    // per-image map (the active edits aren't yet in cold storage).
+    this._annotationsByImageIndex.set(
+      this._selectedImageIndex,
+      this._snapshotCurrentAnnotations()
+    );
 
-    if (this.hasVisualAnnotations && this.effectiveImageUrl) {
+    // Flatten ALL annotated images locally — same per-image walk the
+    // post pipeline uses, but we stop at Blob/object-URL and don't
+    // upload (preview is throwaway; Post Critique re-runs the export
+    // for real). Each rendered image becomes an entry in the preview
+    // snapshot's visualNotesImages array.
+    const annotatedImages = this._gatherAnnotatedImagesInSubmissionOrder();
+    const visualNotesImages = [];
+    let visualNotesError = null;
+    for (const entry of annotatedImages) {
+      const sourceUrl = this._sourceUrlForImageIndex(entry.index);
+      if (!sourceUrl) {
+        continue;
+      }
       try {
-        const image = await loadImageForExport(this.effectiveImageUrl);
+        const image = await loadImageForExport(sourceUrl);
         const canvas = buildVisualNotesCanvas({
           image,
-          pins: this.notes,
-          crop: this.crop,
-          eyePaths: this.eyePaths,
-          attentionPulls: this.attentionPulls,
-          strongAreas: this.strongAreas,
-          directionArrows: this.directionArrows,
-          relationshipArrows: this.relationshipArrows,
+          pins: entry.snapshot.notes,
+          crop: entry.snapshot.crop,
+          eyePaths: entry.snapshot.eyePaths,
+          attentionPulls: entry.snapshot.attentionPulls,
+          strongAreas: entry.snapshot.strongAreas,
+          directionArrows: entry.snapshot.directionArrows,
+          relationshipArrows: entry.snapshot.relationshipArrows,
         });
         const blob = await exportCanvasToBlob(canvas);
-        visualNotesObjectUrl = URL.createObjectURL(blob);
+        visualNotesImages.push({
+          index: entry.index,
+          label: this._sourceLabelForImageIndex(entry.index),
+          objectUrl: URL.createObjectURL(blob),
+        });
       } catch (e) {
-        // Preview is best-effort: if the flatten fails we still want
-        // the critic to see text + processing example. The actual
-        // Post Critique step will re-run the export and surface a
-        // real error banner if it's truly broken.
+        // Preview is best-effort: if a flatten fails we still want
+        // the critic to see text + processing example + any images
+        // that DID work. The Post Critique step will re-run all
+        // exports and surface a real error if it's truly broken.
         visualNotesError = e;
-        this._recordError("preview_visual_notes_export", e, {}, "warn");
+        this._recordError(
+          "preview_visual_notes_export",
+          e,
+          { imageIndex: entry.index },
+          "warn"
+        );
       }
     }
 
     if (this._destroyed) {
-      if (visualNotesObjectUrl) {
-        URL.revokeObjectURL(visualNotesObjectUrl);
+      for (const img of visualNotesImages) {
+        URL.revokeObjectURL(img.objectUrl);
       }
       return;
     }
 
     this._previewSnapshot = {
-      visualNotesObjectUrl,
+      visualNotesImages,
       visualNotesError,
       processingExampleUrl: this.processingExample?.url ?? null,
       processingExampleFilename:
         this.processingExample?.filename ?? null,
       textBody: this.critiqueText.trim(),
-      hasVisualNotes: !!visualNotesObjectUrl,
+      hasVisualNotes: visualNotesImages.length > 0,
       hasProcessingExample: !!this.processingExample,
     };
     this.previewBuilding = false;
@@ -5064,11 +5383,14 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   _teardownPreviewSnapshot() {
-    if (this._previewSnapshot?.visualNotesObjectUrl) {
-      try {
-        URL.revokeObjectURL(this._previewSnapshot.visualNotesObjectUrl);
-      } catch (_e) {
-        // Already revoked / never created — fine.
+    const images = this._previewSnapshot?.visualNotesImages;
+    if (Array.isArray(images)) {
+      for (const img of images) {
+        try {
+          URL.revokeObjectURL(img.objectUrl);
+        } catch (_e) {
+          // Already revoked / never created — fine.
+        }
       }
     }
     this._previewSnapshot = null;
@@ -5143,7 +5465,7 @@ export default class NpnCritiqueReplyModal extends Component {
     }
 
     try {
-      const { raw, upload } = await this._prepareReplyText({
+      const { raw, visualBlocks } = await this._prepareReplyText({
         skipVisualNotes,
       });
       if (this._destroyed) {
@@ -5153,26 +5475,15 @@ export default class NpnCritiqueReplyModal extends Component {
       this.statusMessage = i18n("npn_critique_reply.modal.posting_critique");
 
       // Structured visual-annotation metadata is sent ONLY when the
-      // visual export + upload pipeline succeeded AND the user has
-      // annotations. Text-only critiques, Post-without-visual-notes
-      // fallback, and Edit-in-Composer all skip this — the server
-      // stores the payload as a `npn_visual_notes` post custom field
-      // on the just-created reply for future overlay / reopen use.
-      const visualNotes =
-        upload && this.hasVisualAnnotations
-          ? buildVisualAnnotationPayload({
-              topic: this.topic,
-              selectedVersion: this.selectedVersion,
-              visualUpload: upload,
-              pins: this.notes,
-              crop: this.crop,
-              eyePaths: this.eyePaths,
-              attentionPulls: this.attentionPulls,
-              strongAreas: this.strongAreas,
-              directionArrows: this.directionArrows,
-              relationshipArrows: this.relationshipArrows,
-            })
-          : null;
+      // visual export + upload pipeline produced at least one image.
+      // The primary entry (image_index 0) — if present — flows through
+      // the legacy single-image args so old `source` + `visual_output`
+      // readers still get the same shape; secondary images ride along
+      // in `additionalImages`, and per-annotation `image_index` lets
+      // readers route annotations to their source. Text-only critiques,
+      // Post-without-visual-notes fallback, and Edit-in-Composer all
+      // skip this entirely.
+      const visualNotes = this._buildVisualNotesPayload(visualBlocks);
 
       // Processing-example metadata. Distinct from visual notes —
       // independent eligibility, independent lifecycle, independent
@@ -5521,13 +5832,13 @@ export default class NpnCritiqueReplyModal extends Component {
   async editInComposer() {
     const hasContent =
       this.hasUnsavedText ||
-      this.hasVisualAnnotations ||
+      this.hasAnyImageAnnotations ||
       this.hasProcessingExample;
     if (!hasContent) {
       return this._doEditInComposer({ skipVisualNotes: false });
     }
     const hasVisuals =
-      this.hasVisualAnnotations || this.hasProcessingExample;
+      this.hasAnyImageAnnotations || this.hasProcessingExample;
     const messageKey = hasVisuals
       ? "npn_critique_reply.modal.edit_in_composer_confirm_message_with_visuals"
       : "npn_critique_reply.modal.edit_in_composer_confirm_message_text_only";
@@ -5546,7 +5857,7 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   async _doEditInComposer({ skipVisualNotes }) {
-    const hasVisual = !skipVisualNotes && this.hasVisualAnnotations;
+    const hasVisual = !skipVisualNotes && this.hasAnyImageAnnotations;
     if (!this.hasUnsavedText && !hasVisual) {
       this._launchComposer({ replyText: null });
       return;
@@ -5905,32 +6216,67 @@ export default class NpnCritiqueReplyModal extends Component {
   // schema-aware helpers, so any geometry caps / id normalization
   // applied client-side mirrors the server's normalizer.
   _buildDraftPayload() {
-    const annotations = pinsToAnnotations(this.notes ?? []);
-    if (this.crop) {
-      const cropAnnotation = cropToAnnotation(this.crop);
-      if (cropAnnotation) {
-        annotations.push(cropAnnotation);
+    // Snapshot the active image's edits into the per-image map so
+    // the serialized payload picks them up alongside every other
+    // image's stored annotations.
+    this._annotationsByImageIndex.set(
+      this._selectedImageIndex,
+      this._snapshotCurrentAnnotations()
+    );
+
+    // Build a flat `annotations` array (back-compat: pre-multi-image
+    // readers see one array of all kinds) PLUS a per-image map
+    // keyed by image_index so restore can route each annotation
+    // back to its image. Each annotation in the flat array carries
+    // `image_index` (default 0) so a single-array reader still has
+    // enough info to attribute marks correctly.
+    const annotationsByImage = {};
+    const annotations = [];
+    const indices = new Set([this._selectedImageIndex]);
+    for (const i of this._annotationsByImageIndex.keys()) {
+      indices.add(i);
+    }
+    const orderedIndices = [...indices].sort((a, b) => a - b);
+    for (const idx of orderedIndices) {
+      const snap = this._annotationsByImageIndex.get(idx);
+      if (!snap) {
+        continue;
+      }
+      const per = [];
+      per.push(...pinsToAnnotations(snap.notes ?? []));
+      if (snap.crop) {
+        const c = cropToAnnotation(snap.crop);
+        if (c) {
+          per.push(c);
+        }
+      }
+      for (const e of eyePathsToAnnotations(snap.eyePaths ?? [])) {
+        per.push(e);
+      }
+      for (const a of attentionPullsToAnnotations(snap.attentionPulls ?? [])) {
+        per.push(a);
+      }
+      for (const a of strongAreasToAnnotations(snap.strongAreas ?? [])) {
+        per.push(a);
+      }
+      for (const a of directionArrowsToAnnotations(
+        snap.directionArrows ?? []
+      )) {
+        per.push(a);
+      }
+      for (const a of relationshipArrowsToAnnotations(
+        snap.relationshipArrows ?? []
+      )) {
+        per.push(a);
+      }
+      if (per.length > 0) {
+        annotationsByImage[idx] = per;
+        for (const a of per) {
+          annotations.push({ ...a, image_index: idx });
+        }
       }
     }
-    for (const eyePathAnnotation of eyePathsToAnnotations(this.eyePaths ?? [])) {
-      annotations.push(eyePathAnnotation);
-    }
-    for (const pull of attentionPullsToAnnotations(this.attentionPulls ?? [])) {
-      annotations.push(pull);
-    }
-    for (const area of strongAreasToAnnotations(this.strongAreas ?? [])) {
-      annotations.push(area);
-    }
-    for (const arrow of directionArrowsToAnnotations(
-      this.directionArrows ?? []
-    )) {
-      annotations.push(arrow);
-    }
-    for (const arrow of relationshipArrowsToAnnotations(
-      this.relationshipArrows ?? []
-    )) {
-      annotations.push(arrow);
-    }
+
     const payload = {
       schema_version: 1,
       selected_image_version_key: this.selectedVersionKey ?? null,
@@ -5941,6 +6287,11 @@ export default class NpnCritiqueReplyModal extends Component {
       selected_image_index: this._selectedImageIndex,
       critique_text: this.critiqueText ?? "",
       annotations,
+      // New multi-image map: { "0": [...], "1": [...], ... }. Used
+      // by _restoreDraft to re-populate the per-image snapshot map.
+      // Readers that only know about the flat `annotations` array
+      // still work — each entry there carries image_index.
+      annotations_by_image: annotationsByImage,
       // Processing example draft entry — flat shape matching
       // ProcessingExampleNormalizer.normalize_for_draft on the
       // server. Null when no example is attached; restored on
@@ -5979,7 +6330,7 @@ export default class NpnCritiqueReplyModal extends Component {
       console.info("[npn-critique-reply] draft-build-payload", {
         textLength: payload.critique_text.length,
         annotationCount: payload.annotations.length,
-        kinds: payload.annotations.map((a) => a.kind),
+        imagesWithAnnotations: Object.keys(annotationsByImage).map(Number),
       });
     }
     return payload;
@@ -6170,7 +6521,16 @@ export default class NpnCritiqueReplyModal extends Component {
         if (versionKey) {
           this._selectedVersionKey = versionKey;
         }
-        this._restoreAnnotations(draft.annotations, draft.selected_image_version_key);
+        // Multi-image restore: prefer the explicit map when present
+        // (drafts saved after the multi-image rollout), fall back to
+        // the flat array (legacy drafts) where each entry's
+        // image_index — defaulting to 0 — drives the bucketing.
+        this._restoreAnnotationsByImage({
+          annotationsByImage: draft.annotations_by_image,
+          flatAnnotations: draft.annotations,
+          activeIndex: this._selectedImageIndex,
+          versionKey: draft.selected_image_version_key,
+        });
 
         // Notice when a newer revision exists than the one the draft
         // was started on — informational, not blocking.
@@ -6254,65 +6614,134 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   _restoreAnnotations(annotations, versionKey) {
+    const snapshot = this._buildSnapshotFromAnnotations(annotations, versionKey);
+    this._restoreAnnotationsFromSnapshot(snapshot);
+    this._bumpIdCountersFromSnapshot(snapshot);
+    if (snapshot.crop?.aspectRatio) {
+      this.cropAspectRatio = snapshot.crop.aspectRatio;
+    }
+    this.cropSelected = !!snapshot.crop;
+  }
+
+  // Multi-image draft restore. Accepts either:
+  //   - `annotationsByImage`: { 0: [...], 1: [...], ... }  (preferred,
+  //      set by the multi-image draft payload), OR
+  //   - `flatAnnotations`: a single array whose entries carry
+  //     `image_index` (back-compat for drafts written before the map
+  //     existed).
+  // Builds a snapshot for each image and stashes them in
+  // `_annotationsByImageIndex`. Then restores the active image's
+  // tracked fields from its snapshot.
+  _restoreAnnotationsByImage({
+    annotationsByImage,
+    flatAnnotations,
+    activeIndex,
+    versionKey,
+  }) {
+    const grouped = {};
+    if (annotationsByImage && typeof annotationsByImage === "object") {
+      for (const [key, list] of Object.entries(annotationsByImage)) {
+        const idx = Number.parseInt(key, 10);
+        if (Number.isInteger(idx) && idx >= 0 && Array.isArray(list)) {
+          grouped[idx] = list;
+        }
+      }
+    } else if (Array.isArray(flatAnnotations)) {
+      for (const entry of flatAnnotations) {
+        const idx = Number.isInteger(entry?.image_index)
+          ? entry.image_index
+          : 0;
+        if (!grouped[idx]) {
+          grouped[idx] = [];
+        }
+        grouped[idx].push(entry);
+      }
+    }
+
+    // Build snapshots for each image and stash them. Active image is
+    // populated last so the tracked-field restore reflects the right
+    // snapshot.
+    this._annotationsByImageIndex.clear();
+    const activeIdx = Number.isInteger(activeIndex)
+      ? activeIndex
+      : this._selectedImageIndex;
+    let activeSnapshot = null;
+    for (const [idxKey, list] of Object.entries(grouped)) {
+      const idx = Number.parseInt(idxKey, 10);
+      const snapshot = this._buildSnapshotFromAnnotations(list, versionKey);
+      this._annotationsByImageIndex.set(idx, snapshot);
+      if (idx === activeIdx) {
+        activeSnapshot = snapshot;
+      }
+    }
+    this._restoreAnnotationsFromSnapshot(activeSnapshot);
+    if (activeSnapshot) {
+      this._bumpIdCountersFromSnapshot(activeSnapshot);
+      if (activeSnapshot.crop?.aspectRatio) {
+        this.cropAspectRatio = activeSnapshot.crop.aspectRatio;
+      }
+      this.cropSelected = !!activeSnapshot.crop;
+    }
+  }
+
+  // Convert a list of annotation objects (whatever their image_index)
+  // into a single-image snapshot. Reuses the existing per-kind
+  // converters so the restore logic stays identical to the legacy
+  // path. image_index is intentionally ignored here — callers are
+  // expected to have grouped by index already.
+  _buildSnapshotFromAnnotations(annotations, versionKey) {
     const list = Array.isArray(annotations) ? annotations : [];
     const synthPayload = {
       source: { image_version_key: versionKey ?? null },
       annotations: list,
     };
-
     const pins = annotationsToPins(synthPayload);
-    this.notes = pins.map((p) => ({
+    const notes = pins.map((p) => ({
       number: p.number,
       xPct: p.xPct,
       yPct: p.yPct,
       note: p.note ?? null,
     }));
-
-    // The crop converter takes a SINGLE annotation; pluck the first
-    // matching entry. Eye paths support multiple — convert ALL
-    // matching entries and keep them as an array.
     const cropEntry = list.find((a) => a?.kind === "crop");
-    this.crop = cropEntry ? annotationToCrop(cropEntry) : null;
-    if (this.crop?.aspectRatio) {
-      this.cropAspectRatio = this.crop.aspectRatio;
-    }
-    // Match the auto-select-on-placement behaviour of addCrop so the
-    // restored crop is immediately interactive (Transformer mounts,
-    // drag works in one motion). Multi-instance shapes (pins,
-    // attention pulls, strong areas, eye paths) intentionally do not
-    // auto-select on restore — picking one would be arbitrary, and
-    // the konva stage's canDrag gate already allows single-motion
-    // drag for any marker in the right tool mode.
-    this.cropSelected = !!this.crop;
-    const eyePathEntries = list.filter((a) => a?.kind === "eye_path");
-    this.eyePaths = eyePathEntries
+    const crop = cropEntry ? annotationToCrop(cropEntry) : null;
+    const eyePaths = list
+      .filter((a) => a?.kind === "eye_path")
       .map((entry) => annotationToEyePath(entry))
       .filter((p) => p && (p.points?.length ?? 0) > 0);
-    this.selectedEyePathId = null;
-    this._activeEyePathId = null;
+    return {
+      notes,
+      crop,
+      eyePaths,
+      attentionPulls: annotationsToAttentionPulls(synthPayload),
+      strongAreas: annotationsToStrongAreas(synthPayload),
+      directionArrows: annotationsToDirectionArrows(synthPayload),
+      relationshipArrows: annotationsToRelationshipArrows(synthPayload),
+    };
+  }
 
-    this.attentionPulls = annotationsToAttentionPulls(synthPayload);
-    this.strongAreas = annotationsToStrongAreas(synthPayload);
-    this.directionArrows = annotationsToDirectionArrows(synthPayload);
-    this.relationshipArrows = annotationsToRelationshipArrows(synthPayload);
-    this.selectedDirectionArrowId = null;
-    this.selectedRelationshipArrowId = null;
-
-    // Bump id counters past any restored ids so newly-created
-    // markers don't collide.
-    this._attentionPullIdCounter = this.attentionPulls.reduce(
+  // Bump the per-kind id counters past any ids in the restored
+  // snapshot so newly-created markers don't collide with restored
+  // ones. Pulled out of the legacy _restoreAnnotations so both the
+  // single-image and multi-image restore paths can share it.
+  _bumpIdCountersFromSnapshot(snapshot) {
+    if (!snapshot) {
+      return;
+    }
+    this._attentionPullIdCounter = (snapshot.attentionPulls ?? []).reduce(
       (max, p) => Math.max(max, extractIdSuffix(p.id) ?? 0),
       this._attentionPullIdCounter ?? 0
     );
-    this._strongAreaIdCounter = this.strongAreas.reduce(
+    this._strongAreaIdCounter = (snapshot.strongAreas ?? []).reduce(
       (max, s) => Math.max(max, extractIdSuffix(s.id) ?? 0),
       this._strongAreaIdCounter ?? 0
     );
-    this._directionArrowIdCounter = this.directionArrows.reduce(
+    this._directionArrowIdCounter = (snapshot.directionArrows ?? []).reduce(
       (max, a) => Math.max(max, extractIdSuffix(a.id) ?? 0),
       this._directionArrowIdCounter ?? 0
     );
-    this._relationshipArrowIdCounter = this.relationshipArrows.reduce(
+    this._relationshipArrowIdCounter = (
+      snapshot.relationshipArrows ?? []
+    ).reduce(
       (max, a) => Math.max(max, extractIdSuffix(a.id) ?? 0),
       this._relationshipArrowIdCounter ?? 0
     );
@@ -8316,23 +8745,27 @@ export default class NpnCritiqueReplyModal extends Component {
               </section>
 
               {{#if this._previewSnapshot.hasVisualNotes}}
-                <section
-                  class="npn-critique-reply-modal__preview-section
-                    npn-critique-reply-modal__preview-section--visual-notes"
-                >
-                  <h3 class="npn-critique-reply-modal__preview-section-title">
-                    {{i18n
-                      "npn_critique_reply.modal.preview_section_visual_notes"
-                    }}
-                  </h3>
-                  <img
-                    class="npn-critique-reply-modal__preview-image"
-                    src={{this._previewSnapshot.visualNotesObjectUrl}}
-                    alt={{i18n
-                      "npn_critique_reply.modal.preview_section_visual_notes"
-                    }}
-                  />
-                </section>
+                {{#each this._previewSnapshot.visualNotesImages as |img|}}
+                  <section
+                    class="npn-critique-reply-modal__preview-section
+                      npn-critique-reply-modal__preview-section--visual-notes"
+                  >
+                    <h3
+                      class="npn-critique-reply-modal__preview-section-title"
+                    >
+                      {{#if img.label}}{{img.label}}{{else}}{{i18n
+                          "npn_critique_reply.modal.preview_section_visual_notes"
+                        }}{{/if}}
+                    </h3>
+                    <img
+                      class="npn-critique-reply-modal__preview-image"
+                      src={{img.objectUrl}}
+                      alt={{i18n
+                        "npn_critique_reply.modal.preview_section_visual_notes"
+                      }}
+                    />
+                  </section>
+                {{/each}}
               {{/if}}
 
               {{#if this._previewSnapshot.hasProcessingExample}}

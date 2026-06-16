@@ -256,11 +256,22 @@ en:
 
         # Visual notes — async export + upload pipeline ----------------
         preparing_visual_notes: "Preparing visual notes…"
+        # Shown while iterating multiple annotated images during the
+        # Post Critique flatten+upload pipeline. %{current} / %{total}
+        # both count visually-annotated images, NOT the total
+        # submission size.
+        preparing_visual_notes_n: "Preparing visual notes (%{current} of %{total})…"
         uploading_visual_notes: "Uploading visual notes…"
         posting_critique: "Posting critique…"
         visual_notes_alt: "visual notes"
         visual_notes_heading_original: "Visual notes based on the original image:"
         visual_notes_heading_revision: "Visual notes based on %{label}:"
+        # Heading for visual-notes sections on secondary submission
+        # images (Image 2..N) when the OP attached multiple. Label is
+        # the picker pill text ("Image 2", "Image 3"...) so the post
+        # body reads as a faithful echo of what the critic was looking
+        # at.
+        visual_notes_heading_labeled: "Visual notes based on %{label}:"
         visual_notes_load_failed: "Couldn't load the reference image for export. Check your connection or try a different image version."
         visual_notes_export_failed: "Couldn't export the visual notes image. The reference image may be hosted on a server that blocks cross-origin export."
         visual_notes_upload_failed: "Couldn't upload the visual notes image. Please try again."

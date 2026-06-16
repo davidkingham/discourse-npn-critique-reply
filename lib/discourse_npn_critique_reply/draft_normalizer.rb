@@ -90,6 +90,14 @@ module DiscourseNpnCritiqueReply
           normalize_image_index(payload["selected_image_index"]),
         "critique_text" => normalize_text(payload["critique_text"]),
         "annotations" => normalize_annotations(payload["annotations"]),
+        # Multi-image annotations map. Submissions can carry up to 5
+        # images; each image keeps its own annotation set. Stored as
+        # `{ "0" => [..], "1" => [..], ... }` so JSON round-trip keys
+        # are clean strings; restore parses the keys back to ints.
+        # When missing (legacy drafts), the client falls back to the
+        # flat `annotations` array with per-entry image_index.
+        "annotations_by_image" =>
+          normalize_annotations_by_image(payload["annotations_by_image"]),
         # Processing example draft entry — flat shape, see
         # ProcessingExampleNormalizer.normalize_for_draft. May be nil
         # when the user has no upload pending; the client treats both
@@ -117,6 +125,24 @@ module DiscourseNpnCritiqueReply
       return 0 if value.nil?
       i = value.to_i
       i >= 0 ? i : 0
+    end
+
+    # Per-image annotations map: `{ "0" => [..], "1" => [..], ... }`.
+    # Each value is normalized through the regular annotation path so
+    # the same caps + kind-whitelist apply per image. Non-integer keys
+    # or non-array values are silently dropped — partial corruption
+    # shouldn't poison an otherwise restorable draft.
+    def normalize_annotations_by_image(value)
+      return {} unless value.is_a?(Hash)
+      out = {}
+      value.each do |k, v|
+        idx = Integer(k.to_s, exception: false)
+        next if idx.nil? || idx.negative?
+        next unless v.is_a?(Array)
+        normalized = normalize_annotations(v)
+        out[idx.to_s] = normalized if normalized.any?
+      end
+      out
     end
 
     def normalize_text(value)
