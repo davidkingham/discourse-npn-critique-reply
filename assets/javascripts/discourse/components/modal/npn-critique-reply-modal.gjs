@@ -21,7 +21,7 @@ import TextareaTextManipulation, {
 import userSearch from "discourse/lib/user-search";
 import Composer from "discourse/models/composer";
 import Draft from "discourse/models/draft";
-import { and, eq, or } from "discourse/truth-helpers";
+import { and, eq, not, or } from "discourse/truth-helpers";
 import { i18n } from "discourse-i18n";
 import NpnCritiqueImageReference from "../npn-critique-image-reference";
 import {
@@ -228,6 +228,13 @@ function snapshotHasAnnotations(snapshot) {
 // match for single-crop critiques and posts written before the
 // rename.
 const PREVIEW_TOKEN_PATTERN =
+  /\[([1-9]\d{0,2}|Crop \d{1,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
+
+// Same pattern used by the per-image paragraph grouper. Kept as a
+// separate constant because matchAll() on a single shared regex
+// would clobber the preview parser's lastIndex when both run in the
+// same render cycle.
+const PARAGRAPH_TOKEN_PATTERN =
   /\[([1-9]\d{0,2}|Crop \d{1,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
 
 function badgeVariantForLabel(label) {
@@ -1912,25 +1919,47 @@ export default class NpnCritiqueReplyModal extends Component {
       ? this._composeProcessingExampleBlock()
       : "";
 
-    // Text section. The visual-notes heading + processing-example
-    // heading both name the selected image version, so the
-    // `_textOnlyRaw` revision prefix would be redundant when either
-    // headed block is present. Strip down to the bare textarea body
-    // in that case.
-    const trimmedText = this.critiqueText.trim();
-    const textSection =
+    // The visual-notes heading + processing-example heading both
+    // name the selected image version, so the `_textOnlyRaw`
+    // revision prefix would be redundant when either headed block
+    // is present. Strip down to the bare textarea body in that case.
+    const trimmedText =
       visualBlocks.length > 0 || exampleBlock
-        ? trimmedText
+        ? this.critiqueText.trim()
         : this._textOnlyRaw();
 
-    // Order: critique text first, then one section per annotated
-    // image (submission order), then the processing example. Beta
-    // feedback was that visual-first ordering forced readers to
-    // scroll past the image to learn what they were looking at —
-    // text-first lets the critique introduce its own references.
-    const parts = [textSection];
+    // Body composition.
+    //
+    // Per-image grouping: each paragraph that references annotation
+    // tokens belonging to ONE image (e.g. "[A1] sits low and
+    // anchors..." when A1 lives on image 2) is routed UNDER that
+    // image's section so the prose sits next to the image it
+    // describes. Paragraphs without recognised tokens, or that mix
+    // tokens from multiple images, stay at the top as "general
+    // critique." Single-image submissions get the same treatment so
+    // the typed critique reads as written-then-marks both for a
+    // single and for multiple images.
+    const tokenToImageIndex = this._buildTokenToImageIndexMap();
+    const grouped = this._groupTextParagraphsByImage(
+      trimmedText,
+      tokenToImageIndex
+    );
+
+    // Order: general written critique → per-image (submission order)
+    // section with its own prose paragraphs and image → processing
+    // example. Empty groups + sections collapse cleanly via
+    // filter(Boolean).
+    const parts = [];
+    if (grouped.general.length > 0) {
+      parts.push(grouped.general.join("\n\n"));
+    }
     for (const block of visualBlocks) {
-      parts.push(this._composeVisualNotesBlockForImage(block));
+      parts.push(
+        this._composeVisualNotesBlockForImage(
+          block,
+          grouped.perImage.get(block.index) ?? []
+        )
+      );
     }
     if (exampleBlock) {
       parts.push(exampleBlock);
@@ -2116,11 +2145,108 @@ export default class NpnCritiqueReplyModal extends Component {
   // "original" heading. The cooked-post inline image markdown
   // doesn't change shape — Discourse will resolve `short_url` the
   // same way it did before.
-  _composeVisualNotesBlockForImage({ index, sourceLabel, upload }) {
+  //
+  // `paragraphs` is the prose this image owns (paragraphs whose
+  // annotation tokens belong to THIS image). When empty the section
+  // is just heading + image, same as the v1 visual-notes block.
+  // When populated, the prose sits between heading and image so the
+  // critic's note reads alongside the marked-up image.
+  _composeVisualNotesBlockForImage(
+    { index, sourceLabel, upload },
+    paragraphs = []
+  ) {
     const heading = this._visualNotesHeadingForIndex(index, sourceLabel);
     const altText = i18n("npn_critique_reply.modal.visual_notes_alt");
     const shortUrl = upload?.short_url ?? upload?.url ?? "";
-    return `${heading}\n\n![${altText}](${shortUrl})`;
+    const imageLine = `![${altText}](${shortUrl})`;
+    if (paragraphs.length === 0) {
+      return `${heading}\n\n${imageLine}`;
+    }
+    return `${heading}\n\n${paragraphs.join("\n\n")}\n\n${imageLine}`;
+  }
+
+  // Walk every per-image snapshot and assemble a `token → image_index`
+  // lookup. Tokens are the exact strings that appear between `[` and
+  // `]` in the textarea (so the same key the cooked-post badge
+  // decorator's TOKEN_PATTERN captures).
+  _buildTokenToImageIndexMap() {
+    const map = new Map();
+    const visit = (idx, snap) => {
+      if (!snap) {
+        return;
+      }
+      for (const n of snap.notes ?? []) {
+        if (Number.isInteger(n?.number)) {
+          map.set(String(n.number), idx);
+        }
+      }
+      if (snap.crop) {
+        // Single-crop critiques omit the label and use [Crop]; multi-
+        // crop critiques carry "Crop 1" / "Crop 2" / etc. Register
+        // the actual label when present, otherwise the bare "Crop"
+        // form so the single-crop case still routes correctly.
+        map.set(snap.crop.label ?? "Crop", idx);
+      }
+      for (const arr of [
+        snap.attentionPulls,
+        snap.strongAreas,
+        snap.eyePaths,
+        snap.directionArrows,
+        snap.relationshipArrows,
+      ]) {
+        for (const a of arr ?? []) {
+          if (a?.label && typeof a.label === "string") {
+            map.set(a.label, idx);
+          }
+        }
+      }
+    };
+    for (const [idx, snap] of this._annotationsByImageIndex) {
+      visit(idx, snap);
+    }
+    return map;
+  }
+
+  // Split the critique text into paragraphs (blank-line separated)
+  // and classify each one: a paragraph whose annotation tokens all
+  // belong to ONE image goes into perImage[that index]; everything
+  // else (no tokens, or tokens from multiple images) stays in
+  // `general`. Preserves original order within each bucket. Mixed-
+  // token paragraphs intentionally stay at the top so a critic
+  // writing about how Crop 2 relates to A1 doesn't get sliced
+  // between two sections.
+  _groupTextParagraphsByImage(text, tokenToImageIndex) {
+    const general = [];
+    const perImage = new Map();
+    if (!text) {
+      return { general, perImage };
+    }
+    const paragraphs = text.split(/\n{2,}/);
+    for (const p of paragraphs) {
+      if (!p.trim()) {
+        continue;
+      }
+      PARAGRAPH_TOKEN_PATTERN.lastIndex = 0;
+      const indices = new Set();
+      let recognisedTokenCount = 0;
+      for (const match of p.matchAll(PARAGRAPH_TOKEN_PATTERN)) {
+        const idx = tokenToImageIndex.get(match[1]);
+        if (idx != null) {
+          indices.add(idx);
+          recognisedTokenCount += 1;
+        }
+      }
+      if (recognisedTokenCount > 0 && indices.size === 1) {
+        const idx = [...indices][0];
+        if (!perImage.has(idx)) {
+          perImage.set(idx, []);
+        }
+        perImage.get(idx).push(p);
+      } else {
+        general.push(p);
+      }
+    }
+    return { general, perImage };
   }
 
   // Bridge between the per-image `visualBlocks` returned by
@@ -5473,6 +5599,11 @@ export default class NpnCritiqueReplyModal extends Component {
           index: entry.index,
           label: this._sourceLabelForImageIndex(entry.index),
           objectUrl: URL.createObjectURL(blob),
+          // Per-image prose paragraphs — set below once we have a
+          // token map. Each image renders these between its heading
+          // and the flattened-image preview, matching the cooked-
+          // post body shape from _prepareReplyText.
+          paragraphsHtml: null,
         });
       } catch (e) {
         // Preview is best-effort: if a flatten fails we still want
@@ -5496,13 +5627,33 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
 
+    // Per-image grouping for the preview. Mirrors the cooked-post
+    // composition in _prepareReplyText: prose paragraphs whose
+    // tokens belong to ONE image flow under that image; everything
+    // else (general critique, mixed-token paragraphs) stays at the
+    // top.
+    const tokenToImageIndex = this._buildTokenToImageIndexMap();
+    const grouped = this._groupTextParagraphsByImage(
+      this.critiqueText.trim(),
+      tokenToImageIndex
+    );
+    for (const img of visualNotesImages) {
+      const paras = grouped.perImage.get(img.index) ?? [];
+      img.paragraphsHtml = paras.length
+        ? htmlSafe(buildPreviewTextHtml(paras.join("\n\n")))
+        : null;
+    }
+
     this._previewSnapshot = {
       visualNotesImages,
       visualNotesError,
       processingExampleUrl: this.processingExample?.url ?? null,
       processingExampleFilename:
         this.processingExample?.filename ?? null,
-      textBody: this.critiqueText.trim(),
+      // textBody now holds only the GENERAL (no-token / mixed-token)
+      // paragraphs. Per-image prose lives on each
+      // visualNotesImages[i].paragraphsHtml entry above.
+      textBody: grouped.general.join("\n\n"),
       hasVisualNotes: visualNotesImages.length > 0,
       hasProcessingExample: !!this.processingExample,
     };
@@ -6636,54 +6787,40 @@ export default class NpnCritiqueReplyModal extends Component {
     if (!raw) {
       return "";
     }
-    // Two body formats live in the database today:
+    // Three body shapes live in the database:
     //
-    //   NEW (text-first, multi-image): the critique text comes at
-    //   the start of the post, then one or more
-    //   "{heading}\n\n![alt](upload://...)" image blocks, then an
-    //   optional processing-example block. Text is everything
-    //   BEFORE the first image-markdown line (minus the heading
-    //   that introduces it).
+    //   PER-IMAGE (current): each image block is heading +
+    //   per-image prose paragraphs + image markdown. General prose
+    //   sits at the top, then each image's section follows. Edit
+    //   needs to recover ALL the prose — general + per-image —
+    //   into one textarea while dropping synthetic lines.
     //
-    //   OLD (visual-first, single-image): the heading + image block
-    //   come at the start, and the critique text follows after.
-    //   Text is everything AFTER the LAST image-markdown line.
+    //   TEXT-FIRST (intermediate): text at the top, then sequential
+    //   "heading + image" blocks with no per-image prose. The same
+    //   strip-headings-and-images logic recovers it correctly.
     //
-    // We try the new-format extraction first; if it yields nothing
-    // (the post has heading-then-image at the very top), we fall
-    // back to the old extraction. Text-only posts (no image
-    // markdown at all) return as-is.
-    const imageLineRe = /^!\[[^\]]*\]\(upload:\/\/[^\s)]+\)\s*$/m;
-    const firstImage = imageLineRe.exec(raw);
-    if (!firstImage) {
-      return raw;
+    //   LEGACY VISUAL-FIRST (pre-multi-image): heading + image at
+    //   the start, then the critique text. Same logic — strip the
+    //   leading heading + image, prose at the tail survives.
+    //
+    // Approach: strip image-markdown lines, strip heading lines
+    // (English "Visual notes" / "Processing Example" prefixes
+    // ending with ":"), then collapse blank-line runs. What
+    // remains is the critic's prose in original order.
+    const lines = raw.split("\n");
+    const out = [];
+    const imageLineRe = /^!\[[^\]]*\]\(upload:\/\/[^\s)]+\)\s*$/;
+    const headingPrefixRe = /^(Visual notes|Processing Example)\b.*:\s*$/;
+    for (const line of lines) {
+      if (imageLineRe.test(line)) {
+        continue;
+      }
+      if (headingPrefixRe.test(line.trim())) {
+        continue;
+      }
+      out.push(line);
     }
-
-    // New-format candidate: everything up to (but not including)
-    // the heading line that introduces the first image. The line
-    // immediately above the image is the heading; strip it off
-    // and the blank line that separates it from the prose.
-    const beforeImage = raw.slice(0, firstImage.index).replace(/\s+$/, "");
-    const lastNewline = beforeImage.lastIndexOf("\n");
-    const newFormatText =
-      lastNewline >= 0
-        ? beforeImage.slice(0, lastNewline).replace(/\s+$/, "")
-        : "";
-    if (newFormatText.length > 0) {
-      return newFormatText;
-    }
-
-    // Fall back to the legacy visual-first extraction.
-    const allImagesRe = /^!\[[^\]]*\]\(upload:\/\/[^\s)]+\)\s*$/gm;
-    let lastMatchEnd = -1;
-    let m;
-    while ((m = allImagesRe.exec(raw)) !== null) {
-      lastMatchEnd = m.index + m[0].length;
-    }
-    if (lastMatchEnd < 0) {
-      return raw;
-    }
-    return raw.slice(lastMatchEnd).replace(/^\s+/, "");
+    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
   // `_restoringDraft` first so the didUpdate autosave hook ignores
@@ -8921,27 +9058,48 @@ export default class NpnCritiqueReplyModal extends Component {
                 example. Keeps the preview faithful to what the
                 cooked post will look like. }}
             <div class="npn-critique-reply-modal__preview-body">
-              <section
-                class="npn-critique-reply-modal__preview-section
-                  npn-critique-reply-modal__preview-section--critique"
-              >
-                <h3 class="npn-critique-reply-modal__preview-section-title">
-                  {{i18n
-                    "npn_critique_reply.modal.preview_section_critique"
-                  }}
-                </h3>
-                {{#if this.previewHasText}}
+              {{! General critique section — shows the prose that
+                  isn't routed under any single image. When the user
+                  has annotation-only text (every paragraph belongs
+                  to a specific image) this collapses; the image
+                  sections below carry the prose. Empty placeholder
+                  only fires when there's no preview-eligible content
+                  at all. }}
+              {{#if this.previewHasText}}
+                <section
+                  class="npn-critique-reply-modal__preview-section
+                    npn-critique-reply-modal__preview-section--critique"
+                >
+                  <h3
+                    class="npn-critique-reply-modal__preview-section-title"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.preview_section_critique"
+                    }}
+                  </h3>
                   <div
                     class="npn-critique-reply-modal__preview-text"
                   >{{this.previewTextHtml}}</div>
-                {{else}}
+                </section>
+              {{else if (not this._previewSnapshot.hasVisualNotes)}}
+                <section
+                  class="npn-critique-reply-modal__preview-section
+                    npn-critique-reply-modal__preview-section--critique"
+                >
+                  <h3
+                    class="npn-critique-reply-modal__preview-section-title"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.preview_section_critique"
+                    }}
+                  </h3>
                   <p
                     class="npn-critique-reply-modal__preview-text-empty"
                   >{{i18n
                       "npn_critique_reply.modal.preview_empty_text"
                     }}</p>
-                {{/if}}
-              </section>
+                </section>
+              {{/if}}
 
               {{#if this._previewSnapshot.hasVisualNotes}}
                 {{#each this._previewSnapshot.visualNotesImages as |img|}}
@@ -8956,6 +9114,11 @@ export default class NpnCritiqueReplyModal extends Component {
                           "npn_critique_reply.modal.preview_section_visual_notes"
                         }}{{/if}}
                     </h3>
+                    {{#if img.paragraphsHtml}}
+                      <div
+                        class="npn-critique-reply-modal__preview-text"
+                      >{{img.paragraphsHtml}}</div>
+                    {{/if}}
                     <img
                       class="npn-critique-reply-modal__preview-image"
                       src={{img.objectUrl}}
