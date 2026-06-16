@@ -450,8 +450,14 @@ export function normalizeCropAnnotation(raw) {
     : DEFAULT_ASPECT_RATIO;
 
   const id = isNonEmptyString(raw.id) ? raw.id : "crop_1";
+  // Crop label is OPTIONAL — single-crop critiques carry no label
+  // and render as "[Crop]" in the post body, while multi-image
+  // critiques with 2+ crops stamp each one "Crop 1" / "Crop 2" /
+  // etc. Both forms are preserved here so the schema round-trips
+  // either way.
+  const label = isNonEmptyString(raw.label) ? raw.label : null;
 
-  return {
+  const out = {
     id,
     kind: ANNOTATION_KINDS.CROP,
     x_pct: xPct,
@@ -460,6 +466,10 @@ export function normalizeCropAnnotation(raw) {
     height_pct: heightPct,
     aspect_ratio,
   };
+  if (label) {
+    out.label = label;
+  }
+  return out;
 }
 
 // ----- Eye-path normalizer + conversions --------------------------
@@ -1219,6 +1229,9 @@ export function cropToAnnotation(crop) {
     width_pct: crop.widthPct,
     height_pct: crop.heightPct,
     aspect_ratio: crop.aspectRatio ?? DEFAULT_ASPECT_RATIO,
+    // Multi-image "Crop N" label, when present. Single-crop
+    // critiques omit it (legacy "[Crop]" token).
+    label: crop.label ?? null,
   });
 }
 
@@ -1233,6 +1246,7 @@ export function annotationToCrop(annotation) {
     widthPct: annotation.width_pct,
     heightPct: annotation.height_pct,
     aspectRatio: annotation.aspect_ratio ?? DEFAULT_ASPECT_RATIO,
+    label: annotation.label ?? null,
   };
 }
 

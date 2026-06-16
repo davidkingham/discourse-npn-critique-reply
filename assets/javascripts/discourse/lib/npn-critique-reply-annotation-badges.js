@@ -60,10 +60,15 @@ export function buildAnnotationLabelMap(annotations) {
       continue;
     }
     if (annotation.kind === "crop") {
-      // Crop has no per-instance label (one crop per critique).
-      // Fixed `Crop` token in the prose styles as a pill. Also
-      // accept the legacy uppercase `CROP` form so posts written
-      // before the rename keep their styled badge.
+      // Multi-image critiques may carry numbered crop labels ("Crop
+      // 1", "Crop 2", …) — register the annotation's own label when
+      // present so its token gets styled. Always register the
+      // legacy "Crop" / "CROP" forms too so single-crop posts and
+      // posts written before this change keep their badge.
+      const label = annotation.label;
+      if (typeof label === "string" && label.length > 0) {
+        map.set(label, suffix);
+      }
       map.set("Crop", suffix);
       map.set("CROP", suffix);
       continue;
@@ -95,7 +100,13 @@ const SKIP_ANCESTOR_TAGS = new Set([
 // post's annotations. Numeric form for pins, alpha+number for the
 // other labelled kinds. `Crop` is the canonical form, `CROP` is
 // the legacy form (kept so old posts still render badges).
-const TOKEN_PATTERN = /\[([1-9]\d{0,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
+// Multi-image critiques may have 2+ crops; once that happens the
+// modal stamps each one with a "Crop N" label (Crop 1, Crop 2, …)
+// and the textarea token shifts accordingly. Single-crop critiques
+// stay as the legacy "[Crop]" / "[CROP]" forms. The pattern below
+// accepts all three so old posts and new posts both render badges.
+const TOKEN_PATTERN =
+  /\[([1-9]\d{0,2}|Crop \d{1,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
 
 // Walk every text node under `root` whose ancestors don't include a
 // skip-tag, and hand each one to `replaceTokensInTextNode`. We

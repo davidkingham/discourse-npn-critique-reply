@@ -223,14 +223,18 @@ function snapshotHasAnnotations(snapshot) {
 // TOKEN_PATTERN so the preview shows references using the same family
 // of badge styles. Variants resolve to CSS classes named in
 // `npn-critique-reply.scss` (.npn-annotation-badge--{variant}).
+// `Crop \d` covers the multi-crop labels stamped by the modal once a
+// critique has 2+ crops; the legacy `Crop` / `CROP` forms still
+// match for single-crop critiques and posts written before the
+// rename.
 const PREVIEW_TOKEN_PATTERN =
-  /\[([1-9]\d{0,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
+  /\[([1-9]\d{0,2}|Crop \d{1,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
 
 function badgeVariantForLabel(label) {
   if (/^\d/.test(label)) {
     return "note";
   }
-  if (label === "Crop" || label === "CROP") {
+  if (label === "Crop" || label === "CROP" || /^Crop \d/.test(label)) {
     return "crop";
   }
   const prefix = label[0];
@@ -1539,6 +1543,115 @@ export default class NpnCritiqueReplyModal extends Component {
       }
     }
     return false;
+  }
+
+  // Walk every image's stored annotation array of the given key
+  // (notes / attentionPulls / strongAreas / etc.) and yield each
+  // annotation in submission order. Used to compute label uniqueness
+  // across the WHOLE critique — A1, D1, E1, [N] should not repeat
+  // between images, otherwise the cooked post can't distinguish
+  // "D1 on image 1" from "D1 on image 2".
+  _allAnnotationsAcrossImages(key) {
+    const out = [];
+    const indices = new Set([this._selectedImageIndex]);
+    for (const i of this._annotationsByImageIndex.keys()) {
+      indices.add(i);
+    }
+    for (const idx of indices) {
+      if (idx === this._selectedImageIndex) {
+        const live = this[key];
+        if (Array.isArray(live)) {
+          for (const a of live) {
+            out.push(a);
+          }
+        }
+      } else {
+        const snap = this._annotationsByImageIndex.get(idx);
+        const list = snap?.[key];
+        if (Array.isArray(list)) {
+          for (const a of list) {
+            out.push(a);
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  _allLabelsAcrossImages(key) {
+    return this._allAnnotationsAcrossImages(key)
+      .map((a) => a?.label)
+      .filter((l) => typeof l === "string" && l.length > 0);
+  }
+
+  // Highest pin number used anywhere in the critique. Pin "labels" are
+  // the integer number itself, rendered as `[N]` in the post — they
+  // need to be unique across images too.
+  _maxPinNumberAcrossImages() {
+    let max = 0;
+    for (const note of this._allAnnotationsAcrossImages("notes")) {
+      const n = Number.isInteger(note?.number) ? note.number : 0;
+      if (n > max) {
+        max = n;
+      }
+    }
+    return max;
+  }
+
+  // Count of crops across ALL images. Used by the numbered-crop
+  // labeling rule: 1 total → "[Crop]" (unchanged), 2+ total → each
+  // crop gets "[Crop N]" with the existing first crop retroactively
+  // renamed in the textarea on the 1→2 transition.
+  _cropCountAcrossImages() {
+    let count = this.crop ? 1 : 0;
+    for (const [idx, snap] of this._annotationsByImageIndex) {
+      if (idx === this._selectedImageIndex) {
+        continue;
+      }
+      if (snap?.crop) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  // 1→2 transition: there's exactly one crop in cold storage with no
+  // label (the legacy "[Crop]" form). Stamp it as "Crop 1" in the
+  // snapshot AND rewrite the textarea so its token shifts from
+  // "[Crop]" to "[Crop 1]". The new (second) crop will be labeled
+  // "Crop 2" by the caller.
+  _retroactivelyLabelFirstCrop() {
+    for (const [idx, snap] of this._annotationsByImageIndex) {
+      if (idx === this._selectedImageIndex) {
+        continue;
+      }
+      if (snap?.crop && !snap.crop.label) {
+        this._annotationsByImageIndex.set(idx, {
+          ...snap,
+          crop: { ...snap.crop, label: "Crop 1" },
+        });
+        // Rewrite token in the textarea. The line template was
+        // "[Crop] %{text}" or the bare starter "[Crop]"; either way
+        // the only "[Crop]" tokens present at this moment came from
+        // that first crop. Replace globally so all references shift
+        // together.
+        if (typeof this.critiqueText === "string") {
+          this.critiqueText = this.critiqueText.replace(
+            /\[Crop\](?!\s*\d)/g,
+            "[Crop 1]"
+          );
+        }
+        return;
+      }
+    }
+  }
+
+  // Token format for the ACTIVE image's crop. Used by the popover
+  // confirm path to append the right "[Crop]" / "[Crop N]" token to
+  // the textarea.
+  _activeCropToken() {
+    const label = this.crop?.label;
+    return label ? `[${label}]` : "[Crop]";
   }
 
   get annotationCount() {
@@ -3488,8 +3601,23 @@ export default class NpnCritiqueReplyModal extends Component {
       // belt-and-braces here.
       return;
     }
+    // Numbered crop labels kick in only when 2+ crops exist across
+    // the whole critique. Singles stay as "[Crop]" (legacy
+    // aesthetic). On the 1→2 transition we retroactively label the
+    // existing crop "Crop 1" — both its stored label and the
+    // textarea token it left behind — and assign "Crop 2" to the
+    // new one. Beyond that, each new crop is "Crop {existing+1}".
+    const existingCropCount = this._cropCountAcrossImages();
+    let cropLabel = null;
+    if (existingCropCount === 1) {
+      this._retroactivelyLabelFirstCrop();
+      cropLabel = "Crop 2";
+    } else if (existingCropCount >= 2) {
+      cropLabel = `Crop ${existingCropCount + 1}`;
+    }
     this.crop = {
       id: "crop_1",
+      label: cropLabel,
       xPct,
       yPct,
       widthPct,
@@ -3672,7 +3800,10 @@ export default class NpnCritiqueReplyModal extends Component {
     }));
 
     const newId = nextEyePathId(this.eyePaths.map((p) => p.id));
-    const newLabel = nextEyePathLabel(this.eyePaths.map((p) => p.label));
+    // Eye-path labels (E1, E2, ...) are global across all submission
+    // images so the cooked post can disambiguate "[E1] on image 1"
+    // from "[E1] on image 2".
+    const newLabel = nextEyePathLabel(this._allLabelsAcrossImages("eyePaths"));
     // commitEyePath fires from drag-to-trace → always a stroke path
     // regardless of the toggle. The toggle position is the user's
     // intent for the NEXT interaction; this callback comes from an
@@ -3738,7 +3869,10 @@ export default class NpnCritiqueReplyModal extends Component {
         return;
       }
       const newId = nextEyePathId(this.eyePaths.map((p) => p.id));
-      const newLabel = nextEyePathLabel(this.eyePaths.map((p) => p.label));
+      // Same global-label rule as the stroke commit path above.
+      const newLabel = nextEyePathLabel(
+        this._allLabelsAcrossImages("eyePaths")
+      );
       // Click-to-add → tag as Points. In Stroke mode the Konva stage
       // shouldn't fire this callback at all (short presses are
       // dropped); defensive tag here in case it does.
@@ -4074,8 +4208,9 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this._attentionPullIdCounter += 1;
     const id = `attention_pull_${this._attentionPullIdCounter}`;
+    // Area labels (A1, A2, ...) are global across submission images.
     const label = nextAttentionPullLabel(
-      this.attentionPulls.map((p) => p.label)
+      this._allLabelsAcrossImages("attentionPulls")
     );
     // Bounding box for popover anchoring + note placement
     const xs = points.map((p) => p.xPct);
@@ -4131,8 +4266,9 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this._attentionPullIdCounter += 1;
     const id = `attention_pull_${this._attentionPullIdCounter}`;
+    // Area labels (A1, A2, ...) are global across submission images.
     const label = nextAttentionPullLabel(
-      this.attentionPulls.map((p) => p.label)
+      this._allLabelsAcrossImages("attentionPulls")
     );
     const newPull = { id, label, xPct, yPct, widthPct, heightPct };
     this.attentionPulls = [...this.attentionPulls, newPull];
@@ -4360,7 +4496,9 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this._strongAreaIdCounter += 1;
     const id = `strong_area_${this._strongAreaIdCounter}`;
-    const label = nextStrongAreaLabel(this.strongAreas.map((s) => s.label));
+    const label = nextStrongAreaLabel(
+      this._allLabelsAcrossImages("strongAreas")
+    );
     const xs = points.map((p) => p.xPct);
     const ys = points.map((p) => p.yPct);
     const minX = Math.min(...xs);
@@ -4512,7 +4650,9 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this._strongAreaIdCounter += 1;
     const id = `strong_area_${this._strongAreaIdCounter}`;
-    const label = nextStrongAreaLabel(this.strongAreas.map((p) => p.label));
+    const label = nextStrongAreaLabel(
+      this._allLabelsAcrossImages("strongAreas")
+    );
     const newArea = { id, label, xPct, yPct, widthPct, heightPct };
     this.strongAreas = [...this.strongAreas, newArea];
     this.selectedStrongAreaId = id;
@@ -4711,7 +4851,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this._directionArrowIdCounter += 1;
     const id = `direction_arrow_${this._directionArrowIdCounter}`;
     const label = nextDirectionArrowLabel(
-      this.directionArrows.map((a) => a.label)
+      this._allLabelsAcrossImages("directionArrows")
     );
     const newArrow = { id, label, x1Pct, y1Pct, x2Pct, y2Pct };
     this.directionArrows = [...this.directionArrows, newArrow];
@@ -4867,7 +5007,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this._relationshipArrowIdCounter += 1;
     const id = `relationship_arrow_${this._relationshipArrowIdCounter}`;
     const label = nextRelationshipArrowLabel(
-      this.relationshipArrows.map((a) => a.label)
+      this._allLabelsAcrossImages("relationshipArrows")
     );
     const newArrow = { id, label, x1Pct, y1Pct, x2Pct, y2Pct };
     this.relationshipArrows = [...this.relationshipArrows, newArrow];
@@ -5073,19 +5213,17 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     const text = this.pendingCropPopoverText.trim();
+    // Token shape depends on whether this crop got a number ("Crop
+    // 2") or stayed unnumbered (single-crop case → "[Crop]"). The
+    // crop's label was assigned at addCrop time.
+    const token = this._activeCropToken();
     if (text) {
-      const line = i18n(
-        "npn_critique_reply.visual_notes.crop_line_template",
-        { text }
-      );
-      this._appendToTextarea(line);
+      this._appendToTextarea(`${token} ${text}`);
     } else {
       // No description typed → still drop the bare token so the
-      // cooked post gets the styled [CROP] pill. The user can fill
+      // cooked post gets the styled crop pill. The user can fill
       // in the surrounding prose later.
-      this._appendToTextarea(
-        i18n("npn_critique_reply.visual_notes.crop_starter")
-      );
+      this._appendToTextarea(token);
     }
     this.pendingCropPopover = null;
     this.pendingCropPopoverText = "";
@@ -5142,7 +5280,11 @@ export default class NpnCritiqueReplyModal extends Component {
       this.pendingPin = null;
       this.pendingPinNoteText = "";
     }
-    const nextNumber = (this.notes[this.notes.length - 1]?.number ?? 0) + 1;
+    // Pin numbers are global across all submission images so the
+    // cooked post can refer to "[1]", "[2]", ... unambiguously even
+    // when the user has marked up multiple images. Highest existing
+    // number anywhere wins; the new pin is max+1.
+    const nextNumber = this._maxPinNumberAcrossImages() + 1;
     const newPin = {
       number: nextNumber,
       xPct,
