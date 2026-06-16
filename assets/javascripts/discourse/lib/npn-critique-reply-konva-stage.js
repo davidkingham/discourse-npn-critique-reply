@@ -793,6 +793,13 @@ export async function createAnnotationStage({
   let cropRectRef = null;
   let cropTransformerRef = null;
   let dimRectsRef = null;
+  // Konva.Label for the multi-crop "Crop N" badge. null when the
+  // active crop has no label (single-crop critique) or when there's
+  // no crop at all. Tracked so updateDimDuringInteraction can keep
+  // the badge attached to the crop's top-left corner during drag /
+  // resize.
+  let cropBadgeRef = null;
+  let cropBadgeOffset = 0;
   // Photo-editor-style decoration group around the selected crop:
   // 1px perimeter + 4 L-shaped corner brackets + 4 edge midpoint bars.
   // Editor-only (the exported JPEG draws the simpler stroked rect via
@@ -2977,6 +2984,8 @@ export async function createAnnotationStage({
     cropTransformerRef = null;
     dimRectsRef = null;
     cropDecorationsRef = null;
+    cropBadgeRef = null;
+    cropBadgeOffset = 0;
 
     const sw = stage.width();
     const sh = stage.height();
@@ -3131,6 +3140,50 @@ export async function createAnnotationStage({
     cropLayer.add(dimLeft);
     cropLayer.add(dimRight);
     cropLayer.add(cropRect);
+
+    // Multi-crop badge. Mirrors the export-side label drawn by
+    // drawCropOnCanvas — only renders when the crop carries a "Crop
+    // N" label (the modal stamps these on the 1→2 transition;
+    // single-crop critiques leave label unset). Sits at the top-
+    // left of the crop region so it reads as attached without
+    // obscuring the framed content. Tracked via cropBadgeRef so
+    // updateDimDuringInteraction can keep it pinned to the crop's
+    // corner during drag / resize.
+    if (state.crop.label) {
+      const shortEdge = Math.min(sw, sh);
+      cropBadgeOffset = Math.max(3, Math.round(shortEdge * 0.004));
+      const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+      const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+      const cropBadge = new Konva.Label({
+        x: cx + cropBadgeOffset,
+        y: cy + cropBadgeOffset,
+        listening: false,
+      });
+      cropBadge.add(
+        new Konva.Tag({
+          fill: tertiary,
+          cornerRadius: 3,
+          stroke: secondary,
+          strokeWidth: 1.5,
+          opacity: 0.95,
+          shadowColor: ANNOTATION_HALO_SHADOW,
+          shadowBlur: ANNOTATION_BADGE_SHADOW_BLUR,
+          shadowOpacity: ANNOTATION_BADGE_SHADOW_OPACITY,
+        })
+      );
+      cropBadge.add(
+        new Konva.Text({
+          text: state.crop.label,
+          fontSize: badgeFontSize,
+          fontFamily: "sans-serif",
+          fontStyle: "bold",
+          fill: secondary,
+          padding: badgePadding,
+        })
+      );
+      cropLayer.add(cropBadge);
+      cropBadgeRef = cropBadge;
+    }
 
     // Perimeter-only hit zone for cross-mode crop selection.
     //
@@ -3328,6 +3381,16 @@ export async function createAnnotationStage({
       // its anchors continue to capture mouse events at the corners
       // and edges.
       cropTransformerRef?.moveToTop();
+    }
+
+    // Keep the multi-crop "Crop N" badge pinned to the crop's
+    // top-left corner so it follows drag / resize live instead of
+    // snapping to the new spot only on interaction end.
+    if (cropBadgeRef) {
+      cropBadgeRef.position({
+        x: x + cropBadgeOffset,
+        y: y + cropBadgeOffset,
+      });
     }
 
     annotationsLayer.batchDraw();

@@ -288,6 +288,36 @@ function drawCropOnCanvas(ctx, crop, width, height) {
   const inset = borderWidth / 2;
   ctx.strokeRect(cx + inset, cy + inset, cw - borderWidth, ch - borderWidth);
 
+  // Multi-crop badge. Only rendered when the crop carries a "Crop N"
+  // label (the modal stamps these on the 1→2 transition; single-crop
+  // critiques leave label unset so this draw is skipped). Lets the
+  // reader match the on-image label to the corresponding [Crop N]
+  // token in the prose. Sits just inside the crop's top-left corner
+  // so it reads as attached without obscuring the framed content.
+  if (crop.label) {
+    const shortEdge = Math.min(width, height);
+    const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+    const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+    const badgeOffset = Math.max(3, Math.round(shortEdge * 0.004));
+    const badgeCornerRadius = 3;
+    ctx.font = `bold ${badgeFontSize}px sans-serif`;
+    ctx.textBaseline = "top";
+    const metrics = ctx.measureText(crop.label);
+    const badgeWidth = Math.ceil(metrics.width) + badgePadding * 2;
+    const badgeHeight = badgeFontSize + badgePadding * 2;
+    const bx = cx + badgeOffset;
+    const by = cy + badgeOffset;
+    tracePillRect(ctx, bx, by, badgeWidth, badgeHeight, badgeCornerRadius);
+    ctx.fillStyle = borderColor;
+    ctx.globalAlpha = 1;
+    withBadgeShadow(ctx, () => ctx.fill());
+    ctx.strokeStyle = ANNOTATION_HALO;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = ANNOTATION_HALO;
+    ctx.fillText(crop.label, bx + badgePadding, by + badgePadding);
+  }
+
   // Corner brackets + midpoint edge bars are EDITOR-ONLY now.
   // The posted image gets just the dim + perimeter line — the
   // handles read as active-editing affordances and felt out of
