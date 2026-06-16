@@ -328,6 +328,13 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked _selectedVersionKey = null;
   _selectedVersionInitialized = false;
 
+  // Multi-image picker state. Submissions can carry up to 5 images;
+  // index 0 is the primary image (and the one the version-selector
+  // chain applies to). Switching index resets annotations the same
+  // way switching versions does — the Konva stage is sized against
+  // ONE image's pixel space at a time.
+  @tracked _selectedImageIndex = 0;
+
   // "More ideas" expansion state for the Questions-to-consider panel.
   // Single dimension now: false (default) → show only the 3 default
   // questions; true → also show the grouped "More ideas" bank below.
@@ -1176,7 +1183,60 @@ export default class NpnCritiqueReplyModal extends Component {
     );
   }
 
+  // Submissions plugin lets the OP attach up to 5 images. The server
+  // exposes them via `metadata.submission_images` (array of
+  // { index, upload_id, url, label }). The primary image is at index
+  // 0 and ALSO appears in `image_versions` (alongside any revisions).
+  // The picker UI only renders when there are 2+ images here.
+  get submissionImages() {
+    const list = this.metadata?.submission_images;
+    return Array.isArray(list) ? list : [];
+  }
+
+  get hasMultipleSubmissionImages() {
+    return this.submissionImages.length >= 2;
+  }
+
+  get selectedImageIndex() {
+    return this._selectedImageIndex;
+  }
+
+  get selectedSubmissionImage() {
+    if (!this.hasMultipleSubmissionImages) {
+      return null;
+    }
+    return (
+      this.submissionImages.find(
+        (img) => img.index === this._selectedImageIndex
+      ) ?? this.submissionImages[0]
+    );
+  }
+
+  // Revision/version chain only applies to the PRIMARY image. When the
+  // critic has switched to a secondary submission image, the version
+  // picker hides and we don't try to splice in revision URLs.
+  get versionSelectorAvailable() {
+    return this._selectedImageIndex === 0 && this.hasMultipleVersions;
+  }
+
+  get isOnFirstSubmissionImage() {
+    return this._selectedImageIndex <= 0;
+  }
+
+  get isOnLastSubmissionImage() {
+    const count = this.submissionImages.length;
+    return count === 0 || this._selectedImageIndex >= count - 1;
+  }
+
   get effectiveImageUrl() {
+    // Secondary submission images (index >= 1) use their own URL
+    // directly — they don't currently have a revision chain.
+    if (this._selectedImageIndex > 0) {
+      const img = this.selectedSubmissionImage;
+      if (img?.url) {
+        return getURLWithCDN(img.url);
+      }
+    }
     const version = this.selectedVersion;
     if (version?.url) {
       return getURLWithCDN(version.url);
@@ -2673,6 +2733,112 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // ---- Actions ---------------------------------------------------------
 
+  // Switch to a different submission image (multi-image submissions
+  // can carry up to 5). Uses the same confirm-clear-annotations flow
+  // as version switching — annotations are anchored to one image's
+  // pixel space at a time. Cancel keeps the current image AND any
+  // in-flight annotations.
+  @action
+  selectImage(index) {
+    if (
+      typeof index !== "number" ||
+      index < 0 ||
+      index === this._selectedImageIndex
+    ) {
+      return;
+    }
+    if (this.hasVisualAnnotations) {
+      this.dialog.confirm({
+        message: i18n(
+          "npn_critique_reply.visual_notes.confirm_clear_all_on_switch"
+        ),
+        confirmButtonLabel:
+          "npn_critique_reply.visual_notes.switch_and_clear",
+        didConfirm: () => this._switchImage(index),
+      });
+      return;
+    }
+    this._switchImage(index);
+  }
+
+  @action
+  selectPreviousImage() {
+    if (this._selectedImageIndex <= 0) {
+      return;
+    }
+    this.selectImage(this._selectedImageIndex - 1);
+  }
+
+  @action
+  selectNextImage() {
+    const count = this.submissionImages.length;
+    if (count <= 1 || this._selectedImageIndex >= count - 1) {
+      return;
+    }
+    this.selectImage(this._selectedImageIndex + 1);
+  }
+
+  _switchImage(index) {
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] select-image", {
+        topicId: this.topic?.id,
+        from: this._selectedImageIndex,
+        to: index,
+        clearedNotes: this.notes.length,
+        clearedCrop: !!this.crop,
+      });
+    }
+    this._selectedImageIndex = index;
+    // Switching to a non-primary image leaves the revision selector
+    // hidden. Switching BACK to the primary restores it. We also
+    // reset the version selection to the primary's default so the
+    // chain doesn't surface a stale revision pointer when the critic
+    // returns to image 0.
+    if (index !== 0) {
+      this._selectedVersionKey = null;
+      this._selectedVersionInitialized = false;
+    }
+    this._resetAnnotationsForImageSwitch();
+  }
+
+  // Shared with _switchVersion — the same pixel-space reset applies
+  // whether the critic moves to a different revision or a different
+  // submission image.
+  _resetAnnotationsForImageSwitch() {
+    this.notes = [];
+    this.crop = null;
+    this.eyePaths = [];
+    this._activeEyePathId = null;
+    this._eyePathStarterInserted = false;
+    this.attentionPulls = [];
+    this.strongAreas = [];
+    this.directionArrows = [];
+    this.relationshipArrows = [];
+    this.selectedPinNumber = null;
+    this.cropSelected = false;
+    this.selectedEyePathId = null;
+    this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
+    this.visualMode = null;
+    this.pendingPin = null;
+    this.pendingPinNoteText = "";
+    this.pendingAttentionPullPopover = null;
+    this.pendingAttentionPullPopoverText = "";
+    this.pendingStrongAreaPopover = null;
+    this.pendingStrongAreaPopoverText = "";
+    this.pendingEyePathPopover = null;
+    this.pendingEyePathPopoverText = "";
+    this.pendingDirectionArrowPopover = null;
+    this.pendingDirectionArrowPopoverText = "";
+    this.pendingRelationshipArrowPopover = null;
+    this.pendingRelationshipArrowPopoverText = "";
+    this.pendingCropPopover = null;
+    this.pendingCropPopoverText = "";
+  }
+
   @action
   selectVersion(key) {
     if (key === this.selectedVersionKey) {
@@ -2711,38 +2877,8 @@ export default class NpnCritiqueReplyModal extends Component {
     // Always reset annotations — they're tied to the previous image's
     // pixel layout. The textarea (including [N] lines and any starter
     // text from the crop or eye-path tools) is intentionally left
-    // alone per spec.
-    this.notes = [];
-    this.crop = null;
-    this.eyePaths = [];
-    this._activeEyePathId = null;
-    this._eyePathStarterInserted = false;
-    this.attentionPulls = [];
-    this.strongAreas = [];
-    this.directionArrows = [];
-    this.relationshipArrows = [];
-    this.selectedPinNumber = null;
-    this.cropSelected = false;
-    this.selectedEyePathId = null;
-    this.selectedAttentionPullId = null;
-    this.selectedStrongAreaId = null;
-    this.selectedDirectionArrowId = null;
-    this.selectedRelationshipArrowId = null;
-    this.visualMode = null;
-    this.pendingPin = null;
-    this.pendingPinNoteText = "";
-    this.pendingAttentionPullPopover = null;
-    this.pendingAttentionPullPopoverText = "";
-    this.pendingStrongAreaPopover = null;
-    this.pendingStrongAreaPopoverText = "";
-    this.pendingEyePathPopover = null;
-    this.pendingEyePathPopoverText = "";
-    this.pendingDirectionArrowPopover = null;
-    this.pendingDirectionArrowPopoverText = "";
-    this.pendingRelationshipArrowPopover = null;
-    this.pendingRelationshipArrowPopoverText = "";
-    this.pendingCropPopover = null;
-    this.pendingCropPopoverText = "";
+    // alone per spec. Shared with the submission-image switch flow.
+    this._resetAnnotationsForImageSwitch();
   }
 
   // -- Visual Notes ------------------------------------------------------
@@ -5605,6 +5741,9 @@ export default class NpnCritiqueReplyModal extends Component {
       this.critiqueText.length,
       this.critiqueText,
       this.selectedVersionKey ?? "",
+      // Multi-image picker — include the index so an autosave fires
+      // when the critic just switches images without other edits.
+      this._selectedImageIndex,
       this.notes.length,
       this.notes.map((n) => `${n.number}:${n.xPct}:${n.yPct}`).join(","),
       this.crop
@@ -5787,6 +5926,11 @@ export default class NpnCritiqueReplyModal extends Component {
     const payload = {
       schema_version: 1,
       selected_image_version_key: this.selectedVersionKey ?? null,
+      // Submission multi-image index (0 = primary). Persisted so
+      // reopening the draft lands the critic on the same image they
+      // were last viewing. Always sent; the server tolerates 0 (the
+      // legacy single-image case) as the default.
+      selected_image_index: this._selectedImageIndex,
       critique_text: this.critiqueText ?? "",
       annotations,
       // Processing example draft entry — flat shape matching
@@ -5993,6 +6137,20 @@ export default class NpnCritiqueReplyModal extends Component {
 
     try {
       this.critiqueText = draft.critique_text ?? "";
+
+      // Restore the multi-image picker selection BEFORE we apply the
+      // version key, because secondary images (index >= 1) ignore the
+      // version chain — applying the version first would briefly point
+      // at a revision URL on the wrong image. Clamp to the available
+      // submission images so an out-of-bounds saved index (e.g. an
+      // image got removed from the submission) falls back to 0.
+      const rawIndex = draft.selected_image_index;
+      if (Number.isInteger(rawIndex) && rawIndex >= 0) {
+        const count = this.submissionImages.length;
+        if (count === 0 || rawIndex < count) {
+          this._selectedImageIndex = rawIndex;
+        }
+      }
 
       const versionKey = draft.selected_image_version_key ?? null;
       const versionStillExists = versionKey
@@ -6498,7 +6656,62 @@ export default class NpnCritiqueReplyModal extends Component {
               />
               {{/if}}
 
-              {{#if this.hasMultipleVersions}}
+              {{! Multi-image picker. Submissions can carry up to 5
+                  images; pills + prev/next chevrons let the critic
+                  flip through them without showing all at once.
+                  Hidden when the submission has 0 or 1 images (the
+                  legacy single-image case). Switching images uses the
+                  same confirm-clear-annotations flow as version
+                  switching. }}
+              {{#if this.hasMultipleSubmissionImages}}
+                <div
+                  class="npn-critique-reply-modal__image-picker"
+                  role="group"
+                  aria-label={{i18n
+                    "npn_critique_reply.modal.image_picker.label"
+                  }}
+                >
+                  <button
+                    type="button"
+                    class="npn-critique-reply-modal__image-picker-nav"
+                    aria-label={{i18n
+                      "npn_critique_reply.modal.image_picker.previous"
+                    }}
+                    disabled={{this.isOnFirstSubmissionImage}}
+                    {{on "click" this.selectPreviousImage}}
+                  >{{dIcon "chevron-left"}}</button>
+                  {{#each this.submissionImages as |img|}}
+                    <button
+                      type="button"
+                      class="npn-critique-reply-modal__image-picker-pill
+                        {{if
+                          (eq img.index this.selectedImageIndex)
+                          'is-selected'
+                        }}"
+                      aria-pressed={{if
+                        (eq img.index this.selectedImageIndex)
+                        "true"
+                        "false"
+                      }}
+                      {{on "click" (fn this.selectImage img.index)}}
+                    >{{img.label}}</button>
+                  {{/each}}
+                  <button
+                    type="button"
+                    class="npn-critique-reply-modal__image-picker-nav"
+                    aria-label={{i18n
+                      "npn_critique_reply.modal.image_picker.next"
+                    }}
+                    disabled={{this.isOnLastSubmissionImage}}
+                    {{on "click" this.selectNextImage}}
+                  >{{dIcon "chevron-right"}}</button>
+                </div>
+              {{/if}}
+
+              {{! Version (revision) selector. Revisions only apply to
+                  the primary submission image, so this hides once the
+                  critic switches to a non-primary image. }}
+              {{#if this.versionSelectorAvailable}}
                 <div
                   class="npn-critique-reply-modal__version-selector"
                   role="group"

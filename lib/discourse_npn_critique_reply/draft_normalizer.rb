@@ -82,6 +82,12 @@ module DiscourseNpnCritiqueReply
         "updated_at" => Time.now.utc.iso8601,
         "selected_image_version_key" =>
           normalize_string(payload["selected_image_version_key"]),
+        # Multi-image picker. Index of the submission image the critic
+        # was last viewing (0 = primary). Defaults to 0 — both the
+        # legacy single-image case and any draft predating this field
+        # land on the primary image after restore.
+        "selected_image_index" =>
+          normalize_image_index(payload["selected_image_index"]),
         "critique_text" => normalize_text(payload["critique_text"]),
         "annotations" => normalize_annotations(payload["annotations"]),
         # Processing example draft entry — flat shape, see
@@ -102,6 +108,15 @@ module DiscourseNpnCritiqueReply
       return nil if value.nil?
       str = value.to_s.strip
       LARGE_IMAGE_VIEWS.include?(str) ? str : nil
+    end
+
+    # Submission multi-image picker index. Coerce to a non-negative
+    # integer; anything weird collapses to 0 (the primary image, which
+    # is the legacy single-image default).
+    def normalize_image_index(value)
+      return 0 if value.nil?
+      i = value.to_i
+      i >= 0 ? i : 0
     end
 
     def normalize_text(value)

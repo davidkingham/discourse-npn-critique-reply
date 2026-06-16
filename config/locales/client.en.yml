@@ -109,6 +109,14 @@ en:
         version_selector_label: "Choose image version"
         showing_version: "Showing %{label}"
         revision_note: "Revision note: %{note}"
+        # Submission multi-image picker. Only renders when the OP
+        # attached 2+ images; the critic uses these pills (or the
+        # chevron arrows on either side) to flip between them without
+        # showing all images at once.
+        image_picker:
+          label: "Choose submission image"
+          previous: "Previous image"
+          next: "Next image"
         post_critique: "Post Critique"
         posting: "Posting…"
         # Edit-existing-critique flow. Same modal, primary action

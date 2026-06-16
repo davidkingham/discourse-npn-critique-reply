@@ -115,6 +115,15 @@ module DiscourseNpnCritiqueReply
         image_count: normalize_integer(fields[IMAGE_COUNT_KEY]),
         # Image versions ---------------------------------------------------
         image_versions: build_image_versions(fields),
+        # Submission images ------------------------------------------------
+        # The OP can upload up to 5 images per submission; the critique
+        # workspace needs to surface ALL of them so the critic can flip
+        # through, not just the primary. Each entry is one image in
+        # submission order; the primary image is at index 0.
+        # Versions/revisions still apply only to the primary image
+        # (image_versions above); other images don't currently have a
+        # revision chain.
+        submission_images: build_submission_images(fields),
       }
     rescue => e
       Discourse.warn_exception(
@@ -239,6 +248,68 @@ module DiscourseNpnCritiqueReply
       end
 
       out
+    end
+
+    # ----- Submission images ------------------------------------------------
+    #
+    # Reads `npn_original_image_upload_ids` (an array the submissions plugin
+    # writes for critique submissions with up to 5 uploads) and resolves
+    # each id to a URL. Returns an array of `{ index, upload_id, url,
+    # label }` hashes, primary first. Empty array when no usable ids are
+    # present — the frontend treats empty/single-entry arrays as "no
+    # picker needed, just use image_versions like before."
+    #
+    # `index` is the submission position (0 = primary). `label` is the
+    # display-friendly "Image N" string used by the workspace's picker
+    # pills.
+    def build_submission_images(fields)
+      ids = normalize_id_array(fields[ORIGINAL_IMAGE_UPLOAD_IDS_KEY])
+      return [] if ids.empty?
+
+      # Map ids → URLs in one batch query so we don't issue one SELECT
+      # per image. Preserve submission order; drop entries that don't
+      # resolve to a usable URL.
+      uploads_by_id = ::Upload.where(id: ids).index_by(&:id)
+      out = []
+      ids.each_with_index do |upload_id, idx|
+        upload = uploads_by_id[upload_id]
+        url = upload&.url
+        next if url.blank?
+        out << {
+          index: idx,
+          upload_id: upload_id,
+          url: url,
+          label: "Image #{idx + 1}",
+        }
+      end
+      out
+    rescue => e
+      Discourse.warn_exception(
+        e,
+        message: "[discourse-npn-critique-reply] failed to build submission images",
+      )
+      []
+    end
+
+    # Coerce the `npn_original_image_upload_ids` value (registered as
+    # :json on the submissions side) into a clean integer array. Tolerant
+    # of Array, JSON string, or junk.
+    def normalize_id_array(value)
+      raw =
+        case value
+        when Array
+          value
+        when String
+          begin
+            parsed = JSON.parse(value)
+            parsed.is_a?(Array) ? parsed : []
+          rescue JSON::ParserError
+            []
+          end
+        else
+          []
+        end
+      raw.filter_map { |v| normalize_integer(v) }.reject { |i| i.zero? }
     end
 
     # Highest revision_number wins; insertion order is the tiebreaker for

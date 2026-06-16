@@ -669,6 +669,99 @@
   // tertiary fill PLUS a leading check icon — never color alone. Buttons
   // wrap naturally when there are many revisions.
 
+  // -- Submission multi-image picker --------------------------------
+  //
+  // Sits above the version selector (when present). Chevron buttons
+  // flank pills numbered "Image 1 / 2 / ..." for the submission's
+  // attached images. Mirrors the version-selector pill treatment so
+  // the two "what am I looking at" affordances feel related; the
+  // chevrons add prev/next nav without forcing the critic to chase
+  // pills on long submissions.
+  &__image-picker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35em;
+    margin-bottom: 0.6em;
+  }
+
+  &__image-picker-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85em;
+    height: 1.85em;
+    background: var(--secondary);
+    color: var(--primary);
+    border: 1px solid var(--primary-low-mid);
+    border-radius: 999px;
+    font: inherit;
+    cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease,
+      color 0.12s ease;
+
+    .d-icon {
+      font-size: 0.9em;
+    }
+
+    &:hover:not(:disabled) {
+      background: var(--tertiary-low);
+      border-color: var(--tertiary);
+      color: var(--tertiary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+
+  &__image-picker-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3em 0.8em;
+    background: var(--secondary);
+    color: var(--primary);
+    border: 1px solid var(--primary-low-mid);
+    border-radius: 999px;
+    font: inherit;
+    font-size: var(--font-down-1);
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      background-color 0.12s ease,
+      border-color 0.12s ease,
+      color 0.12s ease;
+
+    &:hover {
+      background: var(--tertiary-low);
+      border-color: var(--tertiary);
+      color: var(--tertiary);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 2px;
+    }
+    &.is-selected {
+      background: var(--tertiary-low);
+      border-color: var(--tertiary);
+      color: var(--tertiary);
+      font-weight: 600;
+    }
+
+    @media (forced-colors: active) {
+      border-color: ButtonText;
+      &.is-selected {
+        border-width: 2px;
+      }
+    }
+  }
+
   &__version-selector {
     display: flex;
     flex-wrap: wrap;
