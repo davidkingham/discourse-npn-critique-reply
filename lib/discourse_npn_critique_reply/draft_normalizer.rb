@@ -252,6 +252,16 @@ module DiscourseNpnCritiqueReply
         id = normalized["id"]
         next if seen_ids.key?(id)
         seen_ids[id] = true
+        # Multi-image scope: each per-kind normalizer above returns
+        # just its geometry + label/note fields. image_index lives
+        # at the wire level — clients send 0 for the primary image
+        # and 1..N for additional submission images. Preserve it
+        # here so the edit-reopen flow can re-bucket annotations
+        # into the right image's snapshot via image_index. Default
+        # to 0 when missing (legacy single-image posts) so old
+        # payloads continue to restore cleanly.
+        raw_index = entry["image_index"] || entry[:image_index]
+        normalized["image_index"] = normalize_image_index(raw_index)
         out << normalized
       end
 
