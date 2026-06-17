@@ -9107,14 +9107,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   >
                     <h3
                       class="npn-critique-reply-modal__preview-section-title"
-                    >
-                      {{#if img.label}}{{img.label}}{{else}}Visual Notes{{/if}}
-                    </h3>
-                    <img
-                      class="npn-critique-reply-modal__preview-image"
-                      src={{img.objectUrl}}
-                      alt="Visual notes"
-                    />
+                    >image entry</h3>
                   </section>
                 {{/each}}
               {{/if}}
