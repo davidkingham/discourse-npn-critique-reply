@@ -9064,7 +9064,25 @@ export default class NpnCritiqueReplyModal extends Component {
             and back. CSS gates visibility from the modal's --preview
             class (see npn-critique-reply.scss). }}
         {{#if this.previewMode}}
-          <div class="npn-critique-reply-modal__preview">PREVIEW MODE</div>
+          <section
+            class="npn-critique-reply-modal__preview"
+            role="region"
+            aria-labelledby="npn-critique-reply-preview-heading"
+          >
+            <header class="npn-critique-reply-modal__preview-header">
+              <h2
+                id="npn-critique-reply-preview-heading"
+                class="npn-critique-reply-modal__preview-title"
+                tabindex="-1"
+              >Preview Critique</h2>
+              <p
+                class="npn-critique-reply-modal__preview-subtitle"
+              >Review how your critique will appear before posting.</p>
+            </header>
+            <div
+              class="npn-critique-reply-modal__preview-body"
+            >BINARY SEARCH: header only</div>
+          </section>
         {{/if}}
       </:body>
 
