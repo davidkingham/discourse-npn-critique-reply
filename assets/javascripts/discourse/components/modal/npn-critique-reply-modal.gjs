@@ -9098,6 +9098,26 @@ export default class NpnCritiqueReplyModal extends Component {
                   >No written critique yet.</p>
                 {{/if}}
               </section>
+
+              {{#if this._previewSnapshot.hasVisualNotes}}
+                {{#each this._previewSnapshot.visualNotesImages as |img|}}
+                  <section
+                    class="npn-critique-reply-modal__preview-section
+                      npn-critique-reply-modal__preview-section--visual-notes"
+                  >
+                    <h3
+                      class="npn-critique-reply-modal__preview-section-title"
+                    >
+                      {{#if img.label}}{{img.label}}{{else}}Visual Notes{{/if}}
+                    </h3>
+                    <img
+                      class="npn-critique-reply-modal__preview-image"
+                      src={{img.objectUrl}}
+                      alt="Visual notes"
+                    />
+                  </section>
+                {{/each}}
+              {{/if}}
             </div>
           </section>
         {{/if}}
