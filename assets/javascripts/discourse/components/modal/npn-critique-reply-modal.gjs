@@ -1212,6 +1212,21 @@ export default class NpnCritiqueReplyModal extends Component {
     );
   }
 
+  // Title for the Preview button. When the modal has no
+  // preview-eligible content the disabled-affordance tooltip
+  // surfaces; otherwise undefined so DButton renders without a
+  // title. Pulled into a getter because expressing this with
+  // `{{unless this.canPreview "..."}}` in the template appears to
+  // trip Glimmer's helper-as-component resolution on some Ember
+  // versions, surfacing as "Expected a dynamic component
+  // definition" mid-render.
+  get previewButtonTitle() {
+    if (this.canPreview) {
+      return null;
+    }
+    return "npn_critique_reply.modal.preview_critique_disabled_title";
+  }
+
   // ---- Image versions --------------------------------------------------
 
   get imageVersions() {
@@ -5641,8 +5656,18 @@ export default class NpnCritiqueReplyModal extends Component {
       hasVisualNotes: visualNotesImages.length > 0,
       hasProcessingExample: !!this.processingExample,
     };
-    this.previewBuilding = false;
+    // Flip previewMode FIRST so the template re-renders with the
+    // preview overlay in one pass. Setting previewBuilding=false
+    // first triggered a brief intermediate render where the
+    // edit-mode footer Preview button left isLoading state, which
+    // — paired with the helper expression in its @title arg —
+    // appears to trip Glimmer's helper-resolution path on some
+    // Ember versions. Going `previewMode = true` first means the
+    // intermediate render is already on the preview footer (no
+    // helpered title), and previewBuilding clears on the same
+    // microtask before any user interaction can fire.
     this.previewMode = true;
+    this.previewBuilding = false;
 
     // Move focus into the preview region so screen readers and
     // keyboard users land on the new view. Falls back gracefully if
@@ -9141,10 +9166,7 @@ export default class NpnCritiqueReplyModal extends Component {
             @action={{this.enterPreview}}
             @icon="eye"
             @label={{this.previewButtonLabel}}
-            @title={{unless
-              this.canPreview
-              "npn_critique_reply.modal.preview_critique_disabled_title"
-            }}
+            @title={{this.previewButtonTitle}}
             @disabled={{this.previewBuilding}}
             @isLoading={{this.previewBuilding}}
           />
