@@ -21,7 +21,7 @@ import TextareaTextManipulation, {
 import userSearch from "discourse/lib/user-search";
 import Composer from "discourse/models/composer";
 import Draft from "discourse/models/draft";
-import { and, eq, not, or } from "discourse/truth-helpers";
+import { and, eq, or } from "discourse/truth-helpers";
 import { i18n } from "discourse-i18n";
 import NpnCritiqueImageReference from "../npn-critique-image-reference";
 import {
@@ -9081,24 +9081,26 @@ export default class NpnCritiqueReplyModal extends Component {
                     class="npn-critique-reply-modal__preview-text"
                   >{{this.previewTextHtml}}</div>
                 </section>
-              {{else if (not this._previewSnapshot.hasVisualNotes)}}
-                <section
-                  class="npn-critique-reply-modal__preview-section
-                    npn-critique-reply-modal__preview-section--critique"
-                >
-                  <h3
-                    class="npn-critique-reply-modal__preview-section-title"
+              {{else}}
+                {{#unless this._previewSnapshot.hasVisualNotes}}
+                  <section
+                    class="npn-critique-reply-modal__preview-section
+                      npn-critique-reply-modal__preview-section--critique"
                   >
-                    {{i18n
-                      "npn_critique_reply.modal.preview_section_critique"
-                    }}
-                  </h3>
-                  <p
-                    class="npn-critique-reply-modal__preview-text-empty"
-                  >{{i18n
-                      "npn_critique_reply.modal.preview_empty_text"
-                    }}</p>
-                </section>
+                    <h3
+                      class="npn-critique-reply-modal__preview-section-title"
+                    >
+                      {{i18n
+                        "npn_critique_reply.modal.preview_section_critique"
+                      }}
+                    </h3>
+                    <p
+                      class="npn-critique-reply-modal__preview-text-empty"
+                    >{{i18n
+                        "npn_critique_reply.modal.preview_empty_text"
+                      }}</p>
+                  </section>
+                {{/unless}}
               {{/if}}
 
               {{#if this._previewSnapshot.hasVisualNotes}}
