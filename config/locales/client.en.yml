@@ -602,6 +602,19 @@ en:
         note_popover_placeholder: "What are you noticing here?"
         note_popover_add: "Add note"
         note_popover_skip: "Skip"
+        # Shared button labels for the per-tool description popovers
+        # (pins, area, crop, eye path, arrows, etc.). Save requires a
+        # non-empty description; Cancel removes the just-drawn marker
+        # and closes the popover; Redraw also removes the marker but
+        # leaves the tool armed so the next click/drag starts a fresh
+        # one immediately.
+        popover_save: "Save"
+        popover_cancel: "Cancel"
+        popover_redraw: "Redraw"
+        # Inline hint shown under the input when text is empty — the
+        # critic must add a description (or back out via Cancel /
+        # Redraw) before the marker is committed.
+        popover_description_required: "Add a description to save."
         # A11y list snippet shown after the pin label when a note exists.
         a11y_note_snippet: "— %{note}"
         # Image-version switching. The unified key replaces older

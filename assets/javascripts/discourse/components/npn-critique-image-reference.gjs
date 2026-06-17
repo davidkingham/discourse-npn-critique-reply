@@ -444,16 +444,44 @@ export default class NpnCritiqueImageReference extends Component {
     element.style.top = `${top}px`;
   }
 
-  // Enter confirms (single-line input, matches the user's spec).
-  // Escape skips. Other keys fall through to the input.
+  // Each popover's Save button is disabled until the critic has
+  // typed a non-empty description. Mirrors the modal-side gates
+  // (pendingXPopoverCanConfirm getters); we invert here because
+  // the template uses `disabled={{...}}`. Enter-key handlers below
+  // short-circuit on the same condition so an empty Enter is a
+  // no-op rather than a silent confirm.
+  get pinSaveDisabled() {
+    return !this.args.pendingPinNoteCanConfirm;
+  }
+  get attentionPullSaveDisabled() {
+    return !this.args.pendingAttentionPullPopoverCanConfirm;
+  }
+  get strongAreaSaveDisabled() {
+    return !this.args.pendingStrongAreaPopoverCanConfirm;
+  }
+  get eyePathSaveDisabled() {
+    return !this.args.pendingEyePathPopoverCanConfirm;
+  }
+  get directionArrowSaveDisabled() {
+    return !this.args.pendingDirectionArrowPopoverCanConfirm;
+  }
+  get relationshipArrowSaveDisabled() {
+    return !this.args.pendingRelationshipArrowPopoverCanConfirm;
+  }
+  get cropSaveDisabled() {
+    return !this.args.pendingCropPopoverCanConfirm;
+  }
+
   @action
   handleNoteKeydown(event) {
     if (event.key === "Enter") {
       event.preventDefault();
-      this.args.onConfirmPendingNote?.();
+      if (this.args.pendingPinNoteCanConfirm) {
+        this.args.onConfirmPendingNote?.();
+      }
     } else if (event.key === "Escape") {
       event.preventDefault();
-      this.args.onSkipPendingNote?.();
+      this.args.onCancelPendingNote?.();
     }
   }
 
@@ -461,10 +489,12 @@ export default class NpnCritiqueImageReference extends Component {
   handleAttentionPullPopoverKeydown(event) {
     if (event.key === "Enter") {
       event.preventDefault();
-      this.args.onConfirmPendingAttentionPullPopover?.();
+      if (this.args.pendingAttentionPullPopoverCanConfirm) {
+        this.args.onConfirmPendingAttentionPullPopover?.();
+      }
     } else if (event.key === "Escape") {
       event.preventDefault();
-      this.args.onSkipPendingAttentionPullPopover?.();
+      this.args.onCancelPendingAttentionPullPopover?.();
     }
   }
 
@@ -472,10 +502,12 @@ export default class NpnCritiqueImageReference extends Component {
   handleStrongAreaPopoverKeydown(event) {
     if (event.key === "Enter") {
       event.preventDefault();
-      this.args.onConfirmPendingStrongAreaPopover?.();
+      if (this.args.pendingStrongAreaPopoverCanConfirm) {
+        this.args.onConfirmPendingStrongAreaPopover?.();
+      }
     } else if (event.key === "Escape") {
       event.preventDefault();
-      this.args.onSkipPendingStrongAreaPopover?.();
+      this.args.onCancelPendingStrongAreaPopover?.();
     }
   }
 
@@ -483,10 +515,12 @@ export default class NpnCritiqueImageReference extends Component {
   handleEyePathPopoverKeydown(event) {
     if (event.key === "Enter") {
       event.preventDefault();
-      this.args.onConfirmPendingEyePathPopover?.();
+      if (this.args.pendingEyePathPopoverCanConfirm) {
+        this.args.onConfirmPendingEyePathPopover?.();
+      }
     } else if (event.key === "Escape") {
       event.preventDefault();
-      this.args.onSkipPendingEyePathPopover?.();
+      this.args.onCancelPendingEyePathPopover?.();
     }
   }
 
@@ -494,10 +528,12 @@ export default class NpnCritiqueImageReference extends Component {
   handleCropPopoverKeydown(event) {
     if (event.key === "Enter") {
       event.preventDefault();
-      this.args.onConfirmPendingCropPopover?.();
+      if (this.args.pendingCropPopoverCanConfirm) {
+        this.args.onConfirmPendingCropPopover?.();
+      }
     } else if (event.key === "Escape") {
       event.preventDefault();
-      this.args.onSkipPendingCropPopover?.();
+      this.args.onCancelPendingCropPopover?.();
     }
   }
 
@@ -505,10 +541,12 @@ export default class NpnCritiqueImageReference extends Component {
   handleDirectionArrowPopoverKeydown(event) {
     if (event.key === "Enter") {
       event.preventDefault();
-      this.args.onConfirmPendingDirectionArrowPopover?.();
+      if (this.args.pendingDirectionArrowPopoverCanConfirm) {
+        this.args.onConfirmPendingDirectionArrowPopover?.();
+      }
     } else if (event.key === "Escape") {
       event.preventDefault();
-      this.args.onSkipPendingDirectionArrowPopover?.();
+      this.args.onCancelPendingDirectionArrowPopover?.();
     }
   }
 
@@ -516,10 +554,12 @@ export default class NpnCritiqueImageReference extends Component {
   handleRelationshipArrowPopoverKeydown(event) {
     if (event.key === "Enter") {
       event.preventDefault();
-      this.args.onConfirmPendingRelationshipArrowPopover?.();
+      if (this.args.pendingRelationshipArrowPopoverCanConfirm) {
+        this.args.onConfirmPendingRelationshipArrowPopover?.();
+      }
     } else if (event.key === "Escape") {
       event.preventDefault();
-      this.args.onSkipPendingRelationshipArrowPopover?.();
+      this.args.onCancelPendingRelationshipArrowPopover?.();
     }
   }
 
@@ -690,17 +730,26 @@ export default class NpnCritiqueImageReference extends Component {
                   type="button"
                   class="btn btn-primary btn-small
                     npn-critique-image-reference__note-popover-add"
+                  disabled={{this.pinSaveDisabled}}
                   {{on "click" @onConfirmPendingNote}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_add"
+                    "npn_critique_reply.visual_notes.popover_save"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-default btn-small
+                    npn-critique-image-reference__note-popover-redraw"
+                  {{on "click" @onRedrawPendingNote}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_redraw"
                   }}</button>
                 <button
                   type="button"
                   class="btn btn-flat btn-small
-                    npn-critique-image-reference__note-popover-skip"
-                  {{on "click" @onSkipPendingNote}}
+                    npn-critique-image-reference__note-popover-cancel"
+                  {{on "click" @onCancelPendingNote}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_skip"
+                    "npn_critique_reply.visual_notes.popover_cancel"
                   }}</button>
               </div>
             </div>
@@ -746,17 +795,26 @@ export default class NpnCritiqueImageReference extends Component {
                   type="button"
                   class="btn btn-primary btn-small
                     npn-critique-image-reference__note-popover-add"
+                  disabled={{this.attentionPullSaveDisabled}}
                   {{on "click" @onConfirmPendingAttentionPullPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_add"
+                    "npn_critique_reply.visual_notes.popover_save"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-default btn-small
+                    npn-critique-image-reference__note-popover-redraw"
+                  {{on "click" @onRedrawPendingAttentionPullPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_redraw"
                   }}</button>
                 <button
                   type="button"
                   class="btn btn-flat btn-small
-                    npn-critique-image-reference__note-popover-skip"
-                  {{on "click" @onSkipPendingAttentionPullPopover}}
+                    npn-critique-image-reference__note-popover-cancel"
+                  {{on "click" @onCancelPendingAttentionPullPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_skip"
+                    "npn_critique_reply.visual_notes.popover_cancel"
                   }}</button>
               </div>
             </div>
@@ -802,17 +860,26 @@ export default class NpnCritiqueImageReference extends Component {
                   type="button"
                   class="btn btn-primary btn-small
                     npn-critique-image-reference__note-popover-add"
+                  disabled={{this.strongAreaSaveDisabled}}
                   {{on "click" @onConfirmPendingStrongAreaPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_add"
+                    "npn_critique_reply.visual_notes.popover_save"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-default btn-small
+                    npn-critique-image-reference__note-popover-redraw"
+                  {{on "click" @onRedrawPendingStrongAreaPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_redraw"
                   }}</button>
                 <button
                   type="button"
                   class="btn btn-flat btn-small
-                    npn-critique-image-reference__note-popover-skip"
-                  {{on "click" @onSkipPendingStrongAreaPopover}}
+                    npn-critique-image-reference__note-popover-cancel"
+                  {{on "click" @onCancelPendingStrongAreaPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_skip"
+                    "npn_critique_reply.visual_notes.popover_cancel"
                   }}</button>
               </div>
             </div>
@@ -858,17 +925,26 @@ export default class NpnCritiqueImageReference extends Component {
                   type="button"
                   class="btn btn-primary btn-small
                     npn-critique-image-reference__note-popover-add"
+                  disabled={{this.eyePathSaveDisabled}}
                   {{on "click" @onConfirmPendingEyePathPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_add"
+                    "npn_critique_reply.visual_notes.popover_save"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-default btn-small
+                    npn-critique-image-reference__note-popover-redraw"
+                  {{on "click" @onRedrawPendingEyePathPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_redraw"
                   }}</button>
                 <button
                   type="button"
                   class="btn btn-flat btn-small
-                    npn-critique-image-reference__note-popover-skip"
-                  {{on "click" @onSkipPendingEyePathPopover}}
+                    npn-critique-image-reference__note-popover-cancel"
+                  {{on "click" @onCancelPendingEyePathPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_skip"
+                    "npn_critique_reply.visual_notes.popover_cancel"
                   }}</button>
               </div>
             </div>
@@ -914,17 +990,26 @@ export default class NpnCritiqueImageReference extends Component {
                   type="button"
                   class="btn btn-primary btn-small
                     npn-critique-image-reference__note-popover-add"
+                  disabled={{this.cropSaveDisabled}}
                   {{on "click" @onConfirmPendingCropPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_add"
+                    "npn_critique_reply.visual_notes.popover_save"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-default btn-small
+                    npn-critique-image-reference__note-popover-redraw"
+                  {{on "click" @onRedrawPendingCropPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_redraw"
                   }}</button>
                 <button
                   type="button"
                   class="btn btn-flat btn-small
-                    npn-critique-image-reference__note-popover-skip"
-                  {{on "click" @onSkipPendingCropPopover}}
+                    npn-critique-image-reference__note-popover-cancel"
+                  {{on "click" @onCancelPendingCropPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_skip"
+                    "npn_critique_reply.visual_notes.popover_cancel"
                   }}</button>
               </div>
             </div>
@@ -970,17 +1055,26 @@ export default class NpnCritiqueImageReference extends Component {
                   type="button"
                   class="btn btn-primary btn-small
                     npn-critique-image-reference__note-popover-add"
+                  disabled={{this.directionArrowSaveDisabled}}
                   {{on "click" @onConfirmPendingDirectionArrowPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_add"
+                    "npn_critique_reply.visual_notes.popover_save"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-default btn-small
+                    npn-critique-image-reference__note-popover-redraw"
+                  {{on "click" @onRedrawPendingDirectionArrowPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_redraw"
                   }}</button>
                 <button
                   type="button"
                   class="btn btn-flat btn-small
-                    npn-critique-image-reference__note-popover-skip"
-                  {{on "click" @onSkipPendingDirectionArrowPopover}}
+                    npn-critique-image-reference__note-popover-cancel"
+                  {{on "click" @onCancelPendingDirectionArrowPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_skip"
+                    "npn_critique_reply.visual_notes.popover_cancel"
                   }}</button>
               </div>
             </div>
@@ -1026,17 +1120,26 @@ export default class NpnCritiqueImageReference extends Component {
                   type="button"
                   class="btn btn-primary btn-small
                     npn-critique-image-reference__note-popover-add"
+                  disabled={{this.relationshipArrowSaveDisabled}}
                   {{on "click" @onConfirmPendingRelationshipArrowPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_add"
+                    "npn_critique_reply.visual_notes.popover_save"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-default btn-small
+                    npn-critique-image-reference__note-popover-redraw"
+                  {{on "click" @onRedrawPendingRelationshipArrowPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_redraw"
                   }}</button>
                 <button
                   type="button"
                   class="btn btn-flat btn-small
-                    npn-critique-image-reference__note-popover-skip"
-                  {{on "click" @onSkipPendingRelationshipArrowPopover}}
+                    npn-critique-image-reference__note-popover-cancel"
+                  {{on "click" @onCancelPendingRelationshipArrowPopover}}
                 >{{i18n
-                    "npn_critique_reply.visual_notes.note_popover_skip"
+                    "npn_critique_reply.visual_notes.popover_cancel"
                   }}</button>
               </div>
             </div>

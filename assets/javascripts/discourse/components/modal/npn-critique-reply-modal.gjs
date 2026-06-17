@@ -4647,11 +4647,22 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   @action
-  skipPendingAttentionPullPopover() {
-    // No textarea write — the marker exists on the image; the critic
-    // can describe it directly in the textarea if they want.
+  cancelPendingAttentionPullPopover() {
+    if (!this.pendingAttentionPullPopover) {
+      return;
+    }
+    const { id } = this.pendingAttentionPullPopover;
+    this.attentionPulls = this.attentionPulls.filter((p) => p.id !== id);
+    if (this.selectedAttentionPullId === id) {
+      this.selectedAttentionPullId = null;
+    }
     this.pendingAttentionPullPopover = null;
     this.pendingAttentionPullPopoverText = "";
+  }
+
+  @action
+  redrawPendingAttentionPullPopover() {
+    this.cancelPendingAttentionPullPopover();
   }
 
   // ---- Strong Area ----------------------------------------------------
@@ -4999,9 +5010,22 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   @action
-  skipPendingStrongAreaPopover() {
+  cancelPendingStrongAreaPopover() {
+    if (!this.pendingStrongAreaPopover) {
+      return;
+    }
+    const { id } = this.pendingStrongAreaPopover;
+    this.strongAreas = this.strongAreas.filter((p) => p.id !== id);
+    if (this.selectedStrongAreaId === id) {
+      this.selectedStrongAreaId = null;
+    }
     this.pendingStrongAreaPopover = null;
     this.pendingStrongAreaPopoverText = "";
+  }
+
+  @action
+  redrawPendingStrongAreaPopover() {
+    this.cancelPendingStrongAreaPopover();
   }
 
   // ---- Direction Arrow ----------------------------------------------
@@ -5161,9 +5185,22 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   @action
-  skipPendingDirectionArrowPopover() {
+  cancelPendingDirectionArrowPopover() {
+    if (!this.pendingDirectionArrowPopover) {
+      return;
+    }
+    const { id } = this.pendingDirectionArrowPopover;
+    this.directionArrows = this.directionArrows.filter((a) => a.id !== id);
+    if (this.selectedDirectionArrowId === id) {
+      this.selectedDirectionArrowId = null;
+    }
     this.pendingDirectionArrowPopover = null;
     this.pendingDirectionArrowPopoverText = "";
+  }
+
+  @action
+  redrawPendingDirectionArrowPopover() {
+    this.cancelPendingDirectionArrowPopover();
   }
 
   // ---- Relationship Arrow -------------------------------------------
@@ -5311,9 +5348,24 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   @action
-  skipPendingRelationshipArrowPopover() {
+  cancelPendingRelationshipArrowPopover() {
+    if (!this.pendingRelationshipArrowPopover) {
+      return;
+    }
+    const { id } = this.pendingRelationshipArrowPopover;
+    this.relationshipArrows = this.relationshipArrows.filter(
+      (a) => a.id !== id
+    );
+    if (this.selectedRelationshipArrowId === id) {
+      this.selectedRelationshipArrowId = null;
+    }
     this.pendingRelationshipArrowPopover = null;
     this.pendingRelationshipArrowPopoverText = "";
+  }
+
+  @action
+  redrawPendingRelationshipArrowPopover() {
+    this.cancelPendingRelationshipArrowPopover();
   }
 
   // ---- Eye-path popover ----------------------------------------------
@@ -5364,13 +5416,26 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   @action
-  skipPendingEyePathPopover() {
+  cancelPendingEyePathPopover() {
+    // Drop the path the popover was anchored to. activeEyePath is
+    // the one just created — the popover triggers immediately after
+    // Stroke commit OR after the 2nd Points-mode click.
+    const active = this.activeEyePath ?? this.selectedEyePath;
+    if (active?.id) {
+      this.eyePaths = this.eyePaths.filter((p) => p.id !== active.id);
+      if (this.selectedEyePathId === active.id) {
+        this.selectedEyePathId = null;
+      }
+    }
     this.pendingEyePathPopover = null;
     this.pendingEyePathPopoverText = "";
-    // See confirmPendingEyePathPopover — dismissing without text still
-    // ends the path session so the next gesture starts a new one.
     this._activeEyePathId = null;
     this._eyePathStarterInserted = false;
+  }
+
+  @action
+  redrawPendingEyePathPopover() {
+    this.cancelPendingEyePathPopover();
   }
 
   // ---- Crop popover -------------------------------------------------
@@ -5408,9 +5473,60 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   @action
-  skipPendingCropPopover() {
+  cancelPendingCropPopover() {
+    // Drop the crop entirely. If this was the 2nd crop in a multi-
+    // image critique (it triggered the retroactive "Crop 1" rename
+    // of the first crop on creation), we DON'T un-rename the first
+    // crop — that label is part of its current state and only
+    // becomes "Crop" again if BOTH crops are removed. Practically:
+    // cancel here doesn't bring "[Crop 1]" back to "[Crop]".
+    this.crop = null;
+    this.cropSelected = false;
     this.pendingCropPopover = null;
     this.pendingCropPopoverText = "";
+  }
+
+  @action
+  redrawPendingCropPopover() {
+    this.cancelPendingCropPopover();
+  }
+
+  // ---- Popover-confirm gates -----------------------------------------
+  //
+  // The description popovers (notes, area, strong area, eye path,
+  // direction arrow, relationship arrow, crop) require the critic to
+  // type a description before the Save button activates. Empty
+  // (whitespace-only) text holds the button disabled; the only paths
+  // forward at that point are Cancel (drop the marker) or Redraw.
+  // Mirrored in handleNoteKeydown / handleXPopoverKeydown so Enter
+  // is a no-op when the input is empty.
+
+  get pendingPinNoteCanConfirm() {
+    return !!this.pendingPinNoteText?.trim();
+  }
+
+  get pendingAttentionPullPopoverCanConfirm() {
+    return !!this.pendingAttentionPullPopoverText?.trim();
+  }
+
+  get pendingStrongAreaPopoverCanConfirm() {
+    return !!this.pendingStrongAreaPopoverText?.trim();
+  }
+
+  get pendingDirectionArrowPopoverCanConfirm() {
+    return !!this.pendingDirectionArrowPopoverText?.trim();
+  }
+
+  get pendingRelationshipArrowPopoverCanConfirm() {
+    return !!this.pendingRelationshipArrowPopoverText?.trim();
+  }
+
+  get pendingEyePathPopoverCanConfirm() {
+    return !!this.pendingEyePathPopoverText?.trim();
+  }
+
+  get pendingCropPopoverCanConfirm() {
+    return !!this.pendingCropPopoverText?.trim();
   }
 
   get selectedPin() {
@@ -5527,22 +5643,41 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
+  // Cancel = back out completely: remove the just-placed pin AND
+  // close the popover. The tool stays armed so the critic can click
+  // again to drop a fresh pin if they want. The pin marker that was
+  // never appended to the textarea (we defer that until Save)
+  // doesn't need cleanup beyond removing from `this.notes`.
   @action
-  skipPendingPinNote() {
+  cancelPendingPinNote() {
     if (!this.pendingPin) {
       return;
     }
     const number = this.pendingPin.number;
-    this._appendPinMarker(number, "");
+    this.notes = this.notes.filter((p) => p.number !== number);
+    if (this.selectedPinNumber === number) {
+      this.selectedPinNumber = null;
+    }
     this.pendingPin = null;
     this.pendingPinNoteText = "";
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
-      console.info("[npn-critique-reply] skip-pin-note", {
+      console.info("[npn-critique-reply] cancel-pin-note", {
         topicId: this.topic?.id,
         number,
       });
     }
+  }
+
+  // Redraw = cancel + the tool naturally stays armed so the next
+  // click drops a fresh pin. Today the visualMode persists across
+  // popover interactions, so Redraw is functionally identical to
+  // Cancel; kept as its own action so the button label can promise
+  // the "try again" intent and future logic can hook here if the
+  // tool ever auto-deactivates.
+  @action
+  redrawPendingPinNote() {
+    this.cancelPendingPinNote();
   }
 
   // Single source of truth for the textarea marker format. Trailing
@@ -7416,7 +7551,9 @@ export default class NpnCritiqueReplyModal extends Component {
                 @pendingCropPopoverText={{this.pendingCropPopoverText}}
                 @onPendingCropPopoverInput={{this.updatePendingCropPopoverText}}
                 @onConfirmPendingCropPopover={{this.confirmPendingCropPopover}}
-                @onSkipPendingCropPopover={{this.skipPendingCropPopover}}
+                @onCancelPendingCropPopover={{this.cancelPendingCropPopover}}
+                @onRedrawPendingCropPopover={{this.redrawPendingCropPopover}}
+                @pendingCropPopoverCanConfirm={{this.pendingCropPopoverCanConfirm}}
                 @eyePaths={{this.eyePaths}}
                 @selectedEyePathId={{this.selectedEyePathId}}
                 @onAddEyePathPoint={{this.addEyePathPoint}}
@@ -7436,7 +7573,9 @@ export default class NpnCritiqueReplyModal extends Component {
                 @pendingAttentionPullPopoverText={{this.pendingAttentionPullPopoverText}}
                 @onPendingAttentionPullPopoverInput={{this.updatePendingAttentionPullPopoverText}}
                 @onConfirmPendingAttentionPullPopover={{this.confirmPendingAttentionPullPopover}}
-                @onSkipPendingAttentionPullPopover={{this.skipPendingAttentionPullPopover}}
+                @onCancelPendingAttentionPullPopover={{this.cancelPendingAttentionPullPopover}}
+                @onRedrawPendingAttentionPullPopover={{this.redrawPendingAttentionPullPopover}}
+                @pendingAttentionPullPopoverCanConfirm={{this.pendingAttentionPullPopoverCanConfirm}}
                 @strongAreas={{this.strongAreas}}
                 @selectedStrongAreaId={{this.selectedStrongAreaId}}
                 @strongAreaEditEnabled={{this.strongAreaEditEnabled}}
@@ -7450,12 +7589,16 @@ export default class NpnCritiqueReplyModal extends Component {
                 @pendingStrongAreaPopoverText={{this.pendingStrongAreaPopoverText}}
                 @onPendingStrongAreaPopoverInput={{this.updatePendingStrongAreaPopoverText}}
                 @onConfirmPendingStrongAreaPopover={{this.confirmPendingStrongAreaPopover}}
-                @onSkipPendingStrongAreaPopover={{this.skipPendingStrongAreaPopover}}
+                @onCancelPendingStrongAreaPopover={{this.cancelPendingStrongAreaPopover}}
+                @onRedrawPendingStrongAreaPopover={{this.redrawPendingStrongAreaPopover}}
+                @pendingStrongAreaPopoverCanConfirm={{this.pendingStrongAreaPopoverCanConfirm}}
                 @pendingEyePathPopover={{this.pendingEyePathPopover}}
                 @pendingEyePathPopoverText={{this.pendingEyePathPopoverText}}
                 @onPendingEyePathPopoverInput={{this.updatePendingEyePathPopoverText}}
                 @onConfirmPendingEyePathPopover={{this.confirmPendingEyePathPopover}}
-                @onSkipPendingEyePathPopover={{this.skipPendingEyePathPopover}}
+                @onCancelPendingEyePathPopover={{this.cancelPendingEyePathPopover}}
+                @onRedrawPendingEyePathPopover={{this.redrawPendingEyePathPopover}}
+                @pendingEyePathPopoverCanConfirm={{this.pendingEyePathPopoverCanConfirm}}
                 @directionArrows={{this.directionArrows}}
                 @selectedDirectionArrowId={{this.selectedDirectionArrowId}}
                 @onAddDirectionArrow={{this.addDirectionArrow}}
@@ -7465,7 +7608,9 @@ export default class NpnCritiqueReplyModal extends Component {
                 @pendingDirectionArrowPopoverText={{this.pendingDirectionArrowPopoverText}}
                 @onPendingDirectionArrowPopoverInput={{this.updatePendingDirectionArrowPopoverText}}
                 @onConfirmPendingDirectionArrowPopover={{this.confirmPendingDirectionArrowPopover}}
-                @onSkipPendingDirectionArrowPopover={{this.skipPendingDirectionArrowPopover}}
+                @onCancelPendingDirectionArrowPopover={{this.cancelPendingDirectionArrowPopover}}
+                @onRedrawPendingDirectionArrowPopover={{this.redrawPendingDirectionArrowPopover}}
+                @pendingDirectionArrowPopoverCanConfirm={{this.pendingDirectionArrowPopoverCanConfirm}}
                 @relationshipArrows={{this.relationshipArrows}}
                 @selectedRelationshipArrowId={{this.selectedRelationshipArrowId}}
                 @onAddRelationshipArrow={{this.addRelationshipArrow}}
@@ -7475,13 +7620,17 @@ export default class NpnCritiqueReplyModal extends Component {
                 @pendingRelationshipArrowPopoverText={{this.pendingRelationshipArrowPopoverText}}
                 @onPendingRelationshipArrowPopoverInput={{this.updatePendingRelationshipArrowPopoverText}}
                 @onConfirmPendingRelationshipArrowPopover={{this.confirmPendingRelationshipArrowPopover}}
-                @onSkipPendingRelationshipArrowPopover={{this.skipPendingRelationshipArrowPopover}}
+                @onCancelPendingRelationshipArrowPopover={{this.cancelPendingRelationshipArrowPopover}}
+                @onRedrawPendingRelationshipArrowPopover={{this.redrawPendingRelationshipArrowPopover}}
+                @pendingRelationshipArrowPopoverCanConfirm={{this.pendingRelationshipArrowPopoverCanConfirm}}
                 @cropAspectRatio={{this.cropAspectRatio}}
                 @pendingPin={{this.pendingPin}}
                 @pendingPinNoteText={{this.pendingPinNoteText}}
                 @onPendingNoteInput={{this.updatePendingPinNoteText}}
                 @onConfirmPendingNote={{this.confirmPendingPinNote}}
-                @onSkipPendingNote={{this.skipPendingPinNote}}
+                @onCancelPendingNote={{this.cancelPendingPinNote}}
+                @onRedrawPendingNote={{this.redrawPendingPinNote}}
+                @pendingPinNoteCanConfirm={{this.pendingPinNoteCanConfirm}}
               />
               {{/if}}
 
