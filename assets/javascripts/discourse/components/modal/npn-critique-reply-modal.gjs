@@ -9096,7 +9096,8 @@ export default class NpnCritiqueReplyModal extends Component {
                 {{#if this.previewHasText}}
                   <div
                     class="npn-critique-reply-modal__preview-text"
-                  >{{this.previewTextHtml}}</div>
+                    style="white-space: pre-wrap;"
+                  >{{this._previewSnapshot.textBody}}</div>
                 {{else}}
                   <p
                     class="npn-critique-reply-modal__preview-text-empty"
