@@ -9074,12 +9074,10 @@ export default class NpnCritiqueReplyModal extends Component {
                 id="npn-critique-reply-preview-heading"
                 class="npn-critique-reply-modal__preview-title"
                 tabindex="-1"
-              >{{i18n
-                  "npn_critique_reply.modal.preview_header_title"
-                }}</h2>
-              <p class="npn-critique-reply-modal__preview-subtitle">{{i18n
-                  "npn_critique_reply.modal.preview_header_subtitle"
-                }}</p>
+              >Preview Critique</h2>
+              <p
+                class="npn-critique-reply-modal__preview-subtitle"
+              >Review how your critique will appear before posting.</p>
             </header>
 
             {{! Section order mirrors the composed reply body in
@@ -9092,11 +9090,9 @@ export default class NpnCritiqueReplyModal extends Component {
                 class="npn-critique-reply-modal__preview-section
                   npn-critique-reply-modal__preview-section--critique"
               >
-                <h3 class="npn-critique-reply-modal__preview-section-title">
-                  {{i18n
-                    "npn_critique_reply.modal.preview_section_critique"
-                  }}
-                </h3>
+                <h3
+                  class="npn-critique-reply-modal__preview-section-title"
+                >Critique</h3>
                 {{#if this.previewHasText}}
                   <div
                     class="npn-critique-reply-modal__preview-text"
@@ -9104,9 +9100,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 {{else}}
                   <p
                     class="npn-critique-reply-modal__preview-text-empty"
-                  >{{i18n
-                      "npn_critique_reply.modal.preview_empty_text"
-                    }}</p>
+                  >No written critique yet.</p>
                 {{/if}}
               </section>
 
@@ -9119,16 +9113,12 @@ export default class NpnCritiqueReplyModal extends Component {
                     <h3
                       class="npn-critique-reply-modal__preview-section-title"
                     >
-                      {{#if img.label}}{{img.label}}{{else}}{{i18n
-                          "npn_critique_reply.modal.preview_section_visual_notes"
-                        }}{{/if}}
+                      {{#if img.label}}{{img.label}}{{else}}Visual Notes{{/if}}
                     </h3>
                     <img
                       class="npn-critique-reply-modal__preview-image"
                       src={{img.objectUrl}}
-                      alt={{i18n
-                        "npn_critique_reply.modal.preview_section_visual_notes"
-                      }}
+                      alt="Visual notes"
                     />
                   </section>
                 {{/each}}
@@ -9139,17 +9129,13 @@ export default class NpnCritiqueReplyModal extends Component {
                   class="npn-critique-reply-modal__preview-section
                     npn-critique-reply-modal__preview-section--processing-example"
                 >
-                  <h3 class="npn-critique-reply-modal__preview-section-title">
-                    {{i18n
-                      "npn_critique_reply.modal.preview_section_processing_example"
-                    }}
-                  </h3>
+                  <h3
+                    class="npn-critique-reply-modal__preview-section-title"
+                  >Processing Example</h3>
                   <img
                     class="npn-critique-reply-modal__preview-image"
                     src={{this._previewSnapshot.processingExampleUrl}}
-                    alt={{i18n
-                      "npn_critique_reply.modal.preview_section_processing_example"
-                    }}
+                    alt="Processing example"
                   />
                 </section>
               {{/if}}
