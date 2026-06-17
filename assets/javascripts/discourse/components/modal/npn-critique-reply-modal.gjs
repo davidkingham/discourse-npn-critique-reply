@@ -1227,6 +1227,31 @@ export default class NpnCritiqueReplyModal extends Component {
     return "npn_critique_reply.modal.preview_critique_disabled_title";
   }
 
+  // Composed CSS class string for the DModal root. Was four inline
+  // {{if}} / {{unless}} helper expressions concatenated in the
+  // template, which surfaced "Expected a dynamic component
+  // definition" errors mid-render — every time one of the gated
+  // tracked properties (hasImage, visualFocusMode, cropMode,
+  // previewMode) changed, Glimmer re-evaluated the helper chain
+  // and tripped its helper-resolution path on some Ember versions.
+  // Compute the whole class string here and bind once.
+  get modalClassNames() {
+    const parts = ["npn-critique-reply-modal", "--workspace"];
+    if (!this.hasImage) {
+      parts.push("npn-critique-reply-modal--no-image");
+    }
+    if (this.visualFocusMode) {
+      parts.push("npn-critique-reply-modal--visual-focus");
+    }
+    if (this.cropMode) {
+      parts.push("npn-critique-reply-modal--crop-mode");
+    }
+    if (this.previewMode) {
+      parts.push("npn-critique-reply-modal--preview");
+    }
+    return parts.join(" ");
+  }
+
   // ---- Image versions --------------------------------------------------
 
   get imageVersions() {
@@ -7200,11 +7225,7 @@ export default class NpnCritiqueReplyModal extends Component {
       @title={{i18n "npn_critique_reply.modal.title"}}
       @closeModal={{@closeModal}}
       @beforeClose={{this.beforeClose}}
-      class="npn-critique-reply-modal --workspace
-        {{unless this.hasImage 'npn-critique-reply-modal--no-image'}}
-        {{if this.visualFocusMode 'npn-critique-reply-modal--visual-focus'}}
-        {{if this.cropMode 'npn-critique-reply-modal--crop-mode'}}
-        {{if this.previewMode 'npn-critique-reply-modal--preview'}}"
+      class={{this.modalClassNames}}
     >
       <:body>
         {{! Hidden autosave anchor. didUpdate fires whenever any
