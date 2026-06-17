@@ -5719,6 +5719,19 @@ export default class NpnCritiqueReplyModal extends Component {
     return !!this._previewSnapshot?.textBody;
   }
 
+  // True when the empty-state placeholder should render in the
+  // Critique section. Fires only when there's no general prose AND
+  // no visual notes (purely empty preview); any image section
+  // carrying its own prose is sufficient to suppress the
+  // placeholder.
+  get previewShowEmptyPlaceholder() {
+    return (
+      !!this._previewSnapshot &&
+      !this.previewHasText &&
+      !this._previewSnapshot.hasVisualNotes
+    );
+  }
+
   @action
   async postCritique() {
     return this._doPostCritique({ skipVisualNotes: false });
@@ -9064,7 +9077,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   to a specific image) this collapses; the image
                   sections below carry the prose. Empty placeholder
                   only fires when there's no preview-eligible content
-                  at all. }}
+                  at all (no general prose AND no visual notes). }}
               {{#if this.previewHasText}}
                 <section
                   class="npn-critique-reply-modal__preview-section
@@ -9081,26 +9094,25 @@ export default class NpnCritiqueReplyModal extends Component {
                     class="npn-critique-reply-modal__preview-text"
                   >{{this.previewTextHtml}}</div>
                 </section>
-              {{else}}
-                {{#unless this._previewSnapshot.hasVisualNotes}}
-                  <section
-                    class="npn-critique-reply-modal__preview-section
-                      npn-critique-reply-modal__preview-section--critique"
+              {{/if}}
+              {{#if this.previewShowEmptyPlaceholder}}
+                <section
+                  class="npn-critique-reply-modal__preview-section
+                    npn-critique-reply-modal__preview-section--critique"
+                >
+                  <h3
+                    class="npn-critique-reply-modal__preview-section-title"
                   >
-                    <h3
-                      class="npn-critique-reply-modal__preview-section-title"
-                    >
-                      {{i18n
-                        "npn_critique_reply.modal.preview_section_critique"
-                      }}
-                    </h3>
-                    <p
-                      class="npn-critique-reply-modal__preview-text-empty"
-                    >{{i18n
-                        "npn_critique_reply.modal.preview_empty_text"
-                      }}</p>
-                  </section>
-                {{/unless}}
+                    {{i18n
+                      "npn_critique_reply.modal.preview_section_critique"
+                    }}
+                  </h3>
+                  <p
+                    class="npn-critique-reply-modal__preview-text-empty"
+                  >{{i18n
+                      "npn_critique_reply.modal.preview_empty_text"
+                    }}</p>
+                </section>
               {{/if}}
 
               {{#if this._previewSnapshot.hasVisualNotes}}
