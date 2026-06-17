@@ -5600,10 +5600,11 @@ export default class NpnCritiqueReplyModal extends Component {
           label: this._sourceLabelForImageIndex(entry.index),
           objectUrl: URL.createObjectURL(blob),
           // Per-image prose paragraphs — set below once we have a
-          // token map. Each image renders these between its heading
-          // and the flattened-image preview, matching the cooked-
-          // post body shape from _prepareReplyText.
-          paragraphsHtml: null,
+          // token map. Plain joined text; the template renders it
+          // with `white-space: pre-wrap` so blank lines + line
+          // breaks survive. Tokens render as raw text (the cooked
+          // post still styles them via the badge decorator).
+          paragraphsText: null,
         });
       } catch (e) {
         // Preview is best-effort: if a flatten fails we still want
@@ -5639,9 +5640,7 @@ export default class NpnCritiqueReplyModal extends Component {
     );
     for (const img of visualNotesImages) {
       const paras = grouped.perImage.get(img.index) ?? [];
-      img.paragraphsHtml = paras.length
-        ? htmlSafe(buildPreviewTextHtml(paras.join("\n\n")))
-        : null;
+      img.paragraphsText = paras.length ? paras.join("\n\n") : null;
     }
 
     this._previewSnapshot = {
@@ -9128,10 +9127,11 @@ export default class NpnCritiqueReplyModal extends Component {
                           "npn_critique_reply.modal.preview_section_visual_notes"
                         }}{{/if}}
                     </h3>
-                    {{#if img.paragraphsHtml}}
+                    {{#if img.paragraphsText}}
                       <div
                         class="npn-critique-reply-modal__preview-text"
-                      >{{img.paragraphsHtml}}</div>
+                        style="white-space: pre-wrap;"
+                      >{{img.paragraphsText}}</div>
                     {{/if}}
                     <img
                       class="npn-critique-reply-modal__preview-image"
