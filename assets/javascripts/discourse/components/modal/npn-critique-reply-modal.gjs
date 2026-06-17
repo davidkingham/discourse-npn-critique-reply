@@ -9100,7 +9100,19 @@ export default class NpnCritiqueReplyModal extends Component {
               </section>
 
               {{#if this._previewSnapshot.hasVisualNotes}}
-                {{#each this._previewSnapshot.visualNotesImages as |img|}}
+                {{! Iteration variable is `imgEntry` (NOT `img`)
+                    because `<img>` is also an HTML element. In
+                    strict-mode gjs/Glimmer, naming the each block-
+                    scope variable `img` causes the literal `<img />`
+                    inside the block to be parsed as a dynamic
+                    component invocation against that variable —
+                    surfacing "Expected a dynamic component
+                    definition" mid-render. Same applies to
+                    `<input>` / `<table>` / etc. for future
+                    iterations. }}
+                {{#each
+                  this._previewSnapshot.visualNotesImages as |imgEntry|
+                }}
                   <section
                     class="npn-critique-reply-modal__preview-section
                       npn-critique-reply-modal__preview-section--visual-notes"
@@ -9108,10 +9120,32 @@ export default class NpnCritiqueReplyModal extends Component {
                     <h3
                       class="npn-critique-reply-modal__preview-section-title"
                     >
-                      {{#if img.label}}{{img.label}}{{else}}Visual Notes{{/if}}
+                      {{#if imgEntry.label}}{{imgEntry.label}}{{else}}Visual
+                          Notes{{/if}}
                     </h3>
+                    <img
+                      class="npn-critique-reply-modal__preview-image"
+                      src={{imgEntry.objectUrl}}
+                      alt="Visual notes"
+                    />
                   </section>
                 {{/each}}
+              {{/if}}
+
+              {{#if this._previewSnapshot.hasProcessingExample}}
+                <section
+                  class="npn-critique-reply-modal__preview-section
+                    npn-critique-reply-modal__preview-section--processing-example"
+                >
+                  <h3
+                    class="npn-critique-reply-modal__preview-section-title"
+                  >Processing Example</h3>
+                  <img
+                    class="npn-critique-reply-modal__preview-image"
+                    src={{this._previewSnapshot.processingExampleUrl}}
+                    alt="Processing example"
+                  />
+                </section>
               {{/if}}
             </div>
           </section>
