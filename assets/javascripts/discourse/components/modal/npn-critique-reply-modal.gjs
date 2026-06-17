@@ -5639,6 +5639,11 @@ export default class NpnCritiqueReplyModal extends Component {
           index: entry.index,
           label: this._sourceLabelForImageIndex(entry.index),
           objectUrl: URL.createObjectURL(blob),
+          // Per-image prose paragraphs — set below once we have a
+          // token map. SafeString of pre-rendered badge HTML so the
+          // preview matches the cooked-post body shape (text under
+          // each image with [A1] / [Crop 2] tokens styled).
+          paragraphsHtml: null,
         });
       } catch (e) {
         // Preview is best-effort: if a flatten fails we still want
@@ -5656,28 +5661,39 @@ export default class NpnCritiqueReplyModal extends Component {
     }
 
     if (this._destroyed) {
-      for (const img of visualNotesImages) {
-        URL.revokeObjectURL(img.objectUrl);
+      for (const entryToRevoke of visualNotesImages) {
+        URL.revokeObjectURL(entryToRevoke.objectUrl);
       }
       return;
     }
 
-    // Preview snapshot. Note: the preview's "Critique" section
-    // shows the FULL textarea text — not the per-image-grouped
-    // sub-bodies that the cooked post composes. We tried rendering
-    // per-image prose under each image in the preview and ran into
-    // a Glimmer "Expected a dynamic component definition" error
-    // that only fires inside the {{#each visualNotesImages}}
-    // iteration; reverting the per-image preview rendering to keep
-    // the modal functional. The POSTED critique still gets the
-    // per-image grouping treatment via _prepareReplyText.
+    // Per-image grouping for the preview. Mirrors the cooked-post
+    // composition in _prepareReplyText: prose paragraphs whose
+    // tokens belong to ONE image flow under that image; everything
+    // else (general critique, mixed-token paragraphs) stays at the
+    // top.
+    const tokenToImageIndex = this._buildTokenToImageIndexMap();
+    const grouped = this._groupTextParagraphsByImage(
+      this.critiqueText.trim(),
+      tokenToImageIndex
+    );
+    for (const imgEntry of visualNotesImages) {
+      const paras = grouped.perImage.get(imgEntry.index) ?? [];
+      imgEntry.paragraphsHtml = paras.length
+        ? htmlSafe(buildPreviewTextHtml(paras.join("\n\n")))
+        : null;
+    }
+
     this._previewSnapshot = {
       visualNotesImages,
       visualNotesError,
       processingExampleUrl: this.processingExample?.url ?? null,
       processingExampleFilename:
         this.processingExample?.filename ?? null,
-      textBody: this.critiqueText.trim(),
+      // textBody holds only the GENERAL (no-token / mixed-token)
+      // paragraphs. Per-image prose lives on each
+      // visualNotesImages[i].paragraphsHtml entry above.
+      textBody: grouped.general.join("\n\n"),
       hasVisualNotes: visualNotesImages.length > 0,
       hasProcessingExample: !!this.processingExample,
     };
@@ -5724,9 +5740,9 @@ export default class NpnCritiqueReplyModal extends Component {
   _teardownPreviewSnapshot() {
     const images = this._previewSnapshot?.visualNotesImages;
     if (Array.isArray(images)) {
-      for (const img of images) {
+      for (const imgEntry of images) {
         try {
-          URL.revokeObjectURL(img.objectUrl);
+          URL.revokeObjectURL(imgEntry.objectUrl);
         } catch (_e) {
           // Already revoked / never created — fine.
         }
@@ -5751,6 +5767,18 @@ export default class NpnCritiqueReplyModal extends Component {
 
   get previewHasText() {
     return !!this._previewSnapshot?.textBody;
+  }
+
+  // Empty-state gate: only show "No written critique yet." when
+  // there's NO general prose AND no visual notes. Annotation-only
+  // critiques (every paragraph belongs to a specific image) skip
+  // the placeholder — image sections carry the content.
+  get previewShowEmptyPlaceholder() {
+    return (
+      !!this._previewSnapshot &&
+      !this.previewHasText &&
+      !this._previewSnapshot.hasVisualNotes
+    );
   }
 
   @action
@@ -9074,30 +9102,57 @@ export default class NpnCritiqueReplyModal extends Component {
                 id="npn-critique-reply-preview-heading"
                 class="npn-critique-reply-modal__preview-title"
                 tabindex="-1"
-              >Preview Critique</h2>
-              <p
-                class="npn-critique-reply-modal__preview-subtitle"
-              >Review how your critique will appear before posting.</p>
+              >{{i18n
+                  "npn_critique_reply.modal.preview_header_title"
+                }}</h2>
+              <p class="npn-critique-reply-modal__preview-subtitle">{{i18n
+                  "npn_critique_reply.modal.preview_header_subtitle"
+                }}</p>
             </header>
             <div class="npn-critique-reply-modal__preview-body">
-              <section
-                class="npn-critique-reply-modal__preview-section
-                  npn-critique-reply-modal__preview-section--critique"
-              >
-                <h3
-                  class="npn-critique-reply-modal__preview-section-title"
-                >Critique</h3>
-                {{#if this.previewHasText}}
+              {{! General critique section — shows the prose that
+                  isn't routed under any single image. When the user
+                  has annotation-only text (every paragraph belongs
+                  to a specific image) this collapses; image
+                  sections below carry the prose. Empty placeholder
+                  only fires when there's no preview-eligible
+                  content at all. }}
+              {{#if this.previewHasText}}
+                <section
+                  class="npn-critique-reply-modal__preview-section
+                    npn-critique-reply-modal__preview-section--critique"
+                >
+                  <h3
+                    class="npn-critique-reply-modal__preview-section-title"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.preview_section_critique"
+                    }}
+                  </h3>
                   <div
                     class="npn-critique-reply-modal__preview-text"
-                    style="white-space: pre-wrap;"
-                  >{{this._previewSnapshot.textBody}}</div>
-                {{else}}
+                  >{{this.previewTextHtml}}</div>
+                </section>
+              {{/if}}
+              {{#if this.previewShowEmptyPlaceholder}}
+                <section
+                  class="npn-critique-reply-modal__preview-section
+                    npn-critique-reply-modal__preview-section--critique"
+                >
+                  <h3
+                    class="npn-critique-reply-modal__preview-section-title"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.preview_section_critique"
+                    }}
+                  </h3>
                   <p
                     class="npn-critique-reply-modal__preview-text-empty"
-                  >No written critique yet.</p>
-                {{/if}}
-              </section>
+                  >{{i18n
+                      "npn_critique_reply.modal.preview_empty_text"
+                    }}</p>
+                </section>
+              {{/if}}
 
               {{#if this._previewSnapshot.hasVisualNotes}}
                 {{! Iteration variable is `imgEntry` (NOT `img`)
@@ -9120,13 +9175,21 @@ export default class NpnCritiqueReplyModal extends Component {
                     <h3
                       class="npn-critique-reply-modal__preview-section-title"
                     >
-                      {{#if imgEntry.label}}{{imgEntry.label}}{{else}}Visual
-                          Notes{{/if}}
+                      {{#if imgEntry.label}}{{imgEntry.label}}{{else}}{{i18n
+                          "npn_critique_reply.modal.preview_section_visual_notes"
+                        }}{{/if}}
                     </h3>
+                    {{#if imgEntry.paragraphsHtml}}
+                      <div
+                        class="npn-critique-reply-modal__preview-text"
+                      >{{imgEntry.paragraphsHtml}}</div>
+                    {{/if}}
                     <img
                       class="npn-critique-reply-modal__preview-image"
                       src={{imgEntry.objectUrl}}
-                      alt="Visual notes"
+                      alt={{i18n
+                        "npn_critique_reply.modal.preview_section_visual_notes"
+                      }}
                     />
                   </section>
                 {{/each}}
@@ -9137,13 +9200,17 @@ export default class NpnCritiqueReplyModal extends Component {
                   class="npn-critique-reply-modal__preview-section
                     npn-critique-reply-modal__preview-section--processing-example"
                 >
-                  <h3
-                    class="npn-critique-reply-modal__preview-section-title"
-                  >Processing Example</h3>
+                  <h3 class="npn-critique-reply-modal__preview-section-title">
+                    {{i18n
+                      "npn_critique_reply.modal.preview_section_processing_example"
+                    }}
+                  </h3>
                   <img
                     class="npn-critique-reply-modal__preview-image"
                     src={{this._previewSnapshot.processingExampleUrl}}
-                    alt="Processing example"
+                    alt={{i18n
+                      "npn_critique_reply.modal.preview_section_processing_example"
+                    }}
                   />
                 </section>
               {{/if}}
