@@ -207,30 +207,24 @@ describe DiscourseNpnCritiqueReply::DraftNormalizer do
     expect(result["annotations"].length).to eq(described_class::MAX_ATTENTION_PULL_COUNT)
   end
 
-  it "enforces MAX_CROP_COUNT (first valid wins)" do
-    result =
-      normalize(
-        "annotations" => [
-          {
-            "kind" => "crop",
-            "id" => "crop_a",
-            "x_pct" => 0,
-            "y_pct" => 0,
-            "width_pct" => 50,
-            "height_pct" => 50,
-          },
-          {
-            "kind" => "crop",
-            "id" => "crop_b",
-            "x_pct" => 10,
-            "y_pct" => 10,
-            "width_pct" => 50,
-            "height_pct" => 50,
-          },
-        ],
-      )
-    expect(result["annotations"].length).to eq(1)
-    expect(result["annotations"].first["id"]).to eq("crop_a")
+  it "enforces MAX_CROP_COUNT (first N kept, extras dropped)" do
+    crops =
+      (described_class::MAX_CROP_COUNT + 1).times.map do |i|
+        {
+          "kind" => "crop",
+          "id" => "crop_#{i}",
+          "x_pct" => i,
+          "y_pct" => i,
+          "width_pct" => 50,
+          "height_pct" => 50,
+        }
+      end
+    result = normalize("annotations" => crops)
+    expect(result["annotations"].length).to eq(described_class::MAX_CROP_COUNT)
+    expect(result["annotations"].first["id"]).to eq("crop_0")
+    expect(result["annotations"].last["id"]).to eq(
+      "crop_#{described_class::MAX_CROP_COUNT - 1}"
+    )
   end
 
   it "requires >= 2 points for eye_path; drops otherwise" do
