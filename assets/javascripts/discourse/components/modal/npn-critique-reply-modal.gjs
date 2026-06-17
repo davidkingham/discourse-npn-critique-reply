@@ -9079,9 +9079,26 @@ export default class NpnCritiqueReplyModal extends Component {
                 class="npn-critique-reply-modal__preview-subtitle"
               >Review how your critique will appear before posting.</p>
             </header>
-            <div
-              class="npn-critique-reply-modal__preview-body"
-            >BINARY SEARCH: header only</div>
+            <div class="npn-critique-reply-modal__preview-body">
+              <section
+                class="npn-critique-reply-modal__preview-section
+                  npn-critique-reply-modal__preview-section--critique"
+              >
+                <h3
+                  class="npn-critique-reply-modal__preview-section-title"
+                >Critique</h3>
+                {{#if this.previewHasText}}
+                  <div
+                    class="npn-critique-reply-modal__preview-text"
+                    style="white-space: pre-wrap;"
+                  >{{this._previewSnapshot.textBody}}</div>
+                {{else}}
+                  <p
+                    class="npn-critique-reply-modal__preview-text-empty"
+                  >No written critique yet.</p>
+                {{/if}}
+              </section>
+            </div>
           </section>
         {{/if}}
       </:body>
