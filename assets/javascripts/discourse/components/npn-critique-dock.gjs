@@ -7,6 +7,20 @@ import DButton from "discourse/ui-kit/d-button";
 import { i18n } from "discourse-i18n";
 import NpnCritiqueReplyModal from "./modal/npn-critique-reply-modal";
 
+// Composer transitions don't change the route or our tracked state, so we
+// re-read the authoritative composer state on each of these app events to
+// keep the dock hidden while the standard composer occupies the bottom.
+// (Subscribing to an event that never fires is harmless.)
+const COMPOSER_EVENTS = [
+  "composer:open",
+  "composer:opened",
+  "composer:closed",
+  "composer:cancelled",
+  "composer:saved",
+  "composer:created-post",
+  "composer:edited-post",
+];
+
 // Persistent "Critique in progress" dock, rendered once into the
 // application-level `below-footer` outlet (always present, every route).
 // It only shows when a critique has been minimized AND the user is on the
@@ -18,22 +32,42 @@ export default class NpnCritiqueDock extends Component {
   @service modal;
   @service router;
   @service appEvents;
+  @service composer;
 
   // Id of the topic currently being viewed (null off any topic route).
   // Tracked so the `visible` getter recomputes when the route changes —
   // we can't trust the topic controller's model alone, since it retains
   // the last topic after you navigate away.
   @tracked _currentTopicId = null;
+  // Whether the standard composer is occupying the bottom of the screen.
+  // We hide the dock while it is, to avoid two stacked bottom bars (and
+  // direct overlap on mobile). The critique draft is untouched — separate
+  // draft keys, never merged.
+  @tracked _composerOpen = false;
 
   constructor() {
     super(...arguments);
     this._syncCurrentTopic();
+    this._syncComposer();
     this.appEvents.on("page:changed", this, "_syncCurrentTopic");
+    for (const evt of COMPOSER_EVENTS) {
+      this.appEvents.on(evt, this, "_syncComposer");
+    }
   }
 
   willDestroy() {
     super.willDestroy(...arguments);
     this.appEvents.off("page:changed", this, "_syncCurrentTopic");
+    for (const evt of COMPOSER_EVENTS) {
+      this.appEvents.off(evt, this, "_syncComposer");
+    }
+  }
+
+  _syncComposer() {
+    const state = this.composer?.model?.composeState;
+    // Present in any non-closed state (open / fullscreen / collapsed draft
+    // bar). When closed, model may be cleared — both read as not-open.
+    this._composerOpen = !!state && state !== "closed";
   }
 
   _syncCurrentTopic() {
@@ -53,7 +87,8 @@ export default class NpnCritiqueDock extends Component {
     return (
       ws.showDock &&
       !!ws.topicId &&
-      this._currentTopicId === ws.topicId
+      this._currentTopicId === ws.topicId &&
+      !this._composerOpen
     );
   }
 
