@@ -1237,6 +1237,17 @@ export default class NpnCritiqueReplyModal extends Component {
     this.#textarea?.focus();
   }
 
+  // Focus the paste field the moment the fallback opens so the critic
+  // can Cmd/Ctrl+V immediately — the whole point of the fallback is for
+  // browsers (notably Firefox) where the one-click clipboard read is
+  // unavailable. The conditional block re-inserts the textarea on each
+  // open, so didInsert fires every time (more reliable than autofocus
+  // across re-renders).
+  @action
+  focusQuotePasteField(element) {
+    element?.focus?.();
+  }
+
   get quotePasteInsertDisabled() {
     return !this._looksLikeQuote(this._quotePasteText);
   }
@@ -10275,6 +10286,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       }}
                       value={{this._quotePasteText}}
                       {{on "input" this.updateQuotePasteText}}
+                      {{didInsert this.focusQuotePasteField}}
                     ></textarea>
                   </label>
                   <div class="npn-critique-reply-modal__quote-paste-actions">
