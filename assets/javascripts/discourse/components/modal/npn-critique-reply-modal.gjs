@@ -1079,6 +1079,18 @@ export default class NpnCritiqueReplyModal extends Component {
     } catch (e) {
       this._recordError("mention_autocomplete_setup", e, null, "warn");
     }
+
+    // Resume-from-dock asks us to land focus in the active writing field
+    // (Start / Edit opens don't, so the critic can read the request
+    // first). Deferred so it wins after DModal's focus-trap setup.
+    if (this.args.model?.focusWriting) {
+      setTimeout(() => {
+        if (this._destroyed) {
+          return;
+        }
+        element?.focus?.();
+      }, 0);
+    }
   }
 
   @action

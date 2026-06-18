@@ -38,6 +38,11 @@ export default class NpnCritiqueWorkspaceService extends Service {
   // Per-session dismissal — hides the dock without touching the draft. The
   // footer "Resume Critique Draft" button still reopens the workspace.
   @tracked dismissed = false;
+  // One-shot: set when a minimize just happened, so the dock moves focus
+  // to its Resume button when it appears. Cleared after the dock consumes
+  // it, so the dock re-appearing later (navigation back, composer close)
+  // never steals focus.
+  @tracked focusRequested = false;
 
   constructor() {
     super(...arguments);
@@ -67,6 +72,7 @@ export default class NpnCritiqueWorkspaceService extends Service {
     this.status = status;
     this.summary = summary;
     this.dismissed = false;
+    this.focusRequested = true;
     this.active = true;
   }
 
@@ -84,6 +90,7 @@ export default class NpnCritiqueWorkspaceService extends Service {
     this.status = null;
     this.summary = null;
     this.dismissed = false;
+    this.focusRequested = false;
   }
 
   // Auto-clear when the matching topic's draft goes away. Post-success and

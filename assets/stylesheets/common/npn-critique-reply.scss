@@ -3170,7 +3170,8 @@
 }
 
 // Mobile: full-width status bar pinned to the bottom, above the safe-area
-// inset, rather than a floating card.
+// inset, rather than a floating card. Bump the action hit targets so the
+// bar is comfortable to tap.
 @media (max-width: 700px) {
   .npn-critique-dock {
     right: 0;
@@ -3182,6 +3183,29 @@
     border-right: none;
     padding-bottom: calc(0.6em + env(safe-area-inset-bottom, 0px));
     justify-content: space-between;
+
+    .btn {
+      min-height: 44px;
+    }
+  }
+}
+
+// Subtle entrance — skipped entirely under reduced-motion.
+@media (prefers-reduced-motion: no-preference) {
+  .npn-critique-dock {
+    animation: npn-critique-dock-in 160ms ease-out;
+  }
+
+  @keyframes npn-critique-dock-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 }
 

@@ -2,6 +2,7 @@ import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
 import { getOwner } from "@ember/owner";
+import didInsert from "@ember/render-modifiers/modifiers/did-insert";
 import { service } from "@ember/service";
 import DButton from "discourse/ui-kit/d-button";
 import { i18n } from "discourse-i18n";
@@ -106,6 +107,23 @@ export default class NpnCritiqueDock extends Component {
     });
   }
 
+  // When the dock appears because of a Minimize (not a navigation/composer
+  // re-show), move focus to Resume so keyboard + screen-reader users land
+  // on the way back. Consumed once, then cleared.
+  @action
+  onDockShown(element) {
+    if (!this.npnCritiqueWorkspace.focusRequested) {
+      return;
+    }
+    this.npnCritiqueWorkspace.focusRequested = false;
+    // Defer so focus wins after the closing modal's focus-trap teardown.
+    setTimeout(() => {
+      element
+        ?.querySelector?.(".npn-critique-dock__resume")
+        ?.focus?.();
+    }, 0);
+  }
+
   @action
   resume() {
     const ws = this.npnCritiqueWorkspace;
@@ -116,9 +134,13 @@ export default class NpnCritiqueDock extends Component {
     }
     const metadata = topic.npn_critique_reply ?? null;
     // Clear first so the dock hides as the workspace reopens; the modal
-    // rebuilds all state from the server draft on open.
+    // rebuilds all state from the server draft on open. `focusWriting`
+    // asks the reopened workspace to land focus in the active writing
+    // field (resume-only — Start/Edit opens are unchanged).
     ws.clear();
-    this.modal.show(NpnCritiqueReplyModal, { model: { topic, metadata } });
+    this.modal.show(NpnCritiqueReplyModal, {
+      model: { topic, metadata, focusWriting: true },
+    });
   }
 
   @action
@@ -134,6 +156,7 @@ export default class NpnCritiqueDock extends Component {
         class="npn-critique-dock"
         role="region"
         aria-label={{i18n "npn_critique_reply.dock.aria_label"}}
+        {{didInsert this.onDockShown}}
       >
         <div class="npn-critique-dock__info">
           <span class="npn-critique-dock__title">
