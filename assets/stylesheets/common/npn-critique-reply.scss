@@ -1763,6 +1763,60 @@
     line-height: 1.4;
   }
 
+  // Import-copied-quote manual paste fallback. Mirrors the inline
+  // link-form so the two toolbar affordances feel consistent.
+  &__quote-paste-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55em;
+    padding: 0.75em 0.85em 0.85em;
+    background: var(--primary-very-low);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+  }
+
+  &__quote-paste-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    font-size: var(--font-down-1);
+    color: var(--primary-high);
+  }
+
+  &__quote-paste-input {
+    width: 100%;
+    padding: 0.5em 0.65em;
+    background: var(--secondary);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+    color: var(--primary);
+    font: inherit;
+    resize: vertical;
+    box-sizing: border-box;
+
+    &:focus,
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: -1px;
+      border-color: var(--tertiary);
+    }
+  }
+
+  &__quote-paste-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.4em;
+    margin-top: 0.15em;
+  }
+
+  &__quote-paste-hint {
+    margin: 0.1em 0 0;
+    font-size: var(--font-down-1);
+    color: var(--primary-medium);
+    line-height: 1.4;
+  }
+
   &__textarea {
     width: 100%;
     // Tall enough that it reads as a real writing surface rather than a

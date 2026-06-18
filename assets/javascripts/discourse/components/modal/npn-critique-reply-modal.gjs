@@ -362,6 +362,15 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked linkFormText = "";
   _linkPreservedSelection = null;
 
+  // Import-copied-quote state. The toolbar "Import copied quote" button
+  // reads the system clipboard and inserts an attributed [quote=…] block
+  // (produced by Discourse's native "Copy Quote") into the active
+  // writing context. When clipboard access is unavailable or denied, or
+  // the clipboard doesn't hold a quote, `_quotePasteFallbackOpen` flips
+  // on a small inline paste field so the critic can paste it manually.
+  @tracked _quotePasteFallbackOpen = false;
+  @tracked _quotePasteText = "";
+
   // Writing state --------------------------------------------------------
   //
   // The right-side textarea is a SINGLE field that switches between two
@@ -1089,6 +1098,8 @@ export default class NpnCritiqueReplyModal extends Component {
     this.linkFormText = defaultText;
     this.linkFormUrl = "";
     this.linkFormOpen = true;
+    // One inline affordance at a time — close the quote paste field.
+    this._quotePasteFallbackOpen = false;
   }
 
   @action
@@ -1146,6 +1157,100 @@ export default class NpnCritiqueReplyModal extends Component {
 
   get linkFormInsertDisabled() {
     return this.linkFormUrl.trim().length === 0;
+  }
+
+  // -- Import copied quote ------------------------------------------------
+  //
+  // The critic uses Discourse's native "Copy Quote" on another member's
+  // selected text (unchanged), then clicks this toolbar button. We read
+  // the clipboard and insert the already-attributed [quote=…] block into
+  // the active writing context. Clipboard reads need a user gesture +
+  // permission and aren't available in every browser/context, so any
+  // miss falls back to a small inline paste field.
+
+  // True for a Discourse quote block. Native Copy Quote emits
+  // [quote="name, post:N, topic:T, full:true"]\n…\n[/quote]; we accept
+  // any [quote …]…[/quote] so older-format or hand-built quotes validate.
+  _looksLikeQuote(text) {
+    return (
+      typeof text === "string" &&
+      /\[quote\b[^\]]*\][\s\S]*?\[\/quote\]/i.test(text)
+    );
+  }
+
+  @action
+  async importCopiedQuote() {
+    let text = null;
+    try {
+      text = await navigator.clipboard?.readText?.();
+    } catch (_e) {
+      // Permission denied / unsupported (Safari, Firefox, insecure
+      // context). Fall through to the manual paste field below.
+      text = null;
+    }
+    if (this._destroyed) {
+      return;
+    }
+    if (this._looksLikeQuote(text)) {
+      this._insertQuoteMarkdown(text.trim());
+      this._closeQuotePaste();
+      this.toasts?.success?.({
+        duration: "short",
+        data: {
+          message: i18n("npn_critique_reply.modal.toolbar.quote_imported"),
+        },
+      });
+      return;
+    }
+    // Couldn't read a quote off the clipboard — open the manual paste
+    // field so the critic can paste the copied quote directly.
+    this._openQuotePaste();
+  }
+
+  @action
+  updateQuotePasteText(event) {
+    this._quotePasteText = event.target.value;
+  }
+
+  @action
+  submitQuotePaste(event) {
+    event?.preventDefault?.();
+    const text = (this._quotePasteText || "").trim();
+    if (!this._looksLikeQuote(text)) {
+      // Insert stays disabled until the text validates, so this is a
+      // belt-and-braces guard.
+      return;
+    }
+    this._insertQuoteMarkdown(text);
+    this._closeQuotePaste();
+    this.toasts?.success?.({
+      duration: "short",
+      data: {
+        message: i18n("npn_critique_reply.modal.toolbar.quote_imported"),
+      },
+    });
+  }
+
+  @action
+  cancelQuotePaste() {
+    this._closeQuotePaste();
+    this.#textarea?.focus();
+  }
+
+  get quotePasteInsertDisabled() {
+    return !this._looksLikeQuote(this._quotePasteText);
+  }
+
+  _openQuotePaste() {
+    // One inline affordance at a time — close the link form if open.
+    this.linkFormOpen = false;
+    this._quotePasteText = "";
+    this._quotePasteFallbackOpen = true;
+  }
+
+  _closeQuotePaste() {
+    this._quotePasteFallbackOpen = false;
+    this._quotePasteText = "";
   }
 
   // -- private -----------------------------------------------------------
@@ -3214,23 +3319,38 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     const attribution = this._buildQuoteAttribution();
-    const quoteText = this._buildQuoteBlock(text, attribution);
+    this._insertQuoteMarkdown(this._buildQuoteBlock(text, attribution));
+    this._quoteButtonPosition = null;
+    this._quoteSelectionText = "";
+    // Clear the OP-side text selection so a stale highlight doesn't
+    // linger after the quote has moved into the textarea.
+    try {
+      window.getSelection?.()?.removeAllRanges?.();
+    } catch {
+      // Some browsers throw on removeAllRanges in odd states; not
+      // critical — the highlight will clear on the next click.
+    }
+  }
+
+  // Insert a fully-formed `[quote=…]…[/quote]` block into the ACTIVE
+  // writing context at the caret, padded with blank lines so it reads
+  // as its own paragraph. Shared by the Photographer's-Notes quote
+  // button and the Import Copied Quote toolbar action — the quote lands
+  // wherever the critic is currently writing (overall critique or the
+  // selected image's notes); the visible tab is the destination, so we
+  // never switch context here. Dispatches a synthetic `input` event so
+  // the bound `activeWritingText` + draft autosaver see the change,
+  // then refocuses the textarea.
+  _insertQuoteMarkdown(quoteText) {
     if (!this.#textManipulation || !this.#textarea) {
-      // Defensive fallback — append to the end of the active writing
-      // context with the existing paragraph-spacing convention. The
-      // textarea ref is set by didInsert and lives for the modal's
-      // lifetime, so this path is unexpected in practice. A quote
-      // lands wherever the critic is currently writing (overall or
-      // image notes), not forced into image notes.
+      // Defensive fallback — append to the end of the active context.
+      // The textarea ref is set by didInsert and lives for the modal's
+      // lifetime, so this path is unexpected in practice.
       this._appendToActiveText(quoteText);
     } else {
       try {
         const tm = this.#textManipulation;
         const sel = tm.getSelected();
-        // Insert at caret with surrounding blank-line padding so
-        // the quote always reads as its own paragraph. Read the
-        // existing text + caret position to decide whether we need
-        // leading / trailing newlines.
         const value = this.#textarea.value ?? "";
         const before = value.slice(0, sel.start);
         const after = value.slice(sel.end);
@@ -3250,21 +3370,8 @@ export default class NpnCritiqueReplyModal extends Component {
         this._appendToActiveText(quoteText);
       }
     }
-    // Dispatch a synthetic `input` event so the bound
-    // `activeWritingText` and the draft autosaver both see the change.
-    // The Textarea component listens on the native `input` event.
     this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
     this.#textarea?.focus();
-    this._quoteButtonPosition = null;
-    this._quoteSelectionText = "";
-    // Clear the OP-side text selection so a stale highlight doesn't
-    // linger after the quote has moved into the textarea.
-    try {
-      window.getSelection?.()?.removeAllRanges?.();
-    } catch {
-      // Some browsers throw on removeAllRanges in odd states; not
-      // critical — the highlight will clear on the next click.
-    }
   }
 
   _buildQuoteAttribution() {
@@ -10144,6 +10251,50 @@ export default class NpnCritiqueReplyModal extends Component {
                     }}
                   </p>
                 </form>
+              {{else if this._quotePasteFallbackOpen}}
+                {{! Manual paste fallback — shown when the clipboard
+                    couldn't be read (permission/browser) or didn't hold
+                    a quote. The critic pastes the copied quote here and
+                    Insert routes it through the same insertion path. }}
+                <form
+                  class="npn-critique-reply-modal__quote-paste-form"
+                  aria-label={{i18n
+                    "npn_critique_reply.modal.toolbar.import_quote"
+                  }}
+                  {{on "submit" this.submitQuotePaste}}
+                >
+                  <label class="npn-critique-reply-modal__quote-paste-label">
+                    <span>{{i18n
+                        "npn_critique_reply.modal.toolbar.quote_paste_label"
+                      }}</span>
+                    <textarea
+                      class="npn-critique-reply-modal__quote-paste-input"
+                      rows="3"
+                      placeholder={{i18n
+                        "npn_critique_reply.modal.toolbar.quote_paste_placeholder"
+                      }}
+                      value={{this._quotePasteText}}
+                      {{on "input" this.updateQuotePasteText}}
+                    ></textarea>
+                  </label>
+                  <div class="npn-critique-reply-modal__quote-paste-actions">
+                    <DButton
+                      @label="npn_critique_reply.modal.toolbar.quote_paste_cancel"
+                      @action={{this.cancelQuotePaste}}
+                      @disabled={{this.isPosting}}
+                      class="btn-flat npn-critique-reply-modal__quote-paste-cancel"
+                    />
+                    <DButton
+                      @label="npn_critique_reply.modal.toolbar.quote_paste_insert"
+                      @action={{this.submitQuotePaste}}
+                      @disabled={{this.quotePasteInsertDisabled}}
+                      class="btn-primary npn-critique-reply-modal__quote-paste-insert"
+                    />
+                  </div>
+                  <p class="npn-critique-reply-modal__quote-paste-hint">
+                    {{i18n "npn_critique_reply.modal.toolbar.quote_paste_hint"}}
+                  </p>
+                </form>
               {{else}}
                 <div
                   class="npn-critique-reply-modal__toolbar"
@@ -10159,6 +10310,14 @@ export default class NpnCritiqueReplyModal extends Component {
                     @icon="link"
                     @label="npn_critique_reply.modal.toolbar.insert_link"
                     @action={{this.openLinkForm}}
+                    @disabled={{this.isPosting}}
+                    class="btn-flat btn-small npn-critique-reply-modal__toolbar-button"
+                  />
+                  <DButton
+                    @icon="quote-left"
+                    @label="npn_critique_reply.modal.toolbar.import_quote"
+                    @title="npn_critique_reply.modal.toolbar.import_quote_title"
+                    @action={{this.importCopiedQuote}}
                     @disabled={{this.isPosting}}
                     class="btn-flat btn-small npn-critique-reply-modal__toolbar-button"
                   />
