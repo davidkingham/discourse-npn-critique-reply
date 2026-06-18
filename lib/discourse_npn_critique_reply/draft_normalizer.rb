@@ -11,7 +11,17 @@ module DiscourseNpnCritiqueReply
   # one user's renderer-specific payload that no other browser can read).
   # Never raises — callers can pass anything.
   module DraftNormalizer
-    SCHEMA_VERSION = 1
+    # v2 adds the separated written-text fields so a draft preserves
+    # overall critique prose and per-image visual-note commentary as
+    # distinct values instead of one `critique_text` body:
+    #   - `overall_critique_text` (the work-as-a-whole response)
+    #   - `image_notes_by_image` ({ "0" => "...", "1" => "..." })
+    #   - `active_writing_context` ("overall" | "image")
+    # Backward compatible: a v1 draft (only `critique_text`) restores
+    # with its text mapped into `overall_critique_text`. `critique_text`
+    # is still emitted for one cycle so an old client never sees a draft
+    # without it.
+    SCHEMA_VERSION = 2
 
     # Caps mirror the client-side constants. Keep in sync with
     # npn-critique-reply-annotation-schema.js.
@@ -65,6 +75,13 @@ module DiscourseNpnCritiqueReply
 
     UI_ALLOWED_KEYS = %w[prompts_hidden prompts_expanded].freeze
 
+    # Which writing context the textarea was last editing. The modal
+    # uses one textarea with a switcher between the overall critique and
+    # the selected image's notes; this restores the user to where they
+    # left off. Anything off-whitelist falls back to "overall".
+    WRITING_CONTEXTS = %w[overall image].freeze
+    DEFAULT_WRITING_CONTEXT = "overall"
+
     # Allowed values for the persisted large-image-view selection.
     # Any other string is normalised to nil and the client falls
     # back to the auto-switch default on restore. Kept in sync with
@@ -94,6 +111,22 @@ module DiscourseNpnCritiqueReply
         "selected_image_index" =>
           normalize_image_index(payload["selected_image_index"]),
         "critique_text" => normalize_text(payload["critique_text"]),
+        # v2 overall critique text. Falls back to the legacy
+        # `critique_text` when absent so a v1 draft restores its body
+        # into the overall context rather than losing it.
+        "overall_critique_text" =>
+          normalize_text(
+            payload.key?("overall_critique_text") ? payload["overall_critique_text"] : payload["critique_text"],
+          ),
+        # v2 per-image notes map: `{ "0" => "...", "1" => "..." }`.
+        # Parallel to `annotations_by_image`; keys are stringified image
+        # indices, values are the commentary tied to that image's visual
+        # notes. Blank entries are dropped so the map stays compact.
+        "image_notes_by_image" =>
+          normalize_image_notes_by_image(payload["image_notes_by_image"]),
+        # v2 last-active writing context for the shared textarea.
+        "active_writing_context" =>
+          normalize_writing_context(payload["active_writing_context"]),
         "annotations" => normalize_annotations(payload["annotations"]),
         # Multi-image annotations map. Submissions can carry up to 5
         # images; each image keeps its own annotation set. Stored as
@@ -135,6 +168,28 @@ module DiscourseNpnCritiqueReply
       return nil if value.nil?
       str = value.to_s.strip
       LARGE_IMAGE_VIEWS.include?(str) ? str : nil
+    end
+
+    def normalize_writing_context(value)
+      str = value.to_s.strip
+      WRITING_CONTEXTS.include?(str) ? str : DEFAULT_WRITING_CONTEXT
+    end
+
+    # Per-image notes map: `{ "0" => "...", "1" => "...", ... }`.
+    # Parallel to `normalize_annotations_by_image`. Non-integer keys are
+    # dropped; values run through normalize_text (so the per-image cap
+    # matches the overall critique cap), and blank entries are omitted so
+    # the stored map only carries images that actually have commentary.
+    def normalize_image_notes_by_image(value)
+      return {} unless value.is_a?(Hash)
+      out = {}
+      value.each do |k, v|
+        idx = Integer(k.to_s, exception: false)
+        next if idx.nil? || idx.negative?
+        text = normalize_text(v)
+        out[idx.to_s] = text unless text.strip.empty?
+      end
+      out
     end
 
     # Submission multi-image picker index. Coerce to a non-negative

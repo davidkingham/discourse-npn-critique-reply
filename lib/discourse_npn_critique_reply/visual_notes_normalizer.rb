@@ -15,8 +15,18 @@ module DiscourseNpnCritiqueReply
   # near-empty payload with valid schema_version + server-stamped
   # source.topic_id.
   module VisualNotesNormalizer
-    SCHEMA_VERSION = 1
+    # v2 adds the separated written-text fields so overall critique
+    # prose and per-image visual-note commentary are stored explicitly
+    # instead of being inferred from the posted body by annotation-token
+    # position: a top-level `overall_critique_text` plus a `notes` string
+    # on each `sources` entry. v1 payloads (no text fields) normalize
+    # unchanged — the new fields are simply absent.
+    SCHEMA_VERSION = 2
     MAX_STRING_LENGTH = 500
+    # Written-text fields (overall critique + per-image notes) get a much
+    # larger ceiling than the short metadata strings above. Mirrors the
+    # client's MAX_NOTES_TEXT_LENGTH and DraftNormalizer's critique cap.
+    MAX_TEXT_LENGTH = 50_000
 
     SOURCE_STRING_KEYS = %w[image_version_key image_version_label source_url].freeze
     VISUAL_OUTPUT_STRING_KEYS = %w[url short_url].freeze
@@ -52,6 +62,11 @@ module DiscourseNpnCritiqueReply
       # readers.
       sources = normalize_sources(payload["sources"], topic_id: topic_id)
       out["sources"] = sources if sources.any?
+      # v2 overall critique text — the critic's response to the work as
+      # a whole, independent of any image. Persisted only when present
+      # so v1-style annotation-only posts stay byte-identical.
+      overall = clean_text(payload["overall_critique_text"])
+      out["overall_critique_text"] = overall if overall
       out
     end
 
@@ -72,6 +87,11 @@ module DiscourseNpnCritiqueReply
           "visual_output" => visual_output,
         }
         sub["image_transform"] = transform if transform
+        # v2 per-image commentary tied to this image's visual notes.
+        # Stays attached to the image's block in the final post; absent
+        # for v1 payloads and images with no written commentary.
+        notes = clean_text(entry["notes"])
+        sub["notes"] = notes if notes
         out << sub
       end
       out
@@ -103,6 +123,18 @@ module DiscourseNpnCritiqueReply
       s = value.to_s.strip
       return nil if s.empty?
       s.length > MAX_STRING_LENGTH ? s[0, MAX_STRING_LENGTH] : s
+    end
+
+    # Written-text fields (overall critique + per-image notes). Unlike
+    # clean_string, the body is preserved verbatim — internal newlines
+    # and meaningful whitespace are kept — but a whitespace-only value
+    # collapses to nil so we never store an empty note block. Capped at
+    # MAX_TEXT_LENGTH (the long-text ceiling, not the metadata one).
+    def clean_text(value)
+      return nil if value.nil?
+      s = value.to_s
+      return nil if s.strip.empty?
+      s.length > MAX_TEXT_LENGTH ? s[0, MAX_TEXT_LENGTH] : s
     end
 
     def clean_integer(value)

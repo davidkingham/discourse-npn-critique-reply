@@ -64,7 +64,33 @@
 
 // ----- Constants --------------------------------------------------
 
-export const VISUAL_ANNOTATION_SCHEMA_VERSION = 1;
+// v2 adds explicit written-text fields so overall critique prose and
+// per-image visual-note commentary are stored separately instead of
+// being inferred from a single body by annotation-token position:
+//   - top-level `overall_critique_text`
+//   - per-`sources[]` entry `notes`
+// v1 payloads (no text fields) still parse cleanly; readers default
+// the new fields to empty.
+export const VISUAL_ANNOTATION_SCHEMA_VERSION = 2;
+
+// Upper bound for the separated written-text fields. Mirrors the
+// server-side DraftNormalizer::MAX_CRITIQUE_TEXT_LENGTH. The server
+// normalizer is authoritative; this is a client-side backstop so we
+// never ship an absurd payload.
+const MAX_NOTES_TEXT_LENGTH = 50_000;
+
+// Coerce a written-text field to a clean string or null. Whitespace-
+// only collapses to null so we don't persist empty note blocks, but
+// meaningful internal whitespace/newlines are preserved verbatim — we
+// never reflow or trim the body itself.
+function cleanNotesText(value) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+  return value.length > MAX_NOTES_TEXT_LENGTH
+    ? value.slice(0, MAX_NOTES_TEXT_LENGTH)
+    : value;
+}
 
 export const ANNOTATION_KINDS = Object.freeze({
   PIN: "pin",
@@ -1454,6 +1480,15 @@ export function buildVisualAnnotationPayload({
   // continues to use the top-level args so existing readers see the
   // same `source` + `visual_output` they did before.
   additionalImages,
+  // v2 separated-text fields. `overallCritiqueText` is the critic's
+  // overall response to the photograph/series — NOT tied to any image,
+  // rendered once at the top of the post. `headNotesText` is the
+  // per-image commentary for the head image (the one the top-level
+  // annotation args describe); each additionalImages entry carries its
+  // own `notesText`. These replace the old behaviour of splitting a
+  // single body by annotation-token position.
+  overallCritiqueText,
+  headNotesText,
 } = {}) {
   const primaryAnnotations = collectAnnotationsForImage({
     pins,
@@ -1490,6 +1525,10 @@ export function buildVisualAnnotationPayload({
   if (primaryTransform) {
     primarySourceEntry.image_transform = primaryTransform;
   }
+  const headNotes = cleanNotesText(headNotesText);
+  if (headNotes) {
+    primarySourceEntry.notes = headNotes;
+  }
   sources.push(primarySourceEntry);
 
   if (Array.isArray(additionalImages) && additionalImages.length > 0) {
@@ -1519,6 +1558,10 @@ export function buildVisualAnnotationPayload({
       if (entryTransform) {
         entrySourceObj.image_transform = entryTransform;
       }
+      const entryNotes = cleanNotesText(entry.notesText);
+      if (entryNotes) {
+        entrySourceObj.notes = entryNotes;
+      }
       sources.push(entrySourceObj);
     }
   }
@@ -1536,6 +1579,13 @@ export function buildVisualAnnotationPayload({
     sources,
     annotations,
   };
+  // v2 overall critique text — the critic's response to the work as a
+  // whole, independent of any single image. Omitted when empty so
+  // written-only-via-annotations payloads stay compact.
+  const overall = cleanNotesText(overallCritiqueText);
+  if (overall) {
+    out.overall_critique_text = overall;
+  }
   // Top-level convenience mirror of the primary image's transform.
   // Legacy single-image readers (and the modal's edit-reopen path
   // for posts that have only one image) read this without diving
@@ -1827,12 +1877,19 @@ export function normalizeVisualAnnotationPayload(input) {
   if (!input || typeof input !== "object") {
     return emptyPayload();
   }
-  return {
+  const out = {
     schema_version: VISUAL_ANNOTATION_SCHEMA_VERSION,
     source: normalizeSourceFromRaw(input.source),
     visual_output: normalizeVisualOutputFromRaw(input.visual_output),
     annotations: normalizeAnnotationsArray(input.annotations),
   };
+  // v2 overall critique text — preserved when present so edit-reopen
+  // can restore it directly rather than re-parsing the posted body.
+  const overall = cleanNotesText(input.overall_critique_text);
+  if (overall) {
+    out.overall_critique_text = overall;
+  }
+  return out;
 }
 
 function emptyPayload() {
@@ -2061,9 +2118,9 @@ export function runSelfCheck() {
     const b = normalizeVisualAnnotationPayload("oops");
     const c = normalizeVisualAnnotationPayload({});
     return (
-      a.schema_version === 1 &&
+      a.schema_version === 2 &&
       a.annotations.length === 0 &&
-      b.schema_version === 1 &&
+      b.schema_version === 2 &&
       c.source === null
     );
   });

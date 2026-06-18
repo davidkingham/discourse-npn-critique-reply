@@ -211,7 +211,7 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
         stored = created.custom_fields["npn_visual_notes"]
 
         expect(stored).to be_a(Hash)
-        expect(stored["schema_version"]).to eq(1)
+        expect(stored["schema_version"]).to eq(2)
         expect(stored.dig("source", "topic_id")).to eq(topic.id)
         expect(stored.dig("source", "image_version_key")).to eq("revision_2")
         expect(stored.dig("source", "image_version_label")).to eq("Revision 2")
@@ -232,6 +232,39 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
         created = Post.find(response.parsed_body["post"]["id"])
         expect(created.custom_fields.dig("npn_visual_notes", "source", "topic_id"))
           .to eq(topic.id)
+      end
+
+      it "round-trips v2 separated written-text fields (overall + per-image notes)" do
+        with_text =
+          valid_visual_notes.merge(
+            "overall_critique_text" => "My overall response to the series.",
+            "sources" => [
+              {
+                "image_index" => 0,
+                "source" => valid_visual_notes["source"],
+                "visual_output" => valid_visual_notes["visual_output"],
+                "notes" => "Notes about the marks on this image.",
+              },
+            ],
+          )
+        post_with_visual_notes(visual_notes: with_text)
+        stored = Post.find(response.parsed_body["post"]["id"]).custom_fields["npn_visual_notes"]
+        expect(stored["overall_critique_text"]).to eq("My overall response to the series.")
+        expect(stored.dig("sources", 0, "notes")).to eq("Notes about the marks on this image.")
+      end
+
+      it "omits the written-text fields for a v1-style payload (no text)" do
+        post_with_visual_notes(visual_notes: valid_visual_notes)
+        stored = Post.find(response.parsed_body["post"]["id"]).custom_fields["npn_visual_notes"]
+        expect(stored).not_to have_key("overall_critique_text")
+      end
+
+      it "drops whitespace-only written-text fields" do
+        blank_text =
+          valid_visual_notes.merge("overall_critique_text" => "   \n  ")
+        post_with_visual_notes(visual_notes: blank_text)
+        stored = Post.find(response.parsed_body["post"]["id"]).custom_fields["npn_visual_notes"]
+        expect(stored).not_to have_key("overall_critique_text")
       end
 
       it "drops invalid annotations but keeps the valid ones" do

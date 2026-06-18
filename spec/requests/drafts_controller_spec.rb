@@ -106,6 +106,52 @@ describe DiscourseNpnCritiqueReply::DraftsController do
         expect(draft["annotations"].first["kind"]).to eq("pin")
       end
 
+      it "round-trips the v2 separated-text fields" do
+        payload =
+          valid_payload.merge(
+            "overall_critique_text" => "Overall response to the work.",
+            "image_notes_by_image" => {
+              "0" => "Notes for the primary image.",
+              "1" => "Notes for the second image.",
+            },
+            "active_writing_context" => "image",
+          )
+        put endpoint, params: { draft: payload }.to_json,
+                      headers: {
+                        "CONTENT_TYPE" => "application/json",
+                      }
+        draft = response.parsed_body["draft"]
+        expect(draft["overall_critique_text"]).to eq("Overall response to the work.")
+        expect(draft["image_notes_by_image"]).to eq(
+          "0" => "Notes for the primary image.",
+          "1" => "Notes for the second image.",
+        )
+        expect(draft["active_writing_context"]).to eq("image")
+      end
+
+      it "falls back to legacy critique_text for overall_critique_text (v1 draft)" do
+        # A v1 draft carries only `critique_text`. On normalize it must
+        # land in the overall context so no written text is lost.
+        put endpoint, params: { draft: valid_payload }
+        draft = response.parsed_body["draft"]
+        expect(draft["overall_critique_text"]).to eq("Working draft text")
+      end
+
+      it "defaults active_writing_context to overall and drops blank image notes" do
+        payload =
+          valid_payload.merge(
+            "active_writing_context" => "bogus",
+            "image_notes_by_image" => { "0" => "   ", "1" => "Real notes." },
+          )
+        put endpoint, params: { draft: payload }.to_json,
+                      headers: {
+                        "CONTENT_TYPE" => "application/json",
+                      }
+        draft = response.parsed_body["draft"]
+        expect(draft["active_writing_context"]).to eq("overall")
+        expect(draft["image_notes_by_image"]).to eq("1" => "Real notes.")
+      end
+
       it "ignores a client-supplied topic_id and user_id inside the payload" do
         evil = valid_payload.merge("topic_id" => 999_999, "user_id" => other_user.id)
         put endpoint, params: { draft: evil }

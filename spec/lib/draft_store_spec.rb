@@ -161,7 +161,7 @@ describe DiscourseNpnCritiqueReply::DraftNormalizer do
 
   it "stamps schema_version, topic_id, user_id, updated_at server-side" do
     result = normalize("topic_id" => 999, "user_id" => 999)
-    expect(result["schema_version"]).to eq(1)
+    expect(result["schema_version"]).to eq(2)
     expect(result["topic_id"]).to eq(topic_id)
     expect(result["user_id"]).to eq(user_id)
     expect(Time.iso8601(result["updated_at"])).to be_within(2).of(Time.now.utc)
@@ -172,6 +172,45 @@ describe DiscourseNpnCritiqueReply::DraftNormalizer do
     expect(normalize("critique_text" => long)["critique_text"].length).to eq(
       described_class::MAX_CRITIQUE_TEXT_LENGTH,
     )
+  end
+
+  describe "v2 separated written-text fields" do
+    it "stores overall_critique_text, image_notes_by_image, and active_writing_context" do
+      result =
+        normalize(
+          "overall_critique_text" => "overall",
+          "image_notes_by_image" => { "0" => "img zero", "2" => "img two" },
+          "active_writing_context" => "image",
+        )
+      expect(result["overall_critique_text"]).to eq("overall")
+      expect(result["image_notes_by_image"]).to eq("0" => "img zero", "2" => "img two")
+      expect(result["active_writing_context"]).to eq("image")
+    end
+
+    it "falls back to legacy critique_text for overall_critique_text (v1 draft)" do
+      result = normalize("critique_text" => "legacy body")
+      expect(result["overall_critique_text"]).to eq("legacy body")
+    end
+
+    it "prefers an explicit overall_critique_text over critique_text" do
+      result = normalize("critique_text" => "legacy", "overall_critique_text" => "explicit")
+      expect(result["overall_critique_text"]).to eq("explicit")
+    end
+
+    it "drops blank image notes and non-integer/negative keys" do
+      result =
+        normalize(
+          "image_notes_by_image" => { "0" => "   ", "1" => "real", "x" => "nope", "-1" => "nope" },
+        )
+      expect(result["image_notes_by_image"]).to eq("1" => "real")
+    end
+
+    it "defaults active_writing_context to overall for missing or off-whitelist values" do
+      expect(normalize["active_writing_context"]).to eq("overall")
+      expect(normalize("active_writing_context" => "bogus")["active_writing_context"]).to eq(
+        "overall",
+      )
+    end
   end
 
   it "drops annotations of unknown kinds" do
