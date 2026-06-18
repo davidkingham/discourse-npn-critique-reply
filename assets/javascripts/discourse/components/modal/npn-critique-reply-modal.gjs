@@ -1340,6 +1340,13 @@ export default class NpnCritiqueReplyModal extends Component {
     // Restore prompt visibility preferences from a previous session.
     this.moreIdeasExpanded = readBool(STORAGE_KEY_MORE_IDEAS, false);
 
+    // Opening the workspace — by ANY path (Start, footer Resume,
+    // invitation panel, dock Resume, Edit) — means the critique is no
+    // longer "minimized", so clear any lingering dock session. Only an
+    // explicit Minimize (on close) re-creates it. Prevents a stale dock
+    // showing behind/after a workspace opened via a non-dock entry point.
+    this.npnCritiqueWorkspace.clear();
+
     // Set up window-level error capture so async failures that bypass
     // our explicit try/catch sites still leave a breadcrumb in
     // _errorHistory. Scoped to modal lifetime (torn down in

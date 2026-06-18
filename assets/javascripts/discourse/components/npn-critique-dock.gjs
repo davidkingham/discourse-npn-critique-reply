@@ -34,6 +34,7 @@ export default class NpnCritiqueDock extends Component {
   @service router;
   @service appEvents;
   @service composer;
+  @service siteSettings;
 
   // Id of the topic currently being viewed (null off any topic route).
   // Tracked so the `visible` getter recomputes when the route changes —
@@ -86,6 +87,7 @@ export default class NpnCritiqueDock extends Component {
   get visible() {
     const ws = this.npnCritiqueWorkspace;
     return (
+      this.siteSettings.npn_critique_reply_enabled !== false &&
       ws.showDock &&
       !!ws.topicId &&
       this._currentTopicId === ws.topicId &&
