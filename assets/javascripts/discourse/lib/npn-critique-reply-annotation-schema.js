@@ -333,6 +333,27 @@ export function nextRelationshipArrowLabel(existingLabels) {
   return `R${max + 1}`;
 }
 
+// Image-transform metadata — emitted on each `sources` entry so
+// edit-reopen can rebuild the same view the user posted with. Stores
+// the rotation + flips applied to the source upload during
+// annotation. Identity (no transform) returns null so the field stays
+// absent on the common single-image / un-rotated case.
+const VALID_TRANSFORM_ROTATIONS = new Set([0, 90, 180, 270]);
+
+function normalizeImageTransformValue(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const rotationRaw = Number(value.rotation);
+  const rotation = VALID_TRANSFORM_ROTATIONS.has(rotationRaw) ? rotationRaw : 0;
+  const flipH = value.flipH === true || value.flip_h === true;
+  const flipV = value.flipV === true || value.flip_v === true;
+  if (rotation === 0 && !flipH && !flipV) {
+    return null;
+  }
+  return { rotation, flip_h: flipH, flip_v: flipV };
+}
+
 // Reserved aspect-ratio values. Documenting in the schema keeps the
 // field stable across UI iterations — adding a new ratio is two
 // touchpoints: this set + the stage's ASPECT_RATIO_VALUES map.
@@ -1407,12 +1428,29 @@ export function buildVisualAnnotationPayload({
   strongAreas,
   directionArrows,
   relationshipArrows,
+  // Optional rotate/flip applied to the primary image during
+  // annotation. Shape: { rotation: 0|90|180|270, flipH, flipV }.
+  // Annotation coordinates are already in transformed space — this
+  // field is metadata for edit-reopen, so the modal can rebake the
+  // original upload through the same transform and land the
+  // annotations on the right pixels. Identity transforms are
+  // emitted as null so payloads stay clean for the common case.
+  imageTransform,
+  // Submission image index for the primary/head args above. Defaults
+  // to 0 (the legacy single-image case). When the only annotated
+  // images are non-primary (e.g. critic marked up image 1 but left
+  // image 0 untouched), the caller can promote image 1 to be the
+  // head — this field then tags the head's annotations + source
+  // entry with the right index, so edit-restore buckets them back
+  // to image 1 instead of collapsing onto image 0.
+  headImageIndex = 0,
   // Multi-image extension: when the submission has 2+ images and the
   // critic marked up more than one, the caller passes the remaining
   // images here (image_index 1+). Each entry mirrors the per-kind
   // arrays plus { index, sourceUrl, sourceUploadId, sourceLabel,
-  // visualUpload } describing where its annotations live and what
-  // upload was just flattened for it. The primary (image_index 0)
+  // visualUpload, imageTransform } describing where its annotations
+  // live, what upload was just flattened for it, and any
+  // rotate/flip applied to its source. The primary (image_index 0)
   // continues to use the top-level args so existing readers see the
   // same `source` + `visual_output` they did before.
   additionalImages,
@@ -1426,17 +1464,33 @@ export function buildVisualAnnotationPayload({
     directionArrows,
     relationshipArrows,
   });
-  const annotations = [...primaryAnnotations];
+  // Tag head annotations with their real image_index. For the legacy
+  // single-image case headImageIndex is 0 and the field is omitted
+  // (the server-side normalizer fills in 0 by default), keeping the
+  // wire shape byte-identical for un-rotated single-image posts.
+  const headIdx = Number.isInteger(headImageIndex) && headImageIndex >= 0
+    ? headImageIndex
+    : 0;
+  const annotations =
+    headIdx === 0
+      ? [...primaryAnnotations]
+      : primaryAnnotations.map((a) => ({ ...a, image_index: headIdx }));
   const sources = [];
-  // Always include the primary source in `sources` (image_index 0).
-  // Readers that only know about the legacy `source` field still see
-  // the same value at the top level; new readers can iterate
-  // `sources` for full multi-image fidelity.
-  sources.push({
-    image_index: 0,
+  // Always include the head source in `sources`. Readers that only
+  // know about the legacy `source` field still see the same value at
+  // the top level; new readers can iterate `sources` for full multi-
+  // image fidelity. The head's index reflects which submission image
+  // the head args actually describe.
+  const primaryTransform = normalizeImageTransformValue(imageTransform);
+  const primarySourceEntry = {
+    image_index: headIdx,
     source: normalizeSourceFromInputs({ topic, selectedVersion }),
     visual_output: normalizeVisualOutputFromInput(visualUpload),
-  });
+  };
+  if (primaryTransform) {
+    primarySourceEntry.image_transform = primaryTransform;
+  }
+  sources.push(primarySourceEntry);
 
   if (Array.isArray(additionalImages) && additionalImages.length > 0) {
     for (const entry of additionalImages) {
@@ -1447,7 +1501,7 @@ export function buildVisualAnnotationPayload({
       for (const a of entryAnnotations) {
         annotations.push({ ...a, image_index: entry.index });
       }
-      sources.push({
+      const entrySourceObj = {
         image_index: entry.index,
         source: normalizeSourceFromInputs({
           topic,
@@ -1460,11 +1514,16 @@ export function buildVisualAnnotationPayload({
           },
         }),
         visual_output: normalizeVisualOutputFromInput(entry.visualUpload),
-      });
+      };
+      const entryTransform = normalizeImageTransformValue(entry.imageTransform);
+      if (entryTransform) {
+        entrySourceObj.image_transform = entryTransform;
+      }
+      sources.push(entrySourceObj);
     }
   }
 
-  return {
+  const out = {
     schema_version: VISUAL_ANNOTATION_SCHEMA_VERSION,
     // Legacy single-image shape — `source` + `visual_output` always
     // describe the PRIMARY image (image_index 0). Back-compat with
@@ -1477,6 +1536,14 @@ export function buildVisualAnnotationPayload({
     sources,
     annotations,
   };
+  // Top-level convenience mirror of the primary image's transform.
+  // Legacy single-image readers (and the modal's edit-reopen path
+  // for posts that have only one image) read this without diving
+  // into the `sources` array. Omitted when identity.
+  if (primaryTransform) {
+    out.image_transform = primaryTransform;
+  }
+  return out;
 }
 
 // Build the annotations array for ONE image from the per-kind input

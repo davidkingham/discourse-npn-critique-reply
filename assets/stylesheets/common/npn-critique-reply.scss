@@ -2429,6 +2429,90 @@
   margin: 0 0 0.4em;
 }
 
+// Rotate / Flip tools. Two labeled DButtons sit at the end of the
+// primary toolbar, each opening its own popover with the relevant
+// directions + a shared Reset orientation. The triggers visually
+// match the neighbouring tool toggles (Notes, Crop, etc.) so the
+// row reads as a single set of critique tools rather than a
+// separate utility cluster.
+.npn-critique-reply-modal__transform-menu-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  // First wrap in the toolbar gets a small spacing break so the
+  // canvas-drawing tools (Notes through Relationship) read as one
+  // group and the image-transform tools (Rotate / Flip) as another.
+  // The break is just an extra gap on top of the toolbar's natural
+  // gap — it doesn't push the row to a new line.
+  &:first-of-type {
+    margin-left: 0.4em;
+  }
+}
+
+.npn-critique-reply-modal__transform-menu {
+  position: absolute;
+  top: calc(100% + 0.3em);
+  left: 0;
+  z-index: 5;
+  min-width: 15em;
+  padding: 0.35em 0;
+  background: var(--secondary);
+  color: var(--primary);
+  border: 1px solid var(--primary-low-mid);
+  border-radius: var(--d-border-radius, 4px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.npn-critique-reply-modal__transform-menu-hint,
+.npn-critique-reply-modal__transform-menu-note {
+  margin: 0;
+  padding: 0.45em 0.95em;
+  font-size: var(--font-down-1);
+  color: var(--primary-medium);
+  line-height: 1.35;
+}
+
+.npn-critique-reply-modal__transform-menu-note {
+  border-top: 1px solid var(--primary-very-low);
+  margin-top: 0.25em;
+  font-size: var(--font-down-2, var(--font-down-1));
+  color: var(--primary-medium);
+}
+
+.npn-critique-reply-modal__transform-menu-item.btn {
+  justify-content: flex-start;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0.55em 0.95em;
+  text-align: left;
+  width: 100%;
+  white-space: nowrap;
+  .d-icon {
+    margin-right: 0.55em;
+  }
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: var(--primary-very-low);
+    color: var(--primary);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.npn-critique-reply-modal__transform-menu-reset.btn {
+  // Visual separator above the reset row so it reads as the
+  // "undo everything" affordance rather than another op.
+  border-top: 1px solid var(--primary-low);
+  margin-top: 0.25em;
+  padding-top: 0.6em;
+}
+
 .npn-critique-reply-modal__visual-notes-secondary {
   display: flex;
   flex-wrap: wrap;

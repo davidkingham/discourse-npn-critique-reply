@@ -42,6 +42,17 @@ register_svg_icon "arrows-left-right"
 # the Larger Image layout.
 register_svg_icon "up-right-and-down-left-from-center"
 register_svg_icon "down-left-and-up-right-to-center"
+# Rotate / Flip transform tools. The Rotate toolbar button uses
+# `rotate-right`; its menu items use `rotate-right`, `rotate-left`,
+# and `arrow-rotate-left` (Reset orientation). The Flip toolbar
+# button reuses `arrows-left-right` (already registered above) and
+# its menu adds `arrows-up-down` for vertical flip. None are in
+# Discourse core's default SVG sprite, so they must be registered
+# here for the toolbar icons to render.
+register_svg_icon "rotate-right"
+register_svg_icon "rotate-left"
+register_svg_icon "arrows-up-down"
+register_svg_icon "arrow-rotate-left"
 
 module ::DiscourseNpnCritiqueReply
   PLUGIN_NAME = "discourse-npn-critique-reply"

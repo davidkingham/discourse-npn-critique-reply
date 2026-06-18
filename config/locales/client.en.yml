@@ -413,6 +413,39 @@ en:
         # stays `pin`.
         numbered_notes: "Notes"
         numbered_notes_title: "Click to place a numbered note"
+        # Rotate / Flip tools. Two labeled buttons sitting at the end
+        # of the visual-notes toolbar — they look like the other
+        # tool buttons (icon + visible label) but each opens a
+        # compact popover with 2 directions + Reset. Rotate/Flip are
+        # not modes: clicking an option applies it immediately and
+        # closes the menu.
+        transform:
+          # Cross-menu safety copy. The original photographer upload
+          # is never mutated — what changes is the bitmap embedded in
+          # the cooked critique reply. Surfaced once on each popover.
+          original_unmodified: "This changes the critique view only. The original image is not modified."
+          # Reset wipes both rotation and flips. Shared between the
+          # two menus because rotation and flips live in one combined
+          # transform state — splitting reset would risk leaving a
+          # partially-applied transform hanging around.
+          reset: "Reset orientation"
+          reset_title: "Restore the original image orientation"
+          rotate:
+            label: "Rotate"
+            title: "Rotate the image 90°"
+            hint: "Choose left or right to rotate the image 90°."
+            rotate_right: "Rotate right"
+            rotate_left: "Rotate left"
+            rotate_right_title: "Rotate the image 90 degrees clockwise"
+            rotate_left_title: "Rotate the image 90 degrees counter-clockwise"
+          flip:
+            label: "Flip"
+            title: "Mirror the image"
+            hint: "Choose horizontal or vertical to mirror the image."
+            flip_horizontal: "Flip horizontally"
+            flip_vertical: "Flip vertically"
+            flip_horizontal_title: "Mirror the image from left to right"
+            flip_vertical_title: "Mirror the image from top to bottom"
         done: "Done with notes"
         clear: "Clear notes"
         # Hint copy intentionally describes WHAT each tool is for, not

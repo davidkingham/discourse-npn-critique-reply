@@ -89,6 +89,15 @@ import {
   deleteDraft as deleteServerDraft,
   loadDraft as loadServerDraft,
 } from "../../lib/npn-critique-reply-drafts";
+import {
+  ACTIONS as IMAGE_TRANSFORM_ACTIONS,
+  IDENTITY_TRANSFORM,
+  applyTransformToImage,
+  composeTransform,
+  isIdentityTransform,
+  normalizeTransform,
+  transformAnnotationPercentages,
+} from "../../lib/npn-critique-reply-image-transform";
 
 // Pipe-separated id lists from Discourse `group_list` settings. Mirrors
 // the helper in the start-button component; kept inline so the two
@@ -402,6 +411,42 @@ export default class NpnCritiqueReplyModal extends Component {
   // restore, and Post Critique. AnnotationSnapshot shape matches
   // _snapshotCurrentAnnotations.
   _annotationsByImageIndex = new Map();
+
+  // Active image's rotate/flip state. Coordinates of every visible
+  // annotation are in this post-transform space — `effectiveImageUrl`
+  // serves the rebaked bitmap, and the modal applies the matching
+  // transform to in-memory coordinates whenever the user clicks an
+  // action in the transform menu. Stored on the visual-notes payload
+  // so edit-reopen can rebake the same view and land annotations on
+  // the right pixels.
+  @tracked _imageTransform = { ...IDENTITY_TRANSFORM };
+
+  // Per-image transform snapshots, parallel to
+  // `_annotationsByImageIndex`. Identity is represented by the
+  // absence of an entry.
+  _imageTransformsByImageIndex = new Map();
+
+  // Cached HTMLImageElement of each image's ORIGINAL (un-transformed)
+  // source. Repeated transforms always rebake from this — never from
+  // the last rebake — so JPEG artifacts don't compound across rotations.
+  _originalImageElementsByImageIndex = new Map();
+
+  // Cached data URL of each image's last rebaked bitmap. The
+  // `effectiveImageUrl` getter reads from here when present so the
+  // <NpnCritiqueImageReference /> component receives the transformed
+  // pixels without any other code path needing transform-awareness.
+  @tracked _transformedImageUrls = new Map();
+
+  // Rotate / Flip menu open/closed flags. Two separate menus on the
+  // toolbar, one for each axis of the transform, so each labeled
+  // button only surfaces its own actions. Both share the same
+  // unified `_imageTransform` state — the menus are just two views
+  // onto the same underlying transform.
+  @tracked _rotateMenuOpen = false;
+  @tracked _flipMenuOpen = false;
+  // In-flight guard for the async rebake. While set, every transform
+  // action is disabled to prevent stacking concurrent rebakes.
+  @tracked _imageTransformApplying = false;
 
   // "More ideas" expansion state for the Questions-to-consider panel.
   // Single dimension now: false (default) → show only the 3 default
@@ -791,6 +836,23 @@ export default class NpnCritiqueReplyModal extends Component {
         true
       );
       this._processingExampleMenuOutsideHandler = null;
+    }
+    // Same teardown for the Rotate / Flip menus.
+    if (this._rotateMenuOutsideHandler) {
+      document.removeEventListener(
+        "mousedown",
+        this._rotateMenuOutsideHandler,
+        true
+      );
+      this._rotateMenuOutsideHandler = null;
+    }
+    if (this._flipMenuOutsideHandler) {
+      document.removeEventListener(
+        "mousedown",
+        this._flipMenuOutsideHandler,
+        true
+      );
+      this._flipMenuOutsideHandler = null;
     }
     // Drop Photographer's Notes selection listener if it's still
     // attached (panel may be open at modal close).
@@ -1342,6 +1404,17 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   get effectiveImageUrl() {
+    // A rebaked rotate/flip bitmap, when present, wins over the
+    // version/submission chain. The data URL is a JPEG produced from
+    // the original source so the <img> tag swap reuses the same
+    // ResizeObserver + Konva re-mount path that version-switching
+    // already drives.
+    const transformed = this._transformedImageUrls.get(
+      this._selectedImageIndex
+    );
+    if (transformed) {
+      return transformed;
+    }
     // Secondary submission images (index >= 1) use their own URL
     // directly — they don't currently have a revision chain.
     if (this._selectedImageIndex > 0) {
@@ -1356,6 +1429,7 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     return this._legacyImageUrl;
   }
+
 
   get hasImage() {
     return !!this.effectiveImageUrl;
@@ -2046,6 +2120,21 @@ export default class NpnCritiqueReplyModal extends Component {
       throw this._wrapVisualNotesError("load", e);
     }
 
+    // Apply any rotate/flip transform the critic made to this image
+    // BEFORE drawing annotations. Annotations are stored in post-
+    // transform coordinate space, so the bitmap they're drawn over
+    // must also be in that space for them to line up. The transform
+    // is rebaked from the original here (not reused from the in-
+    // editor data URL) so the export pipeline stays self-contained.
+    const transform = this._imageTransformForIndex(entry.index);
+    if (transform) {
+      try {
+        image = await applyTransformToImage(image, transform);
+      } catch (e) {
+        throw this._wrapVisualNotesError("load", e);
+      }
+    }
+
     let canvas;
     let blob;
     try {
@@ -2136,9 +2225,20 @@ export default class NpnCritiqueReplyModal extends Component {
   // critic's choice of original-vs-revision still wins. Images 1+
   // pull straight from the submission_images metadata — they don't
   // have a revision chain today.
+  //
+  // Important: returns the UN-TRANSFORMED source URL. Callers that
+  // need the rotated/flipped bitmap apply `applyTransformToImage`
+  // explicitly (the flatten + preview pipelines do). Returning
+  // `effectiveImageUrl` here would double-transform: the rebake
+  // step would run on top of an already-rebaked data URL, undoing
+  // or compounding the user's transform.
   _sourceUrlForImageIndex(index) {
     if (index === 0) {
-      return this.effectiveImageUrl;
+      const version = this.selectedVersion;
+      if (version?.url) {
+        return getURLWithCDN(version.url);
+      }
+      return this._legacyImageUrl;
     }
     const img = this.submissionImages.find((i) => i.index === index);
     return img?.url ? getURLWithCDN(img.url) : null;
@@ -2315,6 +2415,7 @@ export default class NpnCritiqueReplyModal extends Component {
         strongAreas: b.snapshot?.strongAreas ?? [],
         directionArrows: b.snapshot?.directionArrows ?? [],
         relationshipArrows: b.snapshot?.relationshipArrows ?? [],
+        imageTransform: this._imageTransformForIndex(b.index),
       }));
 
     // When the only annotated images are non-primary, fall back to
@@ -2350,6 +2451,13 @@ export default class NpnCritiqueReplyModal extends Component {
         head.snapshot?.directionArrows ?? head.directionArrows ?? [],
       relationshipArrows:
         head.snapshot?.relationshipArrows ?? head.relationshipArrows ?? [],
+      imageTransform: this._imageTransformForIndex(head.index),
+      // Tells the schema the head's REAL image index. When image 0 has
+      // no annotations but image 1 does, image 1 gets promoted to head
+      // and headImageIndex lets the schema tag annotations + source
+      // entries with index 1 instead of collapsing onto 0 — which is
+      // what edit-restore reads to bucket annotations back per image.
+      headImageIndex: head.index,
       additionalImages: additional,
     });
   }
@@ -3317,6 +3425,14 @@ export default class NpnCritiqueReplyModal extends Component {
       oldIndex,
       this._snapshotCurrentAnnotations()
     );
+    // Same idea for the rotate/flip state. Each image keeps its own
+    // independent orientation — switching back to a previously-rotated
+    // image restores the rebake.
+    if (!isIdentityTransform(this._imageTransform)) {
+      this._imageTransformsByImageIndex.set(oldIndex, this._imageTransform);
+    } else {
+      this._imageTransformsByImageIndex.delete(oldIndex);
+    }
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] select-image", {
@@ -3341,6 +3457,13 @@ export default class NpnCritiqueReplyModal extends Component {
     this._restoreAnnotationsFromSnapshot(
       this._annotationsByImageIndex.get(index)
     );
+    this._imageTransform = this._imageTransformsByImageIndex.get(index)
+      ? { ...this._imageTransformsByImageIndex.get(index) }
+      : { ...IDENTITY_TRANSFORM };
+    // The transformed-URL map is already keyed by image index, so the
+    // effectiveImageUrl getter picks the right entry on its own.
+    this._closeRotateMenu();
+    this._closeFlipMenu();
   }
 
   // Build a plain-object snapshot of the current image's annotation
@@ -3419,6 +3542,341 @@ export default class NpnCritiqueReplyModal extends Component {
   _resetAnnotationsForImageSwitch() {
     this._annotationsByImageIndex.delete(this._selectedImageIndex);
     this._restoreAnnotationsFromSnapshot(null);
+    // A revision change replaces the source bitmap entirely, so any
+    // rebake of the previous source is no longer meaningful. Drop the
+    // cached HTMLImageElement so the next transform reloads from the
+    // new revision's URL.
+    this._imageTransform = { ...IDENTITY_TRANSFORM };
+    this._imageTransformsByImageIndex.delete(this._selectedImageIndex);
+    this._originalImageElementsByImageIndex.delete(this._selectedImageIndex);
+    const next = new Map(this._transformedImageUrls);
+    next.delete(this._selectedImageIndex);
+    this._transformedImageUrls = next;
+  }
+
+  // -- Image transform (rotate/flip) ---------------------------------
+
+  // Load the original (un-transformed) source image for the given
+  // submission-image index. Cached so repeated transforms during a
+  // single session don't refetch. Returns Promise<HTMLImageElement>.
+  _loadOriginalImageElement(imageIndex) {
+    const cached = this._originalImageElementsByImageIndex.get(imageIndex);
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+    const url = this._sourceUrlForImageIndex(imageIndex);
+    if (!url) {
+      return Promise.reject(
+        new Error(`No source URL for image index ${imageIndex}`)
+      );
+    }
+    return new Promise((resolve, reject) => {
+      const el = new Image();
+      // CORS for the data-URL pipeline. Discourse's CDN serves images
+      // with the right ACAO header for canvas read-back; the same flag
+      // the export pipeline (`loadImageForExport`) uses.
+      el.crossOrigin = "anonymous";
+      el.onload = () => {
+        this._originalImageElementsByImageIndex.set(imageIndex, el);
+        resolve(el);
+      };
+      el.onerror = (e) => reject(e);
+      el.src = url;
+    });
+  }
+
+  // Open/close pair for the Rotate menu. Mirrors the processing-
+  // example menu pattern: defer the click-outside binding by one
+  // RAF so the click that opened the menu doesn't immediately
+  // re-close it. Opening one transform menu auto-closes the other
+  // so only a single popover ever floats above the toolbar.
+  @action
+  toggleRotateMenu() {
+    if (this._rotateMenuOpen) {
+      this._closeRotateMenu();
+    } else {
+      this._closeFlipMenu();
+      this._openRotateMenu();
+    }
+  }
+
+  _openRotateMenu() {
+    this._rotateMenuOpen = true;
+    requestAnimationFrame(() => {
+      if (this._destroyed || !this._rotateMenuOpen) {
+        return;
+      }
+      this._rotateMenuOutsideHandler = (event) => {
+        const root = document.getElementById(
+          "npn-critique-reply-rotate-menu"
+        );
+        const trigger = document.getElementById(
+          "npn-critique-reply-rotate-trigger"
+        );
+        if (!root) {
+          return;
+        }
+        if (root.contains(event.target) || trigger?.contains(event.target)) {
+          return;
+        }
+        this._closeRotateMenu();
+      };
+      document.addEventListener(
+        "mousedown",
+        this._rotateMenuOutsideHandler,
+        true
+      );
+    });
+  }
+
+  _closeRotateMenu() {
+    this._rotateMenuOpen = false;
+    if (this._rotateMenuOutsideHandler) {
+      document.removeEventListener(
+        "mousedown",
+        this._rotateMenuOutsideHandler,
+        true
+      );
+      this._rotateMenuOutsideHandler = null;
+    }
+  }
+
+  @action
+  closeRotateMenu() {
+    this._closeRotateMenu();
+  }
+
+  @action
+  onRotateMenuKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      this._closeRotateMenu();
+      document.getElementById("npn-critique-reply-rotate-trigger")?.focus?.();
+    }
+  }
+
+  // Same pattern for the Flip menu.
+  @action
+  toggleFlipMenu() {
+    if (this._flipMenuOpen) {
+      this._closeFlipMenu();
+    } else {
+      this._closeRotateMenu();
+      this._openFlipMenu();
+    }
+  }
+
+  _openFlipMenu() {
+    this._flipMenuOpen = true;
+    requestAnimationFrame(() => {
+      if (this._destroyed || !this._flipMenuOpen) {
+        return;
+      }
+      this._flipMenuOutsideHandler = (event) => {
+        const root = document.getElementById("npn-critique-reply-flip-menu");
+        const trigger = document.getElementById(
+          "npn-critique-reply-flip-trigger"
+        );
+        if (!root) {
+          return;
+        }
+        if (root.contains(event.target) || trigger?.contains(event.target)) {
+          return;
+        }
+        this._closeFlipMenu();
+      };
+      document.addEventListener(
+        "mousedown",
+        this._flipMenuOutsideHandler,
+        true
+      );
+    });
+  }
+
+  _closeFlipMenu() {
+    this._flipMenuOpen = false;
+    if (this._flipMenuOutsideHandler) {
+      document.removeEventListener(
+        "mousedown",
+        this._flipMenuOutsideHandler,
+        true
+      );
+      this._flipMenuOutsideHandler = null;
+    }
+  }
+
+  @action
+  closeFlipMenu() {
+    this._closeFlipMenu();
+  }
+
+  @action
+  onFlipMenuKeydown(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      this._closeFlipMenu();
+      document.getElementById("npn-critique-reply-flip-trigger")?.focus?.();
+    }
+  }
+
+  @action
+  rotateImageCw() {
+    return this._applyImageTransformAction(IMAGE_TRANSFORM_ACTIONS.ROTATE_CW);
+  }
+
+  @action
+  rotateImageCcw() {
+    return this._applyImageTransformAction(IMAGE_TRANSFORM_ACTIONS.ROTATE_CCW);
+  }
+
+  @action
+  flipImageHorizontal() {
+    return this._applyImageTransformAction(IMAGE_TRANSFORM_ACTIONS.FLIP_H);
+  }
+
+  @action
+  flipImageVertical() {
+    return this._applyImageTransformAction(IMAGE_TRANSFORM_ACTIONS.FLIP_V);
+  }
+
+  @action
+  resetImageTransform() {
+    return this._applyImageTransformAction(IMAGE_TRANSFORM_ACTIONS.RESET);
+  }
+
+  // Orchestrates a single rotate/flip operation:
+  //   1. Composes the new cumulative transform.
+  //   2. Rebakes the original source bitmap through a canvas with the
+  //      new transform applied; the resulting data URL becomes the
+  //      modal's effectiveImageUrl, swapping the <img> the Konva stage
+  //      observes and triggering the same stage re-mount path that
+  //      version-switching already drives.
+  //   3. Walks the in-memory annotation arrays and applies the same
+  //      incremental coordinate transform so existing markers stay
+  //      pinned to the same pixels.
+  //
+  // RESET is implemented as the inverse sequence of incremental
+  // forward actions ((360 - R) / 90 ROTATE_CW, then FLIP_H if still
+  // flipped, then FLIP_V if still flipped) so the same coordinate-
+  // transform code path covers both forward and reset paths.
+  async _applyImageTransformAction(action) {
+    if (this._imageTransformApplying) {
+      return;
+    }
+    if (
+      action === IMAGE_TRANSFORM_ACTIONS.RESET &&
+      isIdentityTransform(this._imageTransform)
+    ) {
+      this._closeRotateMenu();
+      this._closeFlipMenu();
+      return;
+    }
+    this._imageTransformApplying = true;
+    const debug = this.siteSettings.npn_critique_reply_debug_enabled;
+    try {
+      const imageIndex = this._selectedImageIndex;
+      const current = normalizeTransform(this._imageTransform);
+      const sequence = [];
+      let target;
+      if (action === IMAGE_TRANSFORM_ACTIONS.RESET) {
+        target = { ...IDENTITY_TRANSFORM };
+        // Rotate back to 0 first, then clear residual flips.
+        const rotations = ((360 - current.rotation) / 90) % 4;
+        for (let i = 0; i < rotations; i++) {
+          sequence.push(IMAGE_TRANSFORM_ACTIONS.ROTATE_CW);
+        }
+        // After clearing rotation, the flip state is unchanged.
+        if (current.flipH) {
+          sequence.push(IMAGE_TRANSFORM_ACTIONS.FLIP_H);
+        }
+        if (current.flipV) {
+          sequence.push(IMAGE_TRANSFORM_ACTIONS.FLIP_V);
+        }
+      } else {
+        target = composeTransform(current, action);
+        sequence.push(action);
+      }
+      // Rebake first so a failure (e.g. CORS) doesn't leave the
+      // annotations in a half-transformed state.
+      let nextUrl = null;
+      if (!isIdentityTransform(target)) {
+        const original = await this._loadOriginalImageElement(imageIndex);
+        const rebaked = await applyTransformToImage(original, target);
+        nextUrl = rebaked.src;
+      }
+      // Apply the incremental coordinate transforms.
+      let bundle = this._snapshotCurrentAnnotations();
+      for (const step of sequence) {
+        bundle = transformAnnotationPercentages(bundle, step);
+      }
+      // Commit. The tracked-field write order matters only insofar as
+      // _imageTransform should reflect the new state before
+      // effectiveImageUrl re-reads (which happens on the next render).
+      this._restoreAnnotationsFromSnapshot(bundle);
+      this._imageTransform = target;
+      const nextMap = new Map(this._transformedImageUrls);
+      if (nextUrl) {
+        nextMap.set(imageIndex, nextUrl);
+      } else {
+        nextMap.delete(imageIndex);
+      }
+      this._transformedImageUrls = nextMap;
+      if (debug) {
+        // eslint-disable-next-line no-console
+        console.info("[npn-critique-reply] image-transform", {
+          action,
+          imageIndex,
+          target,
+          steps: sequence.length,
+        });
+      }
+    } catch (e) {
+      if (debug) {
+        // eslint-disable-next-line no-console
+        console.warn("[npn-critique-reply] image-transform failed", e);
+      }
+    } finally {
+      this._imageTransformApplying = false;
+      this._closeRotateMenu();
+      this._closeFlipMenu();
+    }
+  }
+
+  // Per-image transform read for payload builders. Returns the
+  // active image's transform if the supplied index matches the
+  // currently displayed image (tracked state is freshest there);
+  // otherwise reads from the snapshot map. Identity collapses to
+  // null so callers can omit the field.
+  _imageTransformForIndex(imageIndex) {
+    const t =
+      imageIndex === this._selectedImageIndex
+        ? this._imageTransform
+        : this._imageTransformsByImageIndex.get(imageIndex);
+    if (!t || isIdentityTransform(t)) {
+      return null;
+    }
+    return normalizeTransform(t);
+  }
+
+  // Build the `image_transforms_by_image` draft field. Walks the
+  // same index set the annotations map uses so the draft can re-mount
+  // each image with its saved orientation. Identity transforms are
+  // omitted so the map stays compact.
+  _collectImageTransformsByImage(orderedIndices) {
+    const out = {};
+    for (const idx of orderedIndices) {
+      const t = this._imageTransformForIndex(idx);
+      if (t) {
+        out[String(idx)] = t;
+      }
+    }
+    return out;
+  }
+
+  // Reset-disabled state for the menu button. The reset row is greyed
+  // out when there's nothing to undo so a click on it doesn't churn.
+  get _resetTransformDisabled() {
+    return isIdentityTransform(this._imageTransform);
   }
 
   @action
@@ -5758,7 +6216,14 @@ export default class NpnCritiqueReplyModal extends Component {
         continue;
       }
       try {
-        const image = await loadImageForExport(sourceUrl);
+        let image = await loadImageForExport(sourceUrl);
+        // Rebake with any rotate/flip applied so the preview shows
+        // exactly what the cooked post will render. Same handling as
+        // the post-time flatten in `_flattenAndUploadImage`.
+        const transform = this._imageTransformForIndex(entry.index);
+        if (transform) {
+          image = await applyTransformToImage(image, transform);
+        }
         const canvas = buildVisualNotesCanvas({
           image,
           pins: entry.snapshot.notes,
@@ -6794,6 +7259,16 @@ export default class NpnCritiqueReplyModal extends Component {
       // Readers that only know about the flat `annotations` array
       // still work — each entry there carries image_index.
       annotations_by_image: annotationsByImage,
+      // Optional rotate/flip transform applied to the primary image.
+      // Edit-reopen reads this and rebakes the original upload through
+      // the same transform so annotation coords land on the right
+      // pixels. Null when identity.
+      image_transform: this._imageTransformForIndex(0),
+      // Per-image transform map for multi-image drafts. Keys are
+      // stringified image indices; identity entries are omitted.
+      image_transforms_by_image: this._collectImageTransformsByImage(
+        orderedIndices
+      ),
       // Processing example draft entry — flat shape matching
       // ProcessingExampleNormalizer.normalize_for_draft on the
       // server. Null when no example is attached; restored on
@@ -6902,6 +7377,13 @@ export default class NpnCritiqueReplyModal extends Component {
         activeIndex: 0,
         versionKey,
       });
+      // Image-transform restore. Annotations were stored in post-
+      // transform coordinate space, so we need to rebake the original
+      // upload through the same transform before the canvas mounts.
+      // Walk `sources` for per-image transforms when present; fall
+      // back to the top-level `image_transform` for single-image
+      // posts written before the multi-image transform rollout.
+      this._restoreImageTransformsFromPayload(payload);
     }
 
     // Processing-example restore for the edit flow. Lives on the
@@ -7064,6 +7546,12 @@ export default class NpnCritiqueReplyModal extends Component {
           activeIndex: this._selectedImageIndex,
           versionKey: draft.selected_image_version_key,
         });
+        // Image-transform restore. Drafts written after the
+        // rotate/flip rollout carry per-image transforms in
+        // `image_transforms_by_image` and a top-level
+        // `image_transform` mirror for image 0. Earlier drafts have
+        // neither; in that case the rebake step is a no-op.
+        this._restoreImageTransformsFromDraft(draft);
 
         // Notice when a newer revision exists than the one the draft
         // was started on — informational, not blocking.
@@ -7214,6 +7702,114 @@ export default class NpnCritiqueReplyModal extends Component {
         this.cropAspectRatio = activeSnapshot.crop.aspectRatio;
       }
       this.cropSelected = !!activeSnapshot.crop;
+    }
+  }
+
+  // Restore rotate/flip state from a post payload's `sources` array
+  // (per-image) or top-level `image_transform` field (legacy single-
+  // image). Walks each transform, rebakes the original upload, and
+  // caches the data URL so the Konva stage mounts against the
+  // already-transformed bitmap.
+  _restoreImageTransformsFromPayload(payload) {
+    if (!payload || typeof payload !== "object") {
+      return;
+    }
+    const entries = new Map();
+    // Prefer per-image sources when present — that's the canonical
+    // place transforms live in multi-image posts. The top-level
+    // `image_transform` field is a legacy mirror of the head entry,
+    // so re-reading it would risk double-applying or routing to the
+    // wrong image (the head may be a non-primary submission image).
+    if (Array.isArray(payload.sources) && payload.sources.length > 0) {
+      for (const entry of payload.sources) {
+        if (!entry || typeof entry !== "object") {
+          continue;
+        }
+        const idx = Number.isInteger(entry.image_index) ? entry.image_index : 0;
+        const t = normalizeTransform(entry.image_transform);
+        if (!isIdentityTransform(t)) {
+          entries.set(idx, t);
+        }
+      }
+    } else {
+      // Pure legacy fallback: no `sources` array means the post was
+      // written before the multi-image rollout, so the top-level
+      // `image_transform` (if present) describes image 0.
+      const t = normalizeTransform(payload.image_transform);
+      if (!isIdentityTransform(t)) {
+        entries.set(0, t);
+      }
+    }
+    this._applyRestoredImageTransforms(entries);
+  }
+
+  // Same idea for draft payloads, which use the flat
+  // `image_transform` field for image 0 plus an
+  // `image_transforms_by_image` map for image 1+.
+  _restoreImageTransformsFromDraft(draft) {
+    if (!draft || typeof draft !== "object") {
+      return;
+    }
+    const entries = new Map();
+    if (draft.image_transforms_by_image && typeof draft.image_transforms_by_image === "object") {
+      for (const [key, value] of Object.entries(draft.image_transforms_by_image)) {
+        const idx = Number.parseInt(key, 10);
+        if (!Number.isInteger(idx) || idx < 0) {
+          continue;
+        }
+        const t = normalizeTransform(value);
+        if (!isIdentityTransform(t)) {
+          entries.set(idx, t);
+        }
+      }
+    }
+    if (!entries.has(0)) {
+      const t = normalizeTransform(draft.image_transform);
+      if (!isIdentityTransform(t)) {
+        entries.set(0, t);
+      }
+    }
+    this._applyRestoredImageTransforms(entries);
+  }
+
+  // Shared restore. For each non-identity transform, rebake the
+  // original source through the canvas pipeline so `effectiveImageUrl`
+  // serves the post-transform bitmap. Annotations have already been
+  // restored in transformed coordinate space (they were stored that
+  // way at post/save time), so no coordinate mapping is needed here.
+  // Errors during rebake fall back silently — the canvas still
+  // mounts on the original orientation, and the annotation positions
+  // will look wrong but the post text and edit flow stay usable.
+  async _applyRestoredImageTransforms(entries) {
+    if (!entries || entries.size === 0) {
+      return;
+    }
+    for (const [imageIndex, transform] of entries) {
+      // Record the transform so the per-image snapshot map and the
+      // active-image getter both reflect it. _switchImage reads from
+      // this map when the picker moves to a non-active image.
+      if (imageIndex === this._selectedImageIndex) {
+        this._imageTransform = { ...transform };
+      } else {
+        this._imageTransformsByImageIndex.set(imageIndex, { ...transform });
+      }
+      // Rebake the original source. Fire-and-forget per image — the
+      // tracked-Map update at the end is what triggers a re-render.
+      try {
+        const original = await this._loadOriginalImageElement(imageIndex);
+        const rebaked = await applyTransformToImage(original, transform);
+        const nextMap = new Map(this._transformedImageUrls);
+        nextMap.set(imageIndex, rebaked.src);
+        this._transformedImageUrls = nextMap;
+      } catch (e) {
+        if (this.siteSettings.npn_critique_reply_debug_enabled) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "[npn-critique-reply] restore-image-transform failed",
+            { imageIndex, transform, error: e }
+          );
+        }
+      }
     }
   }
 
@@ -8035,6 +8631,139 @@ export default class NpnCritiqueReplyModal extends Component {
                     @title="npn_critique_reply.visual_notes.relationship_arrow_title"
                     @disabled={{this.isPosting}}
                   />
+
+                  {{! Rotate and Flip tools. Two labeled buttons that
+                      visually match the other tool toggles (icon +
+                      visible label, same height/padding). Unlike
+                      drawing modes, these aren't persistent states —
+                      clicking a menu item applies the transform
+                      immediately and closes the menu. Both menus
+                      share the unified `_imageTransform` state. }}
+                  <div class="npn-critique-reply-modal__transform-menu-wrap">
+                    <DButton
+                      id="npn-critique-reply-rotate-trigger"
+                      class="btn-default"
+                      @action={{this.toggleRotateMenu}}
+                      @icon="rotate-right"
+                      @label="npn_critique_reply.visual_notes.transform.rotate.label"
+                      @title="npn_critique_reply.visual_notes.transform.rotate.title"
+                      @disabled={{or this.isPosting this._imageTransformApplying}}
+                      aria-haspopup="menu"
+                      aria-expanded={{if this._rotateMenuOpen "true" "false"}}
+                    />
+                    {{#if this._rotateMenuOpen}}
+                      <div
+                        id="npn-critique-reply-rotate-menu"
+                        class="npn-critique-reply-modal__transform-menu"
+                        role="menu"
+                        {{on "keydown" this.onRotateMenuKeydown}}
+                      >
+                        <p class="npn-critique-reply-modal__transform-menu-hint">
+                          {{i18n
+                            "npn_critique_reply.visual_notes.transform.rotate.hint"
+                          }}
+                        </p>
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__transform-menu-item"
+                          role="menuitem"
+                          @action={{this.rotateImageCw}}
+                          @icon="rotate-right"
+                          @label="npn_critique_reply.visual_notes.transform.rotate.rotate_right"
+                          @title="npn_critique_reply.visual_notes.transform.rotate.rotate_right_title"
+                          @disabled={{this._imageTransformApplying}}
+                        />
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__transform-menu-item"
+                          role="menuitem"
+                          @action={{this.rotateImageCcw}}
+                          @icon="rotate-left"
+                          @label="npn_critique_reply.visual_notes.transform.rotate.rotate_left"
+                          @title="npn_critique_reply.visual_notes.transform.rotate.rotate_left_title"
+                          @disabled={{this._imageTransformApplying}}
+                        />
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__transform-menu-item npn-critique-reply-modal__transform-menu-reset"
+                          role="menuitem"
+                          @action={{this.resetImageTransform}}
+                          @icon="arrow-rotate-left"
+                          @label="npn_critique_reply.visual_notes.transform.reset"
+                          @title="npn_critique_reply.visual_notes.transform.reset_title"
+                          @disabled={{or
+                            this._imageTransformApplying
+                            this._resetTransformDisabled
+                          }}
+                        />
+                        <p class="npn-critique-reply-modal__transform-menu-note">
+                          {{i18n
+                            "npn_critique_reply.visual_notes.transform.original_unmodified"
+                          }}
+                        </p>
+                      </div>
+                    {{/if}}
+                  </div>
+
+                  <div class="npn-critique-reply-modal__transform-menu-wrap">
+                    <DButton
+                      id="npn-critique-reply-flip-trigger"
+                      class="btn-default"
+                      @action={{this.toggleFlipMenu}}
+                      @icon="arrows-left-right"
+                      @label="npn_critique_reply.visual_notes.transform.flip.label"
+                      @title="npn_critique_reply.visual_notes.transform.flip.title"
+                      @disabled={{or this.isPosting this._imageTransformApplying}}
+                      aria-haspopup="menu"
+                      aria-expanded={{if this._flipMenuOpen "true" "false"}}
+                    />
+                    {{#if this._flipMenuOpen}}
+                      <div
+                        id="npn-critique-reply-flip-menu"
+                        class="npn-critique-reply-modal__transform-menu"
+                        role="menu"
+                        {{on "keydown" this.onFlipMenuKeydown}}
+                      >
+                        <p class="npn-critique-reply-modal__transform-menu-hint">
+                          {{i18n
+                            "npn_critique_reply.visual_notes.transform.flip.hint"
+                          }}
+                        </p>
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__transform-menu-item"
+                          role="menuitem"
+                          @action={{this.flipImageHorizontal}}
+                          @icon="arrows-left-right"
+                          @label="npn_critique_reply.visual_notes.transform.flip.flip_horizontal"
+                          @title="npn_critique_reply.visual_notes.transform.flip.flip_horizontal_title"
+                          @disabled={{this._imageTransformApplying}}
+                        />
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__transform-menu-item"
+                          role="menuitem"
+                          @action={{this.flipImageVertical}}
+                          @icon="arrows-up-down"
+                          @label="npn_critique_reply.visual_notes.transform.flip.flip_vertical"
+                          @title="npn_critique_reply.visual_notes.transform.flip.flip_vertical_title"
+                          @disabled={{this._imageTransformApplying}}
+                        />
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__transform-menu-item npn-critique-reply-modal__transform-menu-reset"
+                          role="menuitem"
+                          @action={{this.resetImageTransform}}
+                          @icon="arrow-rotate-left"
+                          @label="npn_critique_reply.visual_notes.transform.reset"
+                          @title="npn_critique_reply.visual_notes.transform.reset_title"
+                          @disabled={{or
+                            this._imageTransformApplying
+                            this._resetTransformDisabled
+                          }}
+                        />
+                        <p class="npn-critique-reply-modal__transform-menu-note">
+                          {{i18n
+                            "npn_critique_reply.visual_notes.transform.original_unmodified"
+                          }}
+                        </p>
+                      </div>
+                    {{/if}}
+                  </div>
 
                 </div>
 

@@ -32,13 +32,49 @@ module DiscourseNpnCritiqueReply
       payload = {} unless payload.is_a?(Hash)
       payload = payload.deep_stringify_keys
 
-      {
+      out = {
         "schema_version" => SCHEMA_VERSION,
         "source" => normalize_source(payload["source"], topic_id: topic_id),
         "visual_output" => normalize_visual_output(payload["visual_output"]),
         "annotations" =>
           DraftNormalizer.normalize_annotations(payload["annotations"]),
       }
+      # Optional rotate/flip applied to the primary image during
+      # annotation. Only persisted when non-identity, so legacy
+      # single-image / un-rotated posts stay byte-identical to before.
+      primary_transform =
+        DraftNormalizer.normalize_image_transform(payload["image_transform"])
+      out["image_transform"] = primary_transform if primary_transform
+      # Per-image `sources` array (multi-image critiques). Preserve
+      # `image_transform` on each entry alongside `source` +
+      # `visual_output`. The flat top-level `image_transform` above
+      # mirrors the primary image's entry for legacy single-image
+      # readers.
+      sources = normalize_sources(payload["sources"], topic_id: topic_id)
+      out["sources"] = sources if sources.any?
+      out
+    end
+
+    def normalize_sources(raw, topic_id:)
+      return [] unless raw.is_a?(Array)
+      out = []
+      raw.each do |entry|
+        next unless entry.is_a?(Hash)
+        idx = entry["image_index"].to_i
+        next if idx.negative?
+        source = normalize_source(entry["source"], topic_id: topic_id)
+        visual_output = normalize_visual_output(entry["visual_output"])
+        transform =
+          DraftNormalizer.normalize_image_transform(entry["image_transform"])
+        sub = {
+          "image_index" => idx,
+          "source" => source,
+          "visual_output" => visual_output,
+        }
+        sub["image_transform"] = transform if transform
+        out << sub
+      end
+      out
     end
 
     def normalize_source(raw, topic_id:)

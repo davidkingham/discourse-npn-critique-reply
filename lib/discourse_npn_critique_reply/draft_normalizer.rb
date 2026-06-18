@@ -103,6 +103,20 @@ module DiscourseNpnCritiqueReply
         # flat `annotations` array with per-entry image_index.
         "annotations_by_image" =>
           normalize_annotations_by_image(payload["annotations_by_image"]),
+        # Optional rotate/flip applied to the primary image during
+        # annotation. Stored only when non-identity. Edit-reopen
+        # uses it to rebake the original upload through the same
+        # transform so annotations land on the right pixels.
+        "image_transform" =>
+          normalize_image_transform(payload["image_transform"]),
+        # Per-image transform map for multi-image drafts. Parallel
+        # to `annotations_by_image`. Keys are stringified image
+        # indices; values are normalized transform hashes. Identity
+        # entries are dropped so the map stays compact.
+        "image_transforms_by_image" =>
+          normalize_image_transforms_by_image(
+            payload["image_transforms_by_image"]
+          ),
         # Processing example draft entry — flat shape, see
         # ProcessingExampleNormalizer.normalize_for_draft. May be nil
         # when the user has no upload pending; the client treats both
@@ -130,6 +144,37 @@ module DiscourseNpnCritiqueReply
       return 0 if value.nil?
       i = value.to_i
       i >= 0 ? i : 0
+    end
+
+    # Optional rotate/flip transform applied to a source image during
+    # annotation. Whitelists rotation to 0/90/180/270 and coerces
+    # flip_h / flip_v to plain booleans. Identity (no rotation, no
+    # flips) collapses to nil so the caller can omit the field.
+    VALID_IMAGE_TRANSFORM_ROTATIONS = [0, 90, 180, 270].freeze
+
+    def normalize_image_transform(value)
+      return nil unless value.is_a?(Hash)
+      rot = value["rotation"].to_i
+      rot = 0 unless VALID_IMAGE_TRANSFORM_ROTATIONS.include?(rot)
+      flip_h = value["flip_h"] == true
+      flip_v = value["flip_v"] == true
+      return nil if rot.zero? && !flip_h && !flip_v
+      { "rotation" => rot, "flip_h" => flip_h, "flip_v" => flip_v }
+    end
+
+    # Per-image transform map: `{ "0" => {..}, "1" => {..}, ... }`.
+    # Parallel to `normalize_annotations_by_image`. Identity entries
+    # are dropped so the map stays minimal.
+    def normalize_image_transforms_by_image(value)
+      return {} unless value.is_a?(Hash)
+      out = {}
+      value.each do |k, v|
+        idx = Integer(k.to_s, exception: false)
+        next if idx.nil? || idx.negative?
+        normalized = normalize_image_transform(v)
+        out[idx.to_s] = normalized if normalized
+      end
+      out
     end
 
     # Per-image annotations map: `{ "0" => [..], "1" => [..], ... }`.
