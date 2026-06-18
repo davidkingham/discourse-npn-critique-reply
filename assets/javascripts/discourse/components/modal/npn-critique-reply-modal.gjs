@@ -334,6 +334,9 @@ export default class NpnCritiqueReplyModal extends Component {
   @service toasts;
   @service dialog;
   @service appEvents;
+  // Owns the minimized-workspace session + dock. Minimize hands off to it
+  // after a confirmed draft save; the dock reads it to offer Resume.
+  @service npnCritiqueWorkspace;
 
   // Set by the Textarea's {{didInsert}} hook below. `#textManipulation`
   // is the Discourse helper that owns cursor/selection logic for
@@ -839,6 +842,9 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked draftStatus = DRAFT_STATUS.IDLE;
   @tracked draftHasSaved = false;
   @tracked draftRestoreNotice = null;
+  // True while Minimize is awaiting its forced draft flush — drives the
+  // button's disabled + "Saving…" state so the critic can't double-fire.
+  @tracked _minimizing = false;
   _autosaver = null;
   _restoringDraft = false;
 
@@ -2927,6 +2933,11 @@ export default class NpnCritiqueReplyModal extends Component {
       }
       return false;
     }
+    // Best-effort flush of any pending debounced save so the saved draft
+    // is current when the workspace closes (X / Esc / click-outside).
+    // Fire-and-forget — we don't block or reopen the close on the result;
+    // the draft is the user's safety net via the footer "Resume" button.
+    this._flushDraftBestEffort();
     return true;
   }
 
@@ -2941,7 +2952,91 @@ export default class NpnCritiqueReplyModal extends Component {
       this.visualFocusMode = false;
       return;
     }
+    this._flushDraftBestEffort();
     this.args.closeModal?.();
+  }
+
+  // Fire-and-forget flush used by the plain close paths. Swallows
+  // everything — the autosaver reports failures on the error bus, and a
+  // plain close makes no "saved" promise (unlike Minimize, which awaits
+  // the flush and only docks on success).
+  _flushDraftBestEffort() {
+    if (!this.draftsEnabled || !this._autosaver) {
+      return;
+    }
+    try {
+      this._autosaver.flush?.();
+    } catch (_e) {
+      // ignore — best effort
+    }
+  }
+
+  // Minimize the workspace: force-save the draft, hand the session to the
+  // dock service, then close. Unlike a plain close, this AWAITS the save
+  // and only minimizes on success — the dock must never claim "Draft
+  // saved" unless it's true. On failure we keep the workspace open and
+  // surface the error so the critic can retry or close manually.
+  @action
+  async minimize() {
+    if (this.isPosting) {
+      return;
+    }
+    // Preview is ephemeral; resume always returns to edit mode.
+    if (this.previewMode) {
+      this.exitPreview();
+    }
+    // Without server drafts there's nothing for the dock to resume from,
+    // so fall back to a normal close.
+    if (!this.draftsEnabled || !this._autosaver) {
+      this.args.closeModal?.();
+      return;
+    }
+
+    this._minimizing = true;
+    this.errorMessage = null;
+    try {
+      await this._autosaver.flush();
+    } catch (_e) {
+      // flush() resolves even on failure (status is reported via
+      // _onDraftSaveStatus); guard anyway.
+    }
+    if (this._destroyed) {
+      return;
+    }
+    this._minimizing = false;
+
+    if (this.draftStatus === DRAFT_STATUS.ERROR) {
+      // Save failed — do NOT minimize (no false "saved"). Surface the
+      // error inline; the critic can retry Minimize or close manually.
+      this.errorMessage = i18n(
+        "npn_critique_reply.modal.minimize.save_failed"
+      );
+      return;
+    }
+
+    this.npnCritiqueWorkspace.minimize({
+      topic: this.topic,
+      status: "saved",
+      summary: this._minimizeSummary(),
+    });
+    this.args.closeModal?.();
+  }
+
+  // Small snapshot for the dock label — which image + writing context the
+  // critic was on. Durable content stays in the server draft.
+  _minimizeSummary() {
+    return {
+      imageIndex: this._selectedImageIndex,
+      imageCount: Math.max(this.submissionImages.length, 1),
+      activeContext: this.activeWritingContext,
+    };
+  }
+
+  // Minimize is only meaningful when there's a server draft to resume
+  // from, and only in edit mode (resume always returns to edit, so we
+  // don't offer it from the preview footer).
+  get canMinimize() {
+    return this.draftsEnabled && !this.previewMode;
   }
 
   // ---- Photographer's Notes lazy-load -----------------------------------
@@ -10709,6 +10804,28 @@ export default class NpnCritiqueReplyModal extends Component {
               @disabled={{this.isPosting}}
             />
           {{/if}}
+        {{/if}}
+
+        {{! Minimize — force-saves the draft, then closes the workspace
+            and drops a "Critique in progress" dock on the topic so the
+            critic can step away (e.g. to Copy Quote another reply) and
+            come back without fear of losing work. Only when drafts are
+            enabled (the dock resumes from the server draft) and not in
+            preview (resume always returns to edit). }}
+        {{#if this.canMinimize}}
+          <DButton
+            class="btn-flat npn-critique-reply-modal__minimize"
+            @action={{this.minimize}}
+            @icon="window-minimize"
+            @label={{if
+              this._minimizing
+              "npn_critique_reply.modal.minimize.saving"
+              "npn_critique_reply.modal.minimize.label"
+            }}
+            @title="npn_critique_reply.modal.minimize.title"
+            @disabled={{this.isPosting}}
+            @isLoading={{this._minimizing}}
+          />
         {{/if}}
 
         {{! Quiet — pushed to the far right via flex on the footer.
