@@ -155,7 +155,7 @@ module DiscourseNpnCritiqueReply
     def normalize_image_transform(value)
       return nil unless value.is_a?(Hash)
       rot = value["rotation"].to_i
-      rot = 0 unless VALID_IMAGE_TRANSFORM_ROTATIONS.include?(rot)
+      rot = 0 if VALID_IMAGE_TRANSFORM_ROTATIONS.exclude?(rot)
       flip_h = value["flip_h"] == true
       flip_v = value["flip_v"] == true
       return nil if rot.zero? && !flip_h && !flip_v
