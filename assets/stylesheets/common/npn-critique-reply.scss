@@ -3117,3 +3117,71 @@
   }
 }
 
+// -- Minimized-workspace dock --------------------------------------------
+//
+// Fixed bar shown after the Critique Workspace is minimized (see
+// npn-critique-dock.gjs), on the originating topic. Deliberately compact
+// and secondary — it reassures ("your work is saved, here's the way back")
+// without behaving like a second composer.
+.npn-critique-dock {
+  position: fixed;
+  right: 1em;
+  // Clear of the iOS/Android home indicator / bottom inset.
+  bottom: calc(1em + env(safe-area-inset-bottom, 0px));
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  max-width: calc(100vw - 2em);
+  padding: 0.6em 0.85em;
+  background: var(--secondary);
+  color: var(--primary);
+  border: 1px solid var(--primary-low);
+  border-radius: var(--d-border-radius, 6px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+
+  &__info {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+    min-width: 0;
+  }
+
+  &__title {
+    font-weight: 700;
+    font-size: var(--font-0);
+  }
+
+  &__status {
+    font-size: var(--font-down-1);
+    color: var(--primary-medium);
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25em;
+    flex: none;
+  }
+
+  &__dismiss.btn {
+    color: var(--primary-medium);
+  }
+}
+
+// Mobile: full-width status bar pinned to the bottom, above the safe-area
+// inset, rather than a floating card.
+@media (max-width: 700px) {
+  .npn-critique-dock {
+    right: 0;
+    left: 0;
+    bottom: 0;
+    max-width: none;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    padding-bottom: calc(0.6em + env(safe-area-inset-bottom, 0px));
+    justify-content: space-between;
+  }
+}
+

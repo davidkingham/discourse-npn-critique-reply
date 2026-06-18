@@ -26,6 +26,17 @@ en:
         resume_description: "Pick up where you left off — your text and visual annotations are saved."
         resume_aria_label: "Resume your critique draft"
 
+      # Persistent dock shown after the workspace is minimized, on the
+      # topic the critique belongs to. Reassures the critic their work is
+      # saved and gives a one-click way back.
+      dock:
+        aria_label: "Critique in progress"
+        title: "Critique in progress"
+        saved: "Draft saved"
+        image_context: "Image %{current} of %{total}"
+        resume: "Resume Critique"
+        dismiss_title: "Hide — your draft stays saved"
+
       modal:
         title: "Start a Critique"
         intro: "Write your critique with the image, request, and photographer’s notes close at hand. Visual notes are optional."

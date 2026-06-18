@@ -1,4 +1,5 @@
 import { apiInitializer } from "discourse/lib/api";
+import NpnCritiqueDock from "../components/npn-critique-dock";
 import NpnCritiqueReplyInvitationPanel from "../components/npn-critique-reply-invitation-panel";
 import NpnCritiqueReplyStartButton from "../components/npn-critique-reply-start-button";
 import NpnEditVisualCritiqueButton from "../components/npn-edit-visual-critique-button";
@@ -65,6 +66,12 @@ export default apiInitializer((api) => {
     "post-article",
     NpnCritiqueReplyInvitationPanel
   );
+
+  // Persistent "Critique in progress" dock for the minimize-to-dock flow.
+  // `below-footer` is an application-level outlet (always rendered, every
+  // route), so the single dock instance lives for the session and shows
+  // itself only when a critique is minimized on the topic being viewed.
+  api.renderInOutlet("below-footer", NpnCritiqueDock);
 
   api.decorateCookedElement(decorateCriticueReplyAnnotations, {
     id: "npn-critique-reply-annotation-badges",
