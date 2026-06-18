@@ -1509,6 +1509,99 @@
     margin: 0; // override the section-heading default — label sits next to its input
   }
 
+  // -- Writing-context switcher -----------------------------------------
+  //
+  // Compact, secondary segmented control above the writing panel that
+  // flips the single textarea between Overall Critique and Image/Visual
+  // Notes. Deliberately small so it never dominates the writing surface
+  // (req. 7) and adds minimal vertical height (req. 15).
+  &__context-switcher {
+    display: inline-flex;
+    align-self: flex-start;
+    gap: 2px;
+    padding: 2px;
+    background: var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+    // Wrap only if the viewport is genuinely narrow; avoids horizontal
+    // overflow on small desktop / mobile widths.
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  &__context-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    margin: 0;
+    padding: 0.3em 0.7em;
+    border: none;
+    background: transparent;
+    color: var(--primary-medium);
+    font-size: var(--font-down-1);
+    font-weight: normal;
+    line-height: 1.3;
+    border-radius: var(--d-border-radius, 4px);
+    cursor: pointer;
+    // Touch-friendly hit target on mobile (req. 15).
+    min-height: 2em;
+
+    &:hover:not(:disabled) {
+      color: var(--primary);
+      background: var(--primary-very-low);
+    }
+
+    // Active context. Uses background + weight + an underline accent so
+    // selection isn't conveyed by color alone (req. 16).
+    &.is-active {
+      background: var(--secondary);
+      color: var(--primary);
+      font-weight: 700;
+      box-shadow: inset 0 -2px 0 var(--tertiary);
+    }
+
+    // Keep a visible keyboard focus ring (req. 16).
+    &:focus-visible {
+      outline: 2px solid var(--tertiary);
+      outline-offset: 1px;
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.6;
+    }
+  }
+
+  // Mark-count badge on the notes tab (e.g. "Image Notes ⟨3⟩").
+  &__context-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4em;
+    height: 1.4em;
+    padding: 0 0.35em;
+    border-radius: 0.7em;
+    background: var(--tertiary-low);
+    color: var(--primary-high);
+    font-size: var(--font-down-2);
+    font-weight: 700;
+  }
+
+  // "Editing notes for Image 2 of 4" indicator under the heading.
+  &__context-indicator {
+    margin: 0;
+    font-size: var(--font-down-1);
+    color: var(--primary-medium);
+    font-style: italic;
+  }
+
+  // Per-context helper copy under the heading.
+  &__writing-helper {
+    margin: 0;
+    font-size: var(--font-down-1);
+    color: var(--primary-medium);
+    line-height: 1.4;
+  }
+
   // -- Inline messages (validation + server error) ----------------------
   //
   // Sit between the label and the textarea so the user sees them right

@@ -73,6 +73,22 @@ en:
         recommended: "Recommended"
         your_critique: "Your critique"
         textarea_placeholder: "Write your critique here in your own voice."
+        # Writing-context switcher. One textarea serves two contexts —
+        # the overall critique and the selected image's notes — flipped
+        # via a small segmented control above the field. Labels differ
+        # for single- vs multi-image critiques (Visual Notes vs Image
+        # Notes); the heading + helper copy track the active context.
+        writing_context:
+          switcher_label: "Choose what you're writing"
+          overall: "Overall Critique"
+          visual_notes: "Visual Notes"
+          image_notes: "Image Notes"
+          editing_image: "Editing notes for Image %{current} of %{total}"
+          overall_helper: "Write your overall response to the photograph or series."
+          visual_notes_heading: "Visual Notes"
+          visual_notes_helper: "Explain the marks you added to this image."
+          image_notes_heading: "Image Notes"
+          image_notes_helper: "Write comments connected to the selected image and its visual notes."
         # Quiet hint sitting next to the Insert-link button above the
         # textarea — signals that the field behaves like the composer
         # for the parts that matter (links, mentions, markdown).

@@ -131,6 +131,12 @@ const LARGE_IMAGE_VIEWS = Object.freeze([
   LARGE_IMAGE_VIEW_PROCESSING_EXAMPLE,
 ]);
 
+// Writing-context switcher values. The right-side textarea edits one of
+// these at a time. Persisted in drafts (DraftNormalizer whitelists the
+// same two strings), so they must stay stable.
+const WRITING_CONTEXT_OVERALL = "overall";
+const WRITING_CONTEXT_IMAGE = "image";
+
 // Pull the numeric suffix off an id like "attention_pull_3" → 3. Used
 // only during draft restore so newly-created markers don't collide
 // with restored ones.
@@ -237,13 +243,6 @@ function snapshotHasAnnotations(snapshot) {
 // match for single-crop critiques and posts written before the
 // rename.
 const PREVIEW_TOKEN_PATTERN =
-  /\[([1-9]\d{0,2}|Crop \d{1,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
-
-// Same pattern used by the per-image paragraph grouper. Kept as a
-// separate constant because matchAll() on a single shared regex
-// would clobber the preview parser's lastIndex when both run in the
-// same render cycle.
-const PARAGRAPH_TOKEN_PATTERN =
   /\[([1-9]\d{0,2}|Crop \d{1,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
 
 function badgeVariantForLabel(label) {
@@ -363,8 +362,27 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked linkFormText = "";
   _linkPreservedSelection = null;
 
-  // Draft state ----------------------------------------------------------
-  @tracked critiqueText = "";
+  // Writing state --------------------------------------------------------
+  //
+  // The right-side textarea is a SINGLE field that switches between two
+  // contexts instead of holding one mixed body:
+  //   • overallCritiqueText — the critic's response to the work as a
+  //     whole, never tied to an image. Renders once at the top of the
+  //     post.
+  //   • per-image notes — commentary tied to a specific image's visual
+  //     notes. The ACTIVE image's notes live in `_activeImageNotes`
+  //     (tracked, drives the textarea); every other image's notes sit
+  //     in `_imageNotesByImageIndex` cold storage, keyed by the same
+  //     0-based image index used for annotations / transforms / drafts.
+  //
+  // `activeWritingContext` picks which one the textarea reads/writes via
+  // the `activeWritingText` getter/setter. This replaces the old single
+  // `critiqueText` body that was split by annotation-token position at
+  // post time — separation is now explicit in the model and the UI.
+  @tracked overallCritiqueText = "";
+  @tracked _activeImageNotes = "";
+  _imageNotesByImageIndex = new Map();
+  @tracked activeWritingContext = WRITING_CONTEXT_OVERALL;
 
   // Post Critique state. `isPosting` disables the action buttons + close
   // path while the request is in flight; `errorMessage` is shown inline
@@ -1171,7 +1189,7 @@ export default class NpnCritiqueReplyModal extends Component {
         // With a selection: wrap it as the link text.
         tm.applySurround(sel, "[", `](${url})`, "link_description");
       }
-      // `critiqueText` is bound through Ember's two-way Textarea
+      // `activeWritingText` is bound through Ember's two-way Textarea
       // component, which listens to the native `input` event. The
       // helper writes directly to .value, so without this dispatch
       // the tracked property would diverge from the DOM until the
@@ -1618,16 +1636,170 @@ export default class NpnCritiqueReplyModal extends Component {
     return this._questionsToConsider.groups;
   }
 
+  // ---- Writing context (Overall Critique ↔ Image Notes) ---------------
+
+  // The textarea binds to this. Reads/writes whichever context is
+  // active, so a single field + single autocomplete/mention setup
+  // serves both the overall critique and the selected image's notes.
+  get activeWritingText() {
+    return this.activeWritingContext === WRITING_CONTEXT_IMAGE
+      ? this._activeImageNotes
+      : this.overallCritiqueText;
+  }
+
+  set activeWritingText(value) {
+    const next = value ?? "";
+    if (this.activeWritingContext === WRITING_CONTEXT_IMAGE) {
+      this._activeImageNotes = next;
+    } else {
+      this.overallCritiqueText = next;
+    }
+  }
+
+  get writingContextIsImage() {
+    return this.activeWritingContext === WRITING_CONTEXT_IMAGE;
+  }
+
+  // Notes text for a given image index — the active image reads the
+  // live tracked field, others read cold storage. Always a string.
+  _imageNotesForIndex(index) {
+    if (index === this._selectedImageIndex) {
+      return this._activeImageNotes ?? "";
+    }
+    return this._imageNotesByImageIndex.get(index) ?? "";
+  }
+
+  // Push the active image's notes into cold storage. Called before any
+  // operation that reads the whole per-image map (image switch, draft
+  // build, post compose, preview) so the active edits are included.
+  _snapshotActiveImageNotes() {
+    this._imageNotesByImageIndex.set(
+      this._selectedImageIndex,
+      this._activeImageNotes ?? ""
+    );
+  }
+
+  // True when ANY image carries notes text — the active one or any in
+  // cold storage. Drives the single-image notes-tab visibility and the
+  // preview/post "has content" gates.
+  get hasAnyImageNotes() {
+    if ((this._activeImageNotes ?? "").trim().length > 0) {
+      return true;
+    }
+    for (const [idx, text] of this._imageNotesByImageIndex) {
+      if (idx !== this._selectedImageIndex && (text ?? "").trim().length > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // The Image Notes / Visual Notes tab. Multi-image submissions always
+  // expose it (Image Notes is a first-class context). Single-image
+  // submissions keep it subdued until there's something to put there —
+  // the first annotation, or restored/typed image-specific text — so a
+  // plain written critique never sees a second tab it doesn't need.
+  get imageNotesTabAvailable() {
+    return (
+      this.hasMultipleSubmissionImages ||
+      this.hasAnyImageAnnotations ||
+      this.hasAnyImageNotes
+    );
+  }
+
+  // Label for the notes tab: single-image critiques say "Visual Notes"
+  // (the marks on the one image); multi-image say "Image Notes".
+  get imageNotesTabLabel() {
+    return this.hasMultipleSubmissionImages
+      ? i18n("npn_critique_reply.modal.writing_context.image_notes")
+      : i18n("npn_critique_reply.modal.writing_context.visual_notes");
+  }
+
+  get overallTabLabel() {
+    return i18n("npn_critique_reply.modal.writing_context.overall");
+  }
+
+  // Mark count shown on the notes tab — the SELECTED image's annotation
+  // count (annotationCount tracks the active image). 0 → no badge.
+  get activeImageMarkCount() {
+    return this.annotationCount;
+  }
+
+  // "Editing notes for Image 2 of 4" — only meaningful for multi-image
+  // submissions while the Image Notes context is active. Null otherwise
+  // so the template can omit the indicator.
+  get imageNotesContextLabel() {
+    if (!this.writingContextIsImage || !this.hasMultipleSubmissionImages) {
+      return null;
+    }
+    return i18n("npn_critique_reply.modal.writing_context.editing_image", {
+      current: this._selectedImageIndex + 1,
+      total: Math.max(this.submissionImages.length, 1),
+    });
+  }
+
+  // Heading above the textarea, per active context.
+  get writingPanelHeading() {
+    if (!this.writingContextIsImage) {
+      return i18n("npn_critique_reply.modal.your_critique");
+    }
+    return this.hasMultipleSubmissionImages
+      ? i18n("npn_critique_reply.modal.writing_context.image_notes_heading")
+      : i18n("npn_critique_reply.modal.writing_context.visual_notes_heading");
+  }
+
+  // Helper copy below the heading, per active context.
+  get writingPanelHelper() {
+    if (!this.writingContextIsImage) {
+      return i18n("npn_critique_reply.modal.writing_context.overall_helper");
+    }
+    return this.hasMultipleSubmissionImages
+      ? i18n("npn_critique_reply.modal.writing_context.image_notes_helper")
+      : i18n("npn_critique_reply.modal.writing_context.visual_notes_helper");
+  }
+
+  // Switch the textarea between Overall Critique and Image Notes. No-op
+  // when the target context is already active or when the Image Notes
+  // tab isn't available yet (single-image, no marks/notes). Moves focus
+  // back into the textarea so keyboard users keep writing.
+  @action
+  setWritingContext(context) {
+    const next =
+      context === WRITING_CONTEXT_IMAGE
+        ? WRITING_CONTEXT_IMAGE
+        : WRITING_CONTEXT_OVERALL;
+    if (next === WRITING_CONTEXT_IMAGE && !this.imageNotesTabAvailable) {
+      return;
+    }
+    if (next === this.activeWritingContext) {
+      return;
+    }
+    this.activeWritingContext = next;
+    this.validationMessage = null;
+    setTimeout(() => {
+      if (this._destroyed) {
+        return;
+      }
+      const el = document.getElementById("npn-critique-reply-textarea");
+      el?.focus?.();
+    }, 0);
+  }
+
   // ---- Reply text preparation -----------------------------------------
 
   get hasUnsavedText() {
-    return this.critiqueText.trim().length > 0;
+    return (
+      this.overallCritiqueText.trim().length > 0 || this.hasAnyImageNotes
+    );
   }
 
-  // Sync path — used when there are no pins. Adds the "Regarding
-  // Revision N:" prefix on revisions; original is returned as-is.
+  // Sync path — used when there's no headed visual-notes / example
+  // block, i.e. a text-only critique. Adds the "Regarding Revision N:"
+  // prefix on revisions; original is returned as-is. Operates on the
+  // OVERALL critique text (image notes only ever render under a headed
+  // image block, which suppresses this prefix path).
   _textOnlyRaw() {
-    const text = this.critiqueText.trim();
+    const text = this.overallCritiqueText.trim();
     if (!text) {
       return "";
     }
@@ -1738,9 +1910,11 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // 1→2 transition: there's exactly one crop in cold storage with no
   // label (the legacy "[Crop]" form). Stamp it as "Crop 1" in the
-  // snapshot AND rewrite the textarea so its token shifts from
+  // snapshot AND rewrite its image's notes so the token shifts from
   // "[Crop]" to "[Crop 1]". The new (second) crop will be labeled
-  // "Crop 2" by the caller.
+  // "Crop 2" by the caller. The first crop lives on a non-active image
+  // (the active image holds the second crop being added now), so its
+  // "[Crop]" token sits in that image's cold-storage notes.
   _retroactivelyLabelFirstCrop() {
     for (const [idx, snap] of this._annotationsByImageIndex) {
       if (idx === this._selectedImageIndex) {
@@ -1751,15 +1925,15 @@ export default class NpnCritiqueReplyModal extends Component {
           ...snap,
           crop: { ...snap.crop, label: "Crop 1" },
         });
-        // Rewrite token in the textarea. The line template was
-        // "[Crop] %{text}" or the bare starter "[Crop]"; either way
-        // the only "[Crop]" tokens present at this moment came from
-        // that first crop. Replace globally so all references shift
-        // together.
-        if (typeof this.critiqueText === "string") {
-          this.critiqueText = this.critiqueText.replace(
-            /\[Crop\](?!\s*\d)/g,
-            "[Crop 1]"
+        // Rewrite token in that image's notes text. The only "[Crop]"
+        // tokens present at this moment came from that first crop, so
+        // replace globally — but never touch a "[Crop N]" that already
+        // carries a number.
+        const notes = this._imageNotesByImageIndex.get(idx);
+        if (typeof notes === "string") {
+          this._imageNotesByImageIndex.set(
+            idx,
+            notes.replace(/\[Crop\](?!\s*\d)/g, "[Crop 1]")
           );
         }
         return;
@@ -2000,13 +2174,15 @@ export default class NpnCritiqueReplyModal extends Component {
   // this same path without re-trying the failed pipeline. A
   // processing example, if present, is still included in the body.
   async _prepareReplyText({ skipVisualNotes = false } = {}) {
-    // Snapshot the active image's edits into the per-image map so
-    // we compose the post body from a consistent picture across all
-    // images (including the one the critic is currently looking at).
+    // Snapshot the active image's edits into the per-image maps so we
+    // compose the post body from a consistent picture across all images
+    // (including the one the critic is currently looking at) — both
+    // annotations and notes text.
     this._annotationsByImageIndex.set(
       this._selectedImageIndex,
       this._snapshotCurrentAnnotations()
     );
+    this._snapshotActiveImageNotes();
 
     const annotatedImages = skipVisualNotes
       ? []
@@ -2033,47 +2209,31 @@ export default class NpnCritiqueReplyModal extends Component {
       ? this._composeProcessingExampleBlock()
       : "";
 
-    // The visual-notes heading + processing-example heading both
-    // name the selected image version, so the `_textOnlyRaw`
-    // revision prefix would be redundant when either headed block
-    // is present. Strip down to the bare textarea body in that case.
-    const trimmedText =
-      visualBlocks.length > 0 || exampleBlock
-        ? this.critiqueText.trim()
+    // Body composition — fully explicit, no prose-position inference:
+    //   1. overall critique text (the work-as-a-whole response)
+    //   2. per-image sections in submission order — heading, that
+    //      image's notes text, then its annotated image (when present)
+    //   3. processing example
+    // An image section renders only when the image has notes text OR an
+    // annotated image; empty sections collapse. The image's notes stay
+    // attached to that image — text is never moved between contexts.
+    const imageSections = this._composeImageSections(visualBlocks);
+
+    // The visual-notes / processing-example headings name the selected
+    // image version, so the `_textOnlyRaw` revision prefix would be
+    // redundant when any headed block is present. Strip to the bare
+    // overall text in that case; otherwise apply the revision prefix.
+    const overallText =
+      imageSections.length > 0 || exampleBlock
+        ? this.overallCritiqueText.trim()
         : this._textOnlyRaw();
 
-    // Body composition.
-    //
-    // Per-image grouping: each paragraph that references annotation
-    // tokens belonging to ONE image (e.g. "[A1] sits low and
-    // anchors..." when A1 lives on image 2) is routed UNDER that
-    // image's section so the prose sits next to the image it
-    // describes. Paragraphs without recognised tokens, or that mix
-    // tokens from multiple images, stay at the top as "general
-    // critique." Single-image submissions get the same treatment so
-    // the typed critique reads as written-then-marks both for a
-    // single and for multiple images.
-    const tokenToImageIndex = this._buildTokenToImageIndexMap();
-    const grouped = this._groupTextParagraphsByImage(
-      trimmedText,
-      tokenToImageIndex
-    );
-
-    // Order: general written critique → per-image (submission order)
-    // section with its own prose paragraphs and image → processing
-    // example. Empty groups + sections collapse cleanly via
-    // filter(Boolean).
     const parts = [];
-    if (grouped.general.length > 0) {
-      parts.push(grouped.general.join("\n\n"));
+    if (overallText) {
+      parts.push(overallText);
     }
-    for (const block of visualBlocks) {
-      parts.push(
-        this._composeVisualNotesBlockForImage(
-          block,
-          grouped.perImage.get(block.index) ?? []
-        )
-      );
+    for (const section of imageSections) {
+      parts.push(section);
     }
     if (exampleBlock) {
       parts.push(exampleBlock);
@@ -2084,6 +2244,35 @@ export default class NpnCritiqueReplyModal extends Component {
     // payload for the post custom field — see buildVisualAnnotationPayload
     // in the schema module.
     return { raw, visualBlocks };
+  }
+
+  // Compose the per-image markdown sections in submission order. An
+  // image gets a section when it has an annotated image (a flattened
+  // visualBlock) OR non-empty notes text. Each section is heading →
+  // notes text → annotated image (whichever parts exist). Assumes
+  // active annotations + notes are already snapshotted into the maps.
+  _composeImageSections(visualBlocks) {
+    const blockByIndex = new Map(visualBlocks.map((b) => [b.index, b]));
+    const indices = new Set(visualBlocks.map((b) => b.index));
+    const count = Math.max(this.submissionImages.length, 1);
+    for (let i = 0; i < count; i++) {
+      if (this._imageNotesForIndex(i).trim().length > 0) {
+        indices.add(i);
+      }
+    }
+    const ordered = [...indices].sort((a, b) => a - b);
+    const sections = [];
+    for (const idx of ordered) {
+      const markdown = this._composeVisualNotesBlockForImage(
+        idx,
+        blockByIndex.get(idx) ?? null,
+        this._imageNotesForIndex(idx).trim()
+      );
+      if (markdown) {
+        sections.push(markdown);
+      }
+    }
+    return sections;
   }
 
   // Walk image indices in submission order (0..N-1, plus index 0 for
@@ -2282,111 +2471,35 @@ export default class NpnCritiqueReplyModal extends Component {
   // Per-image visual-notes markdown section. Uses the source label
   // (e.g. "Revision 2" for image 0 or "Image 3" for a secondary
   // submission image) when available, otherwise the legacy
-  // "original" heading. The cooked-post inline image markdown
-  // doesn't change shape — Discourse will resolve `short_url` the
-  // same way it did before.
+  // "original" heading. The cooked-post inline image markdown doesn't
+  // change shape — Discourse resolves `short_url` the same way.
   //
-  // `paragraphs` is the prose this image owns (paragraphs whose
-  // annotation tokens belong to THIS image). When empty the section
-  // is just heading + image, same as the v1 visual-notes block.
-  // When populated, the prose sits between heading and image so the
-  // critic's note reads alongside the marked-up image.
-  _composeVisualNotesBlockForImage(
-    { index, sourceLabel, upload },
-    paragraphs = []
-  ) {
+  // Order within the section: heading → this image's notes text → the
+  // annotated image. `block` is the flattened/uploaded visual-notes
+  // image for this index (null when the image has notes but no
+  // annotations — then the section is heading + notes only).
+  // `notesText` is this image's commentary, taken verbatim from its
+  // Image Notes context (never reflowed or split). Returns "" when the
+  // section would be heading-only (no notes, no image) so the caller
+  // can drop it.
+  _composeVisualNotesBlockForImage(index, block, notesText) {
+    const sourceLabel =
+      block?.sourceLabel ?? this._sourceLabelForImageIndex(index);
     const heading = this._visualNotesHeadingForIndex(index, sourceLabel);
-    const altText = i18n("npn_critique_reply.modal.visual_notes_alt");
-    const shortUrl = upload?.short_url ?? upload?.url ?? "";
-    const imageLine = `![${altText}](${shortUrl})`;
-    if (paragraphs.length === 0) {
-      return `${heading}\n\n${imageLine}`;
+    const parts = [heading];
+    if (notesText) {
+      parts.push(notesText);
     }
-    return `${heading}\n\n${paragraphs.join("\n\n")}\n\n${imageLine}`;
-  }
-
-  // Walk every per-image snapshot and assemble a `token → image_index`
-  // lookup. Tokens are the exact strings that appear between `[` and
-  // `]` in the textarea (so the same key the cooked-post badge
-  // decorator's TOKEN_PATTERN captures).
-  _buildTokenToImageIndexMap() {
-    const map = new Map();
-    const visit = (idx, snap) => {
-      if (!snap) {
-        return;
-      }
-      for (const n of snap.notes ?? []) {
-        if (Number.isInteger(n?.number)) {
-          map.set(String(n.number), idx);
-        }
-      }
-      if (snap.crop) {
-        // Single-crop critiques omit the label and use [Crop]; multi-
-        // crop critiques carry "Crop 1" / "Crop 2" / etc. Register
-        // the actual label when present, otherwise the bare "Crop"
-        // form so the single-crop case still routes correctly.
-        map.set(snap.crop.label ?? "Crop", idx);
-      }
-      for (const arr of [
-        snap.attentionPulls,
-        snap.strongAreas,
-        snap.eyePaths,
-        snap.directionArrows,
-        snap.relationshipArrows,
-      ]) {
-        for (const a of arr ?? []) {
-          if (a?.label && typeof a.label === "string") {
-            map.set(a.label, idx);
-          }
-        }
-      }
-    };
-    for (const [idx, snap] of this._annotationsByImageIndex) {
-      visit(idx, snap);
+    if (block) {
+      const altText = i18n("npn_critique_reply.modal.visual_notes_alt");
+      const shortUrl = block.upload?.short_url ?? block.upload?.url ?? "";
+      parts.push(`![${altText}](${shortUrl})`);
     }
-    return map;
-  }
-
-  // Split the critique text into paragraphs (blank-line separated)
-  // and classify each one: a paragraph whose annotation tokens all
-  // belong to ONE image goes into perImage[that index]; everything
-  // else (no tokens, or tokens from multiple images) stays in
-  // `general`. Preserves original order within each bucket. Mixed-
-  // token paragraphs intentionally stay at the top so a critic
-  // writing about how Crop 2 relates to A1 doesn't get sliced
-  // between two sections.
-  _groupTextParagraphsByImage(text, tokenToImageIndex) {
-    const general = [];
-    const perImage = new Map();
-    if (!text) {
-      return { general, perImage };
+    if (parts.length === 1) {
+      // Heading only — nothing worth rendering.
+      return "";
     }
-    const paragraphs = text.split(/\n{2,}/);
-    for (const p of paragraphs) {
-      if (!p.trim()) {
-        continue;
-      }
-      PARAGRAPH_TOKEN_PATTERN.lastIndex = 0;
-      const indices = new Set();
-      let recognisedTokenCount = 0;
-      for (const match of p.matchAll(PARAGRAPH_TOKEN_PATTERN)) {
-        const idx = tokenToImageIndex.get(match[1]);
-        if (idx != null) {
-          indices.add(idx);
-          recognisedTokenCount += 1;
-        }
-      }
-      if (recognisedTokenCount > 0 && indices.size === 1) {
-        const idx = [...indices][0];
-        if (!perImage.has(idx)) {
-          perImage.set(idx, []);
-        }
-        perImage.get(idx).push(p);
-      } else {
-        general.push(p);
-      }
-    }
-    return { general, perImage };
+    return parts.join("\n\n");
   }
 
   // Bridge between the per-image `visualBlocks` returned by
@@ -2408,6 +2521,7 @@ export default class NpnCritiqueReplyModal extends Component {
         sourceUploadId: b.sourceUploadId,
         sourceLabel: b.sourceLabel,
         visualUpload: b.upload,
+        notesText: this._imageNotesForIndex(b.index),
         pins: b.snapshot?.notes ?? [],
         crop: b.snapshot?.crop ?? null,
         eyePaths: b.snapshot?.eyePaths ?? [],
@@ -2418,12 +2532,45 @@ export default class NpnCritiqueReplyModal extends Component {
         imageTransform: this._imageTransformForIndex(b.index),
       }));
 
+    // Persist notes for images that carry commentary but NO annotations
+    // (so it round-trips on edit). Such images aren't in visualBlocks,
+    // so add them here with empty annotation arrays + a null upload —
+    // the schema records the source + notes; the cooked body renders
+    // heading + notes with no image. Index 0 can't be represented this
+    // way when the head is a different image (the schema reserves
+    // additionalImages for index > 0), so a notes-only PRIMARY without
+    // any annotated image is a known structural-restore gap.
+    const representedIndices = new Set(visualBlocks.map((b) => b.index));
+    const imageCount = Math.max(this.submissionImages.length, 1);
+    for (let i = 1; i < imageCount; i++) {
+      if (representedIndices.has(i)) {
+        continue;
+      }
+      if (this._imageNotesForIndex(i).trim().length === 0) {
+        continue;
+      }
+      additional.push({
+        index: i,
+        sourceUrl: this._sourceUrlForImageIndex(i),
+        sourceUploadId: this._sourceUploadIdForImageIndex(i),
+        sourceLabel: this._sourceLabelForImageIndex(i),
+        visualUpload: null,
+        notesText: this._imageNotesForIndex(i),
+        pins: [],
+        crop: null,
+        eyePaths: [],
+        attentionPulls: [],
+        strongAreas: [],
+        directionArrows: [],
+        relationshipArrows: [],
+        imageTransform: this._imageTransformForIndex(i),
+      });
+    }
+
     // When the only annotated images are non-primary, fall back to
     // passing the FIRST entry as the "primary" so the legacy `source`
-    // field is non-empty. That entry's image_index is still > 0 in
-    // the per-annotation tag; readers that consult `sources` will see
-    // it; readers that only consult the legacy `source` get its
-    // metadata rather than null.
+    // field is non-empty. Notes-only entries are appended AFTER the
+    // annotated ones, so this shift() always picks an annotated image.
     const head = primary ?? additional.shift();
     if (!head) {
       return null;
@@ -2452,6 +2599,12 @@ export default class NpnCritiqueReplyModal extends Component {
       relationshipArrows:
         head.snapshot?.relationshipArrows ?? head.relationshipArrows ?? [],
       imageTransform: this._imageTransformForIndex(head.index),
+      // v2 separated text. Overall critique rides at the top level; the
+      // head image's notes ride as headNotesText; each additional image
+      // carries its own notesText. Edit-restore reads these back so the
+      // contexts stay separate instead of re-parsing the posted body.
+      overallCritiqueText: this.overallCritiqueText,
+      headNotesText: this._imageNotesForIndex(head.index),
       // Tells the schema the head's REAL image index. When image 0 has
       // no annotations but image 1 does, image 1 gets promoted to head
       // and headImageIndex lets the schema tag annotations + source
@@ -3063,11 +3216,13 @@ export default class NpnCritiqueReplyModal extends Component {
     const attribution = this._buildQuoteAttribution();
     const quoteText = this._buildQuoteBlock(text, attribution);
     if (!this.#textManipulation || !this.#textarea) {
-      // Defensive fallback — append to end of critiqueText with
-      // the existing paragraph-spacing convention. The textarea
-      // ref is set by didInsert and lives for the modal's lifetime,
-      // so this path is unexpected in practice.
-      this._appendToTextarea(quoteText);
+      // Defensive fallback — append to the end of the active writing
+      // context with the existing paragraph-spacing convention. The
+      // textarea ref is set by didInsert and lives for the modal's
+      // lifetime, so this path is unexpected in practice. A quote
+      // lands wherever the critic is currently writing (overall or
+      // image notes), not forced into image notes.
+      this._appendToActiveText(quoteText);
     } else {
       try {
         const tm = this.#textManipulation;
@@ -3090,13 +3245,13 @@ export default class NpnCritiqueReplyModal extends Component {
         }
         tm.insertText(payload);
       } catch (e) {
-        // Last-resort fallback — append to end.
+        // Last-resort fallback — append to end of the active context.
         this._recordError("quote_insert", e, null, "warn");
-        this._appendToTextarea(quoteText);
+        this._appendToActiveText(quoteText);
       }
     }
     // Dispatch a synthetic `input` event so the bound
-    // `critiqueText` and the draft autosaver both see the change.
+    // `activeWritingText` and the draft autosaver both see the change.
     // The Textarea component listens on the native `input` event.
     this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
     this.#textarea?.focus();
@@ -3425,6 +3580,10 @@ export default class NpnCritiqueReplyModal extends Component {
       oldIndex,
       this._snapshotCurrentAnnotations()
     );
+    // Same idea for the outgoing image's notes text. The active notes
+    // live in the tracked `_activeImageNotes` field; stash them in cold
+    // storage keyed by the old index so flipping back restores them.
+    this._imageNotesByImageIndex.set(oldIndex, this._activeImageNotes ?? "");
     // Same idea for the rotate/flip state. Each image keeps its own
     // independent orientation — switching back to a previously-rotated
     // image restores the rebake.
@@ -3457,6 +3616,10 @@ export default class NpnCritiqueReplyModal extends Component {
     this._restoreAnnotationsFromSnapshot(
       this._annotationsByImageIndex.get(index)
     );
+    // Restore the incoming image's notes text into the tracked field so
+    // the textarea reflects it when Image Notes is the active context.
+    // Overall critique text is untouched by image switches.
+    this._activeImageNotes = this._imageNotesByImageIndex.get(index) ?? "";
     this._imageTransform = this._imageTransformsByImageIndex.get(index)
       ? { ...this._imageTransformsByImageIndex.get(index) }
       : { ...IDENTITY_TRANSFORM };
@@ -3868,6 +4031,20 @@ export default class NpnCritiqueReplyModal extends Component {
       const t = this._imageTransformForIndex(idx);
       if (t) {
         out[String(idx)] = t;
+      }
+    }
+    return out;
+  }
+
+  // Per-image notes map for the draft payload: { "0": "...", ... }.
+  // The active image's notes were just snapshotted into the map, so we
+  // read straight from cold storage. Blank entries are skipped; the
+  // server normalizer also drops blanks defensively.
+  _collectImageNotesByImage() {
+    const out = {};
+    for (const [idx, text] of this._imageNotesByImageIndex) {
+      if (typeof text === "string" && text.trim().length > 0) {
+        out[String(idx)] = text;
       }
     }
     return out;
@@ -5094,7 +5271,7 @@ export default class NpnCritiqueReplyModal extends Component {
         "npn_critique_reply.visual_notes.area_note_line_template",
         { label: pull.label, text }
       );
-      this._appendToTextarea(line);
+      this._appendToImageNotes(line);
       // Stash on the marker for the a11y list snippet (same as pins).
       this.attentionPulls = this.attentionPulls.map((p) =>
         p.id === id ? { ...p, noteText: text } : p
@@ -5458,7 +5635,7 @@ export default class NpnCritiqueReplyModal extends Component {
         "npn_critique_reply.visual_notes.strong_area_line_template",
         { label: area.label, text }
       );
-      this._appendToTextarea(line);
+      this._appendToImageNotes(line);
       this.strongAreas = this.strongAreas.map((p) =>
         p.id === id ? { ...p, noteText: text } : p
       );
@@ -5632,7 +5809,7 @@ export default class NpnCritiqueReplyModal extends Component {
         "npn_critique_reply.visual_notes.direction_arrow_line_template",
         { label, text }
       );
-      this._appendToTextarea(line);
+      this._appendToImageNotes(line);
       const id = this.pendingDirectionArrowPopover.id;
       this.directionArrows = this.directionArrows.map((a) =>
         a.id === id ? { ...a, noteText: text } : a
@@ -5795,7 +5972,7 @@ export default class NpnCritiqueReplyModal extends Component {
         "npn_critique_reply.visual_notes.relationship_arrow_line_template",
         { label, text }
       );
-      this._appendToTextarea(line);
+      this._appendToImageNotes(line);
       const id = this.pendingRelationshipArrowPopover.id;
       this.relationshipArrows = this.relationshipArrows.map((a) =>
         a.id === id ? { ...a, noteText: text } : a
@@ -5852,7 +6029,7 @@ export default class NpnCritiqueReplyModal extends Component {
         "npn_critique_reply.visual_notes.eye_path_line_template",
         { label, text }
       );
-      this._appendToTextarea(line);
+      this._appendToImageNotes(line);
       // Stash on the path so a future a11y list snippet can show a
       // description summary. With multiple paths each carries its
       // own noteText.
@@ -5919,12 +6096,12 @@ export default class NpnCritiqueReplyModal extends Component {
     // crop's label was assigned at addCrop time.
     const token = this._activeCropToken();
     if (text) {
-      this._appendToTextarea(`${token} ${text}`);
+      this._appendToImageNotes(`${token} ${text}`);
     } else {
       // No description typed → still drop the bare token so the
       // cooked post gets the styled crop pill. The user can fill
       // in the surrounding prose later.
-      this._appendToTextarea(token);
+      this._appendToImageNotes(token);
     }
     this.pendingCropPopover = null;
     this.pendingCropPopoverText = "";
@@ -6143,19 +6320,47 @@ export default class NpnCritiqueReplyModal extends Component {
   // spot if the critic decides to type after the fact.
   _appendPinMarker(number, text) {
     const marker = text ? `[${number}] ${text}` : `[${number}] `;
-    this._appendToTextarea(marker);
+    this._appendToImageNotes(marker);
   }
 
-  // Append text to the textarea with clean paragraph spacing. Always
-  // single `\n\n` between existing content and the new content; never a
-  // run of blank lines. Stale validation/error banners clear as a side
-  // effect since the textarea state has changed.
-  _appendToTextarea(addition) {
-    const trimmed = this.critiqueText.trimEnd();
-    this.critiqueText =
+  // Generic append into whichever context the textarea is editing.
+  // Used by the quote-insert fallback (which should land in the
+  // critic's current writing surface). Always a single `\n\n` between
+  // existing content and the addition; never a run of blank lines.
+  _appendToActiveText(addition) {
+    const trimmed = (this.activeWritingText ?? "").trimEnd();
+    this.activeWritingText =
       trimmed.length > 0 ? `${trimmed}\n\n${addition}` : addition;
     this.validationMessage = null;
     this.errorMessage = null;
+  }
+
+  // Append an annotation reference into the SELECTED image's notes.
+  // Annotation markers ([1] / [A1] / [Crop 2] / ...) are image-specific
+  // and must never land in the overall critique, so this first flips
+  // the writing context to Image Notes (the marker's image is the
+  // active one — the annotation was just created on it), then appends.
+  // Switching context makes the inserted marker visible immediately and
+  // focuses the critic on the notes they're now building for the image.
+  _appendToImageNotes(addition) {
+    if (this.activeWritingContext !== WRITING_CONTEXT_IMAGE) {
+      this.activeWritingContext = WRITING_CONTEXT_IMAGE;
+    }
+    const trimmed = (this._activeImageNotes ?? "").trimEnd();
+    this._activeImageNotes =
+      trimmed.length > 0 ? `${trimmed}\n\n${addition}` : addition;
+    this.validationMessage = null;
+    this.errorMessage = null;
+    // Pull focus into the textarea so the critic can keep typing notes
+    // right after the reference, and screen readers land on the
+    // now-active Image Notes surface.
+    setTimeout(() => {
+      if (this._destroyed) {
+        return;
+      }
+      const el = document.getElementById("npn-critique-reply-textarea");
+      el?.focus?.();
+    }, 0);
   }
 
   // Questions-to-consider expand/collapse. The compact view shows
@@ -6196,19 +6401,21 @@ export default class NpnCritiqueReplyModal extends Component {
 
     this.previewBuilding = true;
     // Snapshot the active image so the preview iterates a consistent
-    // per-image map (the active edits aren't yet in cold storage).
+    // per-image picture (the active edits aren't yet in cold storage) —
+    // both annotations and notes text.
     this._annotationsByImageIndex.set(
       this._selectedImageIndex,
       this._snapshotCurrentAnnotations()
     );
+    this._snapshotActiveImageNotes();
 
     // Flatten ALL annotated images locally — same per-image walk the
     // post pipeline uses, but we stop at Blob/object-URL and don't
     // upload (preview is throwaway; Post Critique re-runs the export
-    // for real). Each rendered image becomes an entry in the preview
-    // snapshot's visualNotesImages array.
+    // for real). Keyed by image index so the section builder below can
+    // pair each render with that image's notes.
     const annotatedImages = this._gatherAnnotatedImagesInSubmissionOrder();
-    const visualNotesImages = [];
+    const objectUrlByIndex = new Map();
     let visualNotesError = null;
     for (const entry of annotatedImages) {
       const sourceUrl = this._sourceUrlForImageIndex(entry.index);
@@ -6235,16 +6442,7 @@ export default class NpnCritiqueReplyModal extends Component {
           relationshipArrows: entry.snapshot.relationshipArrows,
         });
         const blob = await exportCanvasToBlob(canvas);
-        visualNotesImages.push({
-          index: entry.index,
-          label: this._sourceLabelForImageIndex(entry.index),
-          objectUrl: URL.createObjectURL(blob),
-          // Per-image prose paragraphs — set below once we have a
-          // token map. SafeString of pre-rendered badge HTML so the
-          // preview matches the cooked-post body shape (text under
-          // each image with [A1] / [Crop 2] tokens styled).
-          paragraphsHtml: null,
-        });
+        objectUrlByIndex.set(entry.index, URL.createObjectURL(blob));
       } catch (e) {
         // Preview is best-effort: if a flatten fails we still want
         // the critic to see text + processing example + any images
@@ -6261,27 +6459,38 @@ export default class NpnCritiqueReplyModal extends Component {
     }
 
     if (this._destroyed) {
-      for (const entryToRevoke of visualNotesImages) {
-        URL.revokeObjectURL(entryToRevoke.objectUrl);
+      for (const url of objectUrlByIndex.values()) {
+        URL.revokeObjectURL(url);
       }
       return;
     }
 
-    // Per-image grouping for the preview. Mirrors the cooked-post
-    // composition in _prepareReplyText: prose paragraphs whose
-    // tokens belong to ONE image flow under that image; everything
-    // else (general critique, mixed-token paragraphs) stays at the
-    // top.
-    const tokenToImageIndex = this._buildTokenToImageIndexMap();
-    const grouped = this._groupTextParagraphsByImage(
-      this.critiqueText.trim(),
-      tokenToImageIndex
-    );
-    for (const imgEntry of visualNotesImages) {
-      const paras = grouped.perImage.get(imgEntry.index) ?? [];
-      imgEntry.paragraphsHtml = paras.length
-        ? htmlSafe(buildPreviewTextHtml(paras.join("\n\n")))
-        : null;
+    // Build preview image sections — fully explicit, same order and
+    // rule as the cooked post (`_composeImageSections`): an image
+    // appears when it has an annotated render OR notes text, in
+    // submission order. Notes render as pre-styled badge HTML so the
+    // preview matches the cooked body; the image renders when present
+    // (notes-only sections show heading + notes, no image).
+    const visualNotesImages = [];
+    const indices = new Set(objectUrlByIndex.keys());
+    const imageCount = Math.max(this.submissionImages.length, 1);
+    for (let i = 0; i < imageCount; i++) {
+      if (this._imageNotesForIndex(i).trim().length > 0) {
+        indices.add(i);
+      }
+    }
+    for (const idx of [...indices].sort((a, b) => a - b)) {
+      const notes = this._imageNotesForIndex(idx).trim();
+      visualNotesImages.push({
+        index: idx,
+        label: this._sourceLabelForImageIndex(idx),
+        objectUrl: objectUrlByIndex.get(idx) ?? null,
+        // SafeString of pre-rendered badge HTML (text with [A1] /
+        // [Crop 2] tokens styled), or null when this image has no notes.
+        paragraphsHtml: notes
+          ? htmlSafe(buildPreviewTextHtml(notes))
+          : null,
+      });
     }
 
     this._previewSnapshot = {
@@ -6290,10 +6499,9 @@ export default class NpnCritiqueReplyModal extends Component {
       processingExampleUrl: this.processingExample?.url ?? null,
       processingExampleFilename:
         this.processingExample?.filename ?? null,
-      // textBody holds only the GENERAL (no-token / mixed-token)
-      // paragraphs. Per-image prose lives on each
-      // visualNotesImages[i].paragraphsHtml entry above.
-      textBody: grouped.general.join("\n\n"),
+      // textBody is the OVERALL critique only. Per-image notes live on
+      // each visualNotesImages[i].paragraphsHtml entry above.
+      textBody: this.overallCritiqueText.trim(),
       hasVisualNotes: visualNotesImages.length > 0,
       hasProcessingExample: !!this.processingExample,
     };
@@ -6341,6 +6549,10 @@ export default class NpnCritiqueReplyModal extends Component {
     const images = this._previewSnapshot?.visualNotesImages;
     if (Array.isArray(images)) {
       for (const imgEntry of images) {
+        if (!imgEntry.objectUrl) {
+          // Notes-only section — no blob was created for it.
+          continue;
+        }
         try {
           URL.revokeObjectURL(imgEntry.objectUrl);
         } catch (_e) {
@@ -7024,8 +7236,14 @@ export default class NpnCritiqueReplyModal extends Component {
       return "";
     }
     return [
-      this.critiqueText.length,
-      this.critiqueText,
+      // Both writing contexts. The active image's notes live in
+      // `_activeImageNotes`; other images' notes only change on an
+      // image switch, which flips `_selectedImageIndex` below.
+      this.overallCritiqueText.length,
+      this.overallCritiqueText,
+      this._activeImageNotes.length,
+      this._activeImageNotes,
+      this.activeWritingContext,
       this.selectedVersionKey ?? "",
       // Multi-image picker — include the index so an autosave fires
       // when the critic just switches images without other edits.
@@ -7178,18 +7396,19 @@ export default class NpnCritiqueReplyModal extends Component {
     this.appEvents?.trigger(DRAFT_CHANGED_EVENT, { topicId, hasDraft });
   }
 
-  // Compose the current workspace state into the v1 draft shape that
+  // Compose the current workspace state into the v2 draft shape that
   // the server expects. Annotation conversion reuses the existing
   // schema-aware helpers, so any geometry caps / id normalization
   // applied client-side mirrors the server's normalizer.
   _buildDraftPayload() {
-    // Snapshot the active image's edits into the per-image map so
-    // the serialized payload picks them up alongside every other
-    // image's stored annotations.
+    // Snapshot the active image's edits into the per-image maps so the
+    // serialized payload picks them up alongside every other image's
+    // stored annotations + notes.
     this._annotationsByImageIndex.set(
       this._selectedImageIndex,
       this._snapshotCurrentAnnotations()
     );
+    this._snapshotActiveImageNotes();
 
     // Build a flat `annotations` array (back-compat: pre-multi-image
     // readers see one array of all kinds) PLUS a per-image map
@@ -7245,14 +7464,26 @@ export default class NpnCritiqueReplyModal extends Component {
     }
 
     const payload = {
-      schema_version: 1,
+      schema_version: 2,
       selected_image_version_key: this.selectedVersionKey ?? null,
       // Submission multi-image index (0 = primary). Persisted so
       // reopening the draft lands the critic on the same image they
       // were last viewing. Always sent; the server tolerates 0 (the
       // legacy single-image case) as the default.
       selected_image_index: this._selectedImageIndex,
-      critique_text: this.critiqueText ?? "",
+      // v2 separated writing contexts. `critique_text` is still sent
+      // (mirrors overall) so a stale v1 client reading this draft isn't
+      // left with an empty textarea; the server also maps it into
+      // overall on restore when overall is absent.
+      critique_text: this.overallCritiqueText ?? "",
+      overall_critique_text: this.overallCritiqueText ?? "",
+      // Per-image notes map: { "0": "...", "1": "..." }. Mirrors
+      // annotations_by_image. Active image's notes were just snapshotted
+      // into the map above; blank entries are dropped server-side.
+      image_notes_by_image: this._collectImageNotesByImage(),
+      // Which context the textarea was last editing, so reopening lands
+      // the critic back where they left off.
+      active_writing_context: this.activeWritingContext,
       annotations,
       // New multi-image map: { "0": [...], "1": [...], ... }. Used
       // by _restoreDraft to re-populate the per-image snapshot map.
@@ -7330,8 +7561,9 @@ export default class NpnCritiqueReplyModal extends Component {
   //     creating the post in the same session, or after the user
   //     hits the standard composer Edit), we use it directly.
   //   • Otherwise we kick off an async fetch of /posts/:id.json
-  //     and patch `this.critiqueText` once the response arrives.
-  //     This is the page-refresh case — without the fetch, the
+  //     and patch `this.overallCritiqueText` once it arrives (legacy
+  //     posts only; v2 posts restore text structurally from the
+  //     payload). This is the page-refresh case — without the fetch the
   //     textarea would open empty even though the post body is
   //     intact server-side.
   _initializeFromPost() {
@@ -7340,14 +7572,22 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     const payload = post.npn_visual_notes;
+    // Posts written under the v2 schema store overall critique + per-
+    // image notes structurally in the payload, so we restore them
+    // directly and never re-parse the prose body (which can't reliably
+    // tell overall text from image notes). Older posts (v1 / no
+    // payload) fall back to parsing the raw body into the OVERALL
+    // context — legacy critiques never had separate image notes.
+    const usesStructuredText =
+      payload && Number(payload.schema_version) >= 2;
 
-    // Critique text: the post's raw is composed as
-    //   "<heading>\n\n![visual notes](upload://...)\n\n<text>"
-    // by `_composeVisualNotesRaw`. Split on the image-markdown
-    // line and take everything after it. Falls back to the whole
-    // raw if the format doesn't match (e.g. a hand-edited post).
-    if (post.raw) {
-      this.critiqueText = this._parseCritiqueTextFromRaw(post.raw);
+    if (usesStructuredText) {
+      this.overallCritiqueText =
+        typeof payload.overall_critique_text === "string"
+          ? payload.overall_critique_text
+          : "";
+    } else if (post.raw) {
+      this.overallCritiqueText = this._parseCritiqueTextFromRaw(post.raw);
     } else {
       // Fire-and-forget. Modal renders with an empty textarea for
       // the brief window between open and the fetch resolving;
@@ -7377,6 +7617,11 @@ export default class NpnCritiqueReplyModal extends Component {
         activeIndex: 0,
         versionKey,
       });
+      // v2 per-image notes restore — read each image's commentary from
+      // the payload's `sources` entries back into the cold-storage map
+      // (and the active field for image 0). Legacy v1 payloads have no
+      // `notes`, so the map stays empty and image notes start blank.
+      this._restoreImageNotesFromPayload(payload);
       // Image-transform restore. Annotations were stored in post-
       // transform coordinate space, so we need to rebake the original
       // upload through the same transform before the canvas mounts.
@@ -7420,9 +7665,10 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // Async helper: fetch the post's raw markdown over the network
   // when it wasn't present on the post model (the page-refresh
-  // edit case). On success, patch both the post model and the
-  // tracked critiqueText so the textarea fills in. Guards against
-  // modal teardown mid-flight via `_destroyed`.
+  // edit case). On success, patch the post model and the OVERALL
+  // critique text so the textarea fills in. Only reached for legacy
+  // (v1 / no payload) posts — v2 posts restore text structurally and
+  // never need the raw body. Guards against teardown via `_destroyed`.
   async _loadPostRawForEdit(post) {
     try {
       const json = await ajax(`/posts/${post.id}.json`);
@@ -7439,8 +7685,8 @@ export default class NpnCritiqueReplyModal extends Component {
       // Only adopt the fetched text if the user hasn't started
       // typing while the request was in flight. Typing during the
       // 100-200ms RTT is unlikely but real on slow connections.
-      if (!this.critiqueText) {
-        this.critiqueText = text;
+      if (!this.overallCritiqueText) {
+        this.overallCritiqueText = text;
       }
     } catch (e) {
       // Soft failure — leave the textarea empty. We deliberately
@@ -7509,7 +7755,17 @@ export default class NpnCritiqueReplyModal extends Component {
     this._restoringDraft = true;
 
     try {
-      this.critiqueText = draft.critique_text ?? "";
+      // v2 overall critique text, falling back to the legacy
+      // `critique_text` so a v1 draft restores its body into the
+      // overall context rather than losing it. Image notes are
+      // restored alongside annotations below.
+      this.overallCritiqueText =
+        draft.overall_critique_text ?? draft.critique_text ?? "";
+      // Restore the last-active writing context (defaults to overall).
+      this.activeWritingContext =
+        draft.active_writing_context === WRITING_CONTEXT_IMAGE
+          ? WRITING_CONTEXT_IMAGE
+          : WRITING_CONTEXT_OVERALL;
 
       // Restore the multi-image picker selection BEFORE we apply the
       // version key, because secondary images (index >= 1) ignore the
@@ -7546,6 +7802,10 @@ export default class NpnCritiqueReplyModal extends Component {
           activeIndex: this._selectedImageIndex,
           versionKey: draft.selected_image_version_key,
         });
+        // Per-image notes restore from the draft's image_notes_by_image
+        // map. Runs after the active index is set so the active field
+        // reflects the right image.
+        this._restoreImageNotesFromDraft(draft);
         // Image-transform restore. Drafts written after the
         // rotate/flip rollout carry per-image transforms in
         // `image_transforms_by_image` and a top-level
@@ -7703,6 +7963,48 @@ export default class NpnCritiqueReplyModal extends Component {
       }
       this.cropSelected = !!activeSnapshot.crop;
     }
+  }
+
+  // Restore per-image notes text from a posted v2 payload's `sources`
+  // entries into the cold-storage map, and the active field for the
+  // currently-selected image. v1 payloads carry no `notes`, so the map
+  // stays empty (image notes start blank). Call after _selectedImageIndex
+  // is set so the active field reflects the right image.
+  _restoreImageNotesFromPayload(payload) {
+    this._imageNotesByImageIndex.clear();
+    const sources = Array.isArray(payload?.sources) ? payload.sources : [];
+    for (const entry of sources) {
+      const idx = Number.isInteger(entry?.image_index) ? entry.image_index : 0;
+      const notes = typeof entry?.notes === "string" ? entry.notes : "";
+      if (notes.trim().length > 0) {
+        this._imageNotesByImageIndex.set(idx, notes);
+      }
+    }
+    this._activeImageNotes =
+      this._imageNotesByImageIndex.get(this._selectedImageIndex) ?? "";
+  }
+
+  // Restore per-image notes text from a saved draft's
+  // `image_notes_by_image` map ({ "0": "...", ... }). Mirrors the
+  // payload restore above but reads the draft shape. Call after
+  // _selectedImageIndex is restored.
+  _restoreImageNotesFromDraft(draft) {
+    this._imageNotesByImageIndex.clear();
+    const map = draft?.image_notes_by_image;
+    if (map && typeof map === "object") {
+      for (const [key, value] of Object.entries(map)) {
+        const idx = Number.parseInt(key, 10);
+        if (!Number.isInteger(idx) || idx < 0) {
+          continue;
+        }
+        const notes = typeof value === "string" ? value : "";
+        if (notes.trim().length > 0) {
+          this._imageNotesByImageIndex.set(idx, notes);
+        }
+      }
+    }
+    this._activeImageNotes =
+      this._imageNotesByImageIndex.get(this._selectedImageIndex) ?? "";
   }
 
   // Restore rotate/flip state from a post payload's `sources` array
@@ -7917,7 +8219,11 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     this._restoringDraft = true;
-    this.critiqueText = "";
+    // Both writing contexts reset to a clean start.
+    this.overallCritiqueText = "";
+    this._activeImageNotes = "";
+    this._imageNotesByImageIndex.clear();
+    this.activeWritingContext = WRITING_CONTEXT_OVERALL;
     this.notes = [];
     this.crop = null;
     this.eyePaths = [];
@@ -9634,12 +9940,81 @@ export default class NpnCritiqueReplyModal extends Component {
                 Keeps the workspace focused on the response rather
                 than on the supporting material. }}
             <section class="npn-critique-reply-modal__textarea-section">
+              {{! Writing-context switcher. One textarea serves both the
+                  overall critique and the selected image's notes; this
+                  segmented control (ARIA tablist) flips between them.
+                  The Image/Visual Notes tab stays hidden on single-image
+                  critiques until there's something to put there. }}
+              <div
+                class="npn-critique-reply-modal__context-switcher"
+                role="tablist"
+                aria-label={{i18n
+                  "npn_critique_reply.modal.writing_context.switcher_label"
+                }}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  id="npn-critique-reply-context-overall"
+                  aria-controls="npn-critique-reply-textarea"
+                  aria-selected={{if
+                    (eq this.activeWritingContext "overall")
+                    "true"
+                    "false"
+                  }}
+                  class="npn-critique-reply-modal__context-tab
+                    {{if
+                      (eq this.activeWritingContext 'overall')
+                      'is-active'
+                    }}"
+                  disabled={{this.isPosting}}
+                  {{on "click" (fn this.setWritingContext "overall")}}
+                >{{this.overallTabLabel}}</button>
+                {{#if this.imageNotesTabAvailable}}
+                  <button
+                    type="button"
+                    role="tab"
+                    id="npn-critique-reply-context-image"
+                    aria-controls="npn-critique-reply-textarea"
+                    aria-selected={{if
+                      (eq this.activeWritingContext "image")
+                      "true"
+                      "false"
+                    }}
+                    class="npn-critique-reply-modal__context-tab
+                      {{if
+                        (eq this.activeWritingContext 'image')
+                        'is-active'
+                      }}"
+                    disabled={{this.isPosting}}
+                    {{on "click" (fn this.setWritingContext "image")}}
+                  >{{this.imageNotesTabLabel}}{{#if this.activeImageMarkCount}}
+                      <span
+                        class="npn-critique-reply-modal__context-tab-count"
+                      >{{this.activeImageMarkCount}}</span>
+                    {{/if}}</button>
+                {{/if}}
+              </div>
+
               <label
                 for="npn-critique-reply-textarea"
                 class="npn-critique-reply-modal__textarea-label"
               >
-                {{i18n "npn_critique_reply.modal.your_critique"}}
+                {{this.writingPanelHeading}}
               </label>
+
+              {{#if this.imageNotesContextLabel}}
+                <p
+                  class="npn-critique-reply-modal__context-indicator"
+                  aria-live="polite"
+                >
+                  {{this.imageNotesContextLabel}}
+                </p>
+              {{/if}}
+
+              <p class="npn-critique-reply-modal__writing-helper">
+                {{this.writingPanelHelper}}
+              </p>
 
               {{#if this.validationMessage}}
                 <p
@@ -9793,7 +10168,7 @@ export default class NpnCritiqueReplyModal extends Component {
               <Textarea
                 id="npn-critique-reply-textarea"
                 class="npn-critique-reply-modal__textarea"
-                @value={{this.critiqueText}}
+                @value={{this.activeWritingText}}
                 placeholder={{i18n
                   "npn_critique_reply.modal.textarea_placeholder"
                 }}
@@ -10062,13 +10437,15 @@ export default class NpnCritiqueReplyModal extends Component {
                         class="npn-critique-reply-modal__preview-text"
                       >{{imgEntry.paragraphsHtml}}</div>
                     {{/if}}
-                    <img
-                      class="npn-critique-reply-modal__preview-image"
-                      src={{imgEntry.objectUrl}}
-                      alt={{i18n
-                        "npn_critique_reply.modal.preview_section_visual_notes"
-                      }}
-                    />
+                    {{#if imgEntry.objectUrl}}
+                      <img
+                        class="npn-critique-reply-modal__preview-image"
+                        src={{imgEntry.objectUrl}}
+                        alt={{i18n
+                          "npn_critique_reply.modal.preview_section_visual_notes"
+                        }}
+                      />
+                    {{/if}}
                   </section>
                 {{/each}}
               {{/if}}
