@@ -3225,8 +3225,16 @@
   // Composer-style card: centered with a max-width (side spacing on
   // wide screens), flush to the bottom edge, top corners rounded, and
   // the composer's shadow.
+  //
+  // Bottom-pin via auto margins, not `align-items`: a flex item's auto
+  // margins absorb free space and win over the parent's `align-items`,
+  // so `margin-block: auto 0` (top auto, bottom 0) reliably sticks the
+  // card to the viewport bottom even if some other rule flips the
+  // cross-axis alignment back to center. `margin-inline: auto` keeps it
+  // horizontally centered.
   .d-modal__container {
     margin-inline: auto;
+    margin-block: auto 0;
     width: 100%;
     // Mirrors the composer's `$reply-area-max-width` (1475px); the
     // calc guarantees a visible side gap on narrower viewports too.
