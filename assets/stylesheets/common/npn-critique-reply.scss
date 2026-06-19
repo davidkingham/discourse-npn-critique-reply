@@ -3118,15 +3118,29 @@
 }
 
 // Minimize control in the modal header — mirrors the composer's collapse
-// toggle (transparent, muted, angles-down). Pushed to the right edge of
-// the header so it sits immediately to the left of the close X.
-.npn-critique-reply-modal__minimize.btn {
-  margin-inline-start: auto;
-  color: var(--primary-medium);
+// toggle (transparent, muted, angles-down), sitting immediately to the
+// left of the close X.
+//
+// Core's `.d-modal__header` is `justify-content: space-between` and gives
+// `.modal-close` `margin-left: auto`. If we ALSO give the minimize button
+// an auto margin, the free space splits between the two and the button
+// lands dead-centre. So: the minimize button takes the auto margin (it
+// absorbs the gap after the title and pushes itself + the close button to
+// the right), and we drop the close button's auto margin within our modal
+// so the two sit together. Scoped under the modal root for specificity.
+.npn-critique-reply-modal .d-modal__header {
+  .npn-critique-reply-modal__minimize.btn {
+    margin-left: auto;
+    color: var(--primary-medium);
 
-  &:hover,
-  &:focus {
-    color: var(--primary);
+    &:hover,
+    &:focus {
+      color: var(--primary);
+    }
+  }
+
+  .modal-close {
+    margin-left: 0;
   }
 }
 
