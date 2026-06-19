@@ -207,8 +207,7 @@ en:
         # on success.
         minimize:
           label: "Minimize"
-          saving: "Saving…"
-          title: "Minimize — your draft stays saved; resume it from the dock on this topic."
+          title: "Minimize — your draft stays saved; resume it from the dock."
           save_failed: "Couldn’t save your draft, so the workspace stayed open. Check your connection and try again."
         critique_posted: "Critique posted."
         critique_posted_with_notes: "Critique posted with visual notes."

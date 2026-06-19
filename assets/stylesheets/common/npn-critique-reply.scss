@@ -3117,6 +3117,19 @@
   }
 }
 
+// Minimize control in the modal header — mirrors the composer's collapse
+// toggle (transparent, muted, angles-down). Pushed to the right edge of
+// the header so it sits immediately to the left of the close X.
+.npn-critique-reply-modal__minimize.btn {
+  margin-inline-start: auto;
+  color: var(--primary-medium);
+
+  &:hover,
+  &:focus {
+    color: var(--primary);
+  }
+}
+
 // -- Minimized-workspace dock --------------------------------------------
 //
 // Fixed bar shown after the Critique Workspace is minimized (see

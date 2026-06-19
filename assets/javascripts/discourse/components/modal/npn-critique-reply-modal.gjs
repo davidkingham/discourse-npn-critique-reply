@@ -8538,6 +8538,26 @@ export default class NpnCritiqueReplyModal extends Component {
       @beforeClose={{this.beforeClose}}
       class={{this.modalClassNames}}
     >
+      {{! Minimize sits in the header next to the X, styled like the
+          composer's collapse control (transparent, angles-down). It
+          force-saves the draft and drops a "Critique in progress" dock
+          on the topic so the critic can step away and come back without
+          fear of losing work. Only when drafts are enabled (the dock
+          resumes from the server draft) and not in preview. }}
+      <:headerBelowTitle>
+        {{#if this.canMinimize}}
+          <DButton
+            class="btn-transparent toggle-minimize npn-critique-reply-modal__minimize"
+            @icon="angles-down"
+            @action={{this.minimize}}
+            @ariaLabel="npn_critique_reply.modal.minimize.label"
+            @title="npn_critique_reply.modal.minimize.title"
+            @disabled={{this.isPosting}}
+            @isLoading={{this._minimizing}}
+          />
+        {{/if}}
+      </:headerBelowTitle>
+
       <:body>
         {{! Hidden autosave anchor. didUpdate fires whenever any
             draft-relevant tracked state changes (via draftSignature),
@@ -10837,28 +10857,6 @@ export default class NpnCritiqueReplyModal extends Component {
               @disabled={{this.isPosting}}
             />
           {{/if}}
-        {{/if}}
-
-        {{! Minimize — force-saves the draft, then closes the workspace
-            and drops a "Critique in progress" dock on the topic so the
-            critic can step away (e.g. to Copy Quote another reply) and
-            come back without fear of losing work. Only when drafts are
-            enabled (the dock resumes from the server draft) and not in
-            preview (resume always returns to edit). }}
-        {{#if this.canMinimize}}
-          <DButton
-            class="btn-flat npn-critique-reply-modal__minimize"
-            @action={{this.minimize}}
-            @icon="window-minimize"
-            @label={{if
-              this._minimizing
-              "npn_critique_reply.modal.minimize.saving"
-              "npn_critique_reply.modal.minimize.label"
-            }}
-            @title="npn_critique_reply.modal.minimize.title"
-            @disabled={{this.isPosting}}
-            @isLoading={{this._minimizing}}
-          />
         {{/if}}
 
         {{! Quiet — pushed to the far right via flex on the footer.
