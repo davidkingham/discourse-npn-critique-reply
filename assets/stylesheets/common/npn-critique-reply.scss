@@ -3222,19 +3222,23 @@
     pointer-events: none;
   }
 
-  // Composer-style card: centered with a max-width (side spacing on
-  // wide screens), flush to the bottom edge, top corners rounded, and
+  // Composer-style card: pinned to the viewport bottom, centered with a
+  // max-width (side spacing on wide screens), top corners rounded, and
   // the composer's shadow.
   //
-  // Bottom-pin via auto margins, not `align-items`: a flex item's auto
-  // margins absorb free space and win over the parent's `align-items`,
-  // so `margin-block: auto 0` (top auto, bottom 0) reliably sticks the
-  // card to the viewport bottom even if some other rule flips the
-  // cross-axis alignment back to center. `margin-inline: auto` keeps it
-  // horizontally centered.
+  // Bottom-pin with `position: fixed; bottom: 0` rather than the flex
+  // parent's `align-items`/auto-margins — those proved unreliable here
+  // (the card kept rendering vertically centered). This is exactly how
+  // the composer's `#reply-control` anchors itself. `.d-modal` is itself
+  // fixed-to-viewport and never transformed, so the card's fixed
+  // containing block is the viewport: `bottom: 0` is the viewport bottom.
   .d-modal__container {
+    position: fixed;
+    bottom: 0;
+    top: auto;
+    left: 0;
+    right: 0;
     margin-inline: auto;
-    margin-block: auto 0;
     width: 100%;
     // Mirrors the composer's `$reply-area-max-width` (1475px); the
     // calc guarantees a visible side gap on narrower viewports too.
