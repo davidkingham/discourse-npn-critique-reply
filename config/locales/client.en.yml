@@ -200,6 +200,9 @@ en:
           label: "Minimize"
           title: "Minimize — your draft stays saved; resume it from the dock."
           save_failed: "Couldn’t save your draft, so the workspace stayed open. Check your connection and try again."
+        # Experimental docked workspace (npn_critique_reply_docked_experiment).
+        docked:
+          resize: "Drag to resize the critique workspace (Up/Down arrows to adjust)"
         critique_posted: "Critique posted."
         critique_posted_with_notes: "Critique posted with visual notes."
         validation_empty: "Write a critique or use the prompts first."

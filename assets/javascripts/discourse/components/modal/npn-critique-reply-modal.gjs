@@ -171,6 +171,36 @@ function writeBool(key, value) {
   }
 }
 
+function readNumber(key, fallback) {
+  try {
+    const raw = window.localStorage?.getItem(key);
+    if (raw === null || raw === undefined || raw === "") {
+      return fallback;
+    }
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? n : fallback;
+  } catch (_e) {
+    return fallback;
+  }
+}
+
+function writeNumber(key, value) {
+  try {
+    window.localStorage?.setItem(key, String(value));
+  } catch (_e) {
+    // Storage unavailable / quota / disabled — silently skip.
+  }
+}
+
+// Docked-experiment panel height (px) persisted across opens. Only used
+// when the `npn_critique_reply_docked_experiment` site setting is on —
+// the docked workspace can be dragged taller/shorter by its top-edge
+// grippie, and the chosen height is remembered. Min keeps the header +
+// footer usable; max leaves a sliver of topic visible above the dock.
+const STORAGE_KEY_DOCKED_HEIGHT = "npn-critique-reply.docked-height";
+const DOCKED_MIN_HEIGHT = 220;
+const DOCKED_MAX_VIEWPORT_FRACTION = 0.92;
+
 // Critique workspace modal. Two-column on desktop, stacked on mobile.
 //
 // New in this step: "Post Critique" creates a real Discourse reply via a
@@ -303,6 +333,19 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked linkFormUrl = "";
   @tracked linkFormText = "";
   _linkPreservedSelection = null;
+
+  // Docked-experiment resize state (gated by the
+  // `npn_critique_reply_docked_experiment` setting). `_dockedHeightPx`
+  // is the dragged panel height in pixels; null means "use the CSS
+  // default" (60vh) until the critic drags the grippie or a persisted
+  // value is restored. `_dockedResizing` toggles a class that disables
+  // transitions + text-selection while a drag is in flight.
+  @tracked _dockedHeightPx = readNumber(STORAGE_KEY_DOCKED_HEIGHT, null);
+  @tracked _dockedResizing = false;
+  // Bound pointer handlers, attached to window during a grippie drag so
+  // the drag keeps tracking even when the cursor leaves the handle.
+  #dockedPointerMove = null;
+  #dockedPointerUp = null;
 
   // Writing state --------------------------------------------------------
   //
@@ -783,6 +826,8 @@ export default class NpnCritiqueReplyModal extends Component {
     this._destroyed = true;
     this._autosaver?.destroy?.();
     this._autosaver = null;
+    // Drop any in-flight docked-resize window listeners.
+    this._teardownDockedResize();
     // Drop refs so the GC can clear the textarea and the
     // TextareaTextManipulation helper. The dAutocomplete modifier
     // wires its own teardown when the textarea is removed from the
@@ -1346,10 +1391,113 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.previewMode) {
       parts.push("npn-critique-reply-modal--preview");
     }
-    if (this.siteSettings.npn_critique_reply_docked_experiment) {
+    if (this.dockedExperimentEnabled) {
       parts.push("npn-critique-reply-modal--docked-experiment");
+      if (this._dockedResizing) {
+        parts.push("npn-critique-reply-modal--docked-resizing");
+      }
     }
     return parts.join(" ");
+  }
+
+  // ---- Docked-experiment resize ----------------------------------------
+  //
+  // Gated by the `npn_critique_reply_docked_experiment` setting. The
+  // docked workspace gets a top-edge grippie (rendered in DModal's
+  // `<:aboveHeader>` slot) that drags the panel taller/shorter, like the
+  // composer. Height is written to `--npn-docked-height` on the modal
+  // root (DModal forwards `style` via `...attributes`), inherited by
+  // `.d-modal__container` where the SCSS reads it; persisted so the
+  // critic's chosen height survives reopen.
+
+  get dockedExperimentEnabled() {
+    return this.siteSettings.npn_critique_reply_docked_experiment;
+  }
+
+  // Inline `style` for the modal root. Sets the height custom property
+  // only when docked AND a height has been chosen — otherwise the SCSS
+  // fallback (60vh) applies. Harmless when the setting is off (the var
+  // goes unread).
+  get dockedStyle() {
+    if (!this.dockedExperimentEnabled || this._dockedHeightPx == null) {
+      return null;
+    }
+    return htmlSafe(`--npn-docked-height: ${this._dockedHeightPx}px;`);
+  }
+
+  _clampDockedHeight(px) {
+    const max = Math.round(window.innerHeight * DOCKED_MAX_VIEWPORT_FRACTION);
+    return Math.min(Math.max(px, DOCKED_MIN_HEIGHT), max);
+  }
+
+  @action
+  startDockedResize(event) {
+    // Primary button / touch / pen only; ignore secondary clicks.
+    if (event.button != null && event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+
+    this._dockedResizing = true;
+
+    const onMove = (moveEvent) => {
+      // The grippie sits at the panel's top edge; dragging up grows the
+      // panel. Height = distance from the pointer to the viewport bottom.
+      const clientY =
+        moveEvent.touches?.[0]?.clientY ?? moveEvent.clientY ?? 0;
+      const next = this._clampDockedHeight(window.innerHeight - clientY);
+      this._dockedHeightPx = next;
+    };
+
+    const onUp = () => {
+      this._dockedResizing = false;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      this.#dockedPointerMove = null;
+      this.#dockedPointerUp = null;
+      if (this._dockedHeightPx != null) {
+        writeNumber(STORAGE_KEY_DOCKED_HEIGHT, this._dockedHeightPx);
+      }
+    };
+
+    this.#dockedPointerMove = onMove;
+    this.#dockedPointerUp = onUp;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }
+
+  // Keyboard a11y: arrow keys nudge the height when the grippie is
+  // focused, so resize isn't mouse-only.
+  @action
+  nudgeDockedResize(event) {
+    const STEP = 32;
+    let delta = 0;
+    if (event.key === "ArrowUp") {
+      delta = STEP;
+    } else if (event.key === "ArrowDown") {
+      delta = -STEP;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    const current =
+      this._dockedHeightPx ?? Math.round(window.innerHeight * 0.6);
+    this._dockedHeightPx = this._clampDockedHeight(current + delta);
+    writeNumber(STORAGE_KEY_DOCKED_HEIGHT, this._dockedHeightPx);
+  }
+
+  _teardownDockedResize() {
+    if (this.#dockedPointerMove) {
+      window.removeEventListener("pointermove", this.#dockedPointerMove);
+      this.#dockedPointerMove = null;
+    }
+    if (this.#dockedPointerUp) {
+      window.removeEventListener("pointerup", this.#dockedPointerUp);
+      window.removeEventListener("pointercancel", this.#dockedPointerUp);
+      this.#dockedPointerUp = null;
+    }
   }
 
   // ---- Image versions --------------------------------------------------
@@ -8429,7 +8577,29 @@ export default class NpnCritiqueReplyModal extends Component {
       @closeModal={{@closeModal}}
       @beforeClose={{this.beforeClose}}
       class={{this.modalClassNames}}
+      style={{this.dockedStyle}}
     >
+      <:aboveHeader>
+        {{! Composer-style top-edge grippie. Drag to grow/shrink the
+            docked panel; arrow keys nudge it for keyboard users. Only
+            rendered in the docked experiment — the named block itself
+            must stay unconditional (Glimmer forbids wrapping a
+            `<:block>` in `{{#if}}`), so the guard lives inside. }}
+        {{#if this.dockedExperimentEnabled}}
+          <div
+            class="npn-critique-reply-modal__resizer"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={{i18n "npn_critique_reply.modal.docked.resize"}}
+            tabindex="0"
+            {{on "pointerdown" this.startDockedResize}}
+            {{on "keydown" this.nudgeDockedResize}}
+          >
+            <span class="npn-critique-reply-modal__resizer-grip"></span>
+          </div>
+        {{/if}}
+      </:aboveHeader>
+
       <:headerBelowTitle>
         {{! Minimize sits in the header next to the X, styled like the
             composer's collapse control (transparent, angles-down). It
