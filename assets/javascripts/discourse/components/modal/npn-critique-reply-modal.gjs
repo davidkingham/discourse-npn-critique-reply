@@ -8556,6 +8556,20 @@ export default class NpnCritiqueReplyModal extends Component {
             @isLoading={{this._minimizing}}
           />
         {{/if}}
+        {{! In Larger Image (Visual Focus) mode the close X is hidden
+            (it would otherwise read as "close the whole critique" when
+            it actually just exits the large view). Surface an explicit
+            "Return to Critique" here instead, beside Minimize. }}
+        {{#if this.visualFocusMode}}
+          <DButton
+            class="btn-flat npn-critique-reply-modal__return-to-critique"
+            @action={{this.toggleVisualFocusMode}}
+            @icon="arrow-left"
+            @label="npn_critique_reply.modal.visual_focus.exit"
+            @title="npn_critique_reply.modal.visual_focus.exit_title"
+            @disabled={{this.isPosting}}
+          />
+        {{/if}}
       </:headerBelowTitle>
 
       <:body>
@@ -8656,26 +8670,21 @@ export default class NpnCritiqueReplyModal extends Component {
                       the inline link near "Showing X" status and
                       via the Optional Processing Example section
                       lower in the pane. }}
-                  <DButton
-                    class="btn-flat btn-small npn-critique-reply-modal__visual-focus-toggle"
-                    @action={{this.toggleVisualFocusMode}}
-                    @icon={{if
-                      this.visualFocusMode
-                      "down-left-and-up-right-to-center"
-                      "up-right-and-down-left-from-center"
-                    }}
-                    @label={{if
-                      this.visualFocusMode
-                      "npn_critique_reply.modal.visual_focus.exit"
-                      "npn_critique_reply.modal.visual_focus.enter"
-                    }}
-                    @title={{if
-                      this.visualFocusMode
-                      "npn_critique_reply.modal.visual_focus.exit_title"
-                      "npn_critique_reply.modal.visual_focus.enter_title"
-                    }}
-                    aria-pressed={{if this.visualFocusMode "true" "false"}}
-                  />
+                  {{! "Larger Image" entry only. Exiting Larger Image
+                      is handled by the "Return to Critique" button in
+                      the modal header (next to Minimize), so we don't
+                      duplicate a return control down here in focus
+                      mode. }}
+                  {{#unless this.visualFocusMode}}
+                    <DButton
+                      class="btn-flat btn-small npn-critique-reply-modal__visual-focus-toggle"
+                      @action={{this.toggleVisualFocusMode}}
+                      @icon="up-right-and-down-left-from-center"
+                      @label="npn_critique_reply.modal.visual_focus.enter"
+                      @title="npn_critique_reply.modal.visual_focus.enter_title"
+                      aria-pressed="false"
+                    />
+                  {{/unless}}
                 </div>
               </div>
 

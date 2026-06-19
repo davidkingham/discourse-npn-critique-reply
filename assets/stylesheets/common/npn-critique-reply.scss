@@ -3144,6 +3144,14 @@
   }
 }
 
+// Larger Image (Visual Focus) mode: hide the close X — it would read as
+// "close the whole critique" but in this mode only exits the large view.
+// The explicit "Return to Critique" button in the header handles that
+// instead (Esc / click-outside still exit the large view via beforeClose).
+.npn-critique-reply-modal--visual-focus .d-modal__header .modal-close {
+  display: none;
+}
+
 // -- Minimized-workspace dock --------------------------------------------
 //
 // Fixed bar shown after the Critique Workspace is minimized (see
