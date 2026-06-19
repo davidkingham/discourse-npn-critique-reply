@@ -3197,16 +3197,17 @@
 // The dock height comes from `--npn-docked-height`: the SCSS default
 // (60vh) until the grippie drag sets an inline px value on the modal
 // root (forwarded via DModal's `...attributes`), which inherits to
-// `.d-modal__container`. The DModal focus trap + body-scroll-lock
-// still apply (keyboard focus stays captured, topic wheel-scroll is
-// locked) — lifting those needs the larger non-modal panel refactor.
+// `.d-modal__container`. Background page scroll is restored (see the
+// `html.modal-open:has(...)` override below) so the topic scrolls
+// behind the dock like the composer; the DModal focus trap still
+// applies (Tab stays inside the panel).
 //
 // Fully reversible: turn the setting off, or delete this block + the
 // setting + the `modalClassNames` branch + the `<:aboveHeader>` grippie.
 // ---------------------------------------------------------------------
 .d-modal.npn-critique-reply-modal--docked-experiment {
   // Height of the docked panel. Leaving the upper viewport free is the
-  // whole point — that strip of topic stays visible and selectable
+  // whole point — that strip of topic stays visible and scrollable
   // above the dock.
   --npn-docked-height: 60vh;
 
@@ -3221,17 +3222,22 @@
     pointer-events: none;
   }
 
-  // Full-width card flush to the bottom, composer-style.
+  // Composer-style card: centered with a max-width (side spacing on
+  // wide screens), flush to the bottom edge, top corners rounded, and
+  // the composer's shadow.
   .d-modal__container {
-    margin: 0;
+    margin-inline: auto;
     width: 100%;
-    max-width: 100%;
+    // Mirrors the composer's `$reply-area-max-width` (1475px); the
+    // calc guarantees a visible side gap on narrower viewports too.
+    max-width: min(1475px, calc(100vw - 3em));
     height: var(--npn-docked-height);
     --modal-max-height: var(--npn-docked-height);
     max-height: var(--npn-docked-height);
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.18);
+    border-radius: 0;
+    border-top-left-radius: var(--d-border-radius-large);
+    border-top-right-radius: var(--d-border-radius-large);
+    box-shadow: var(--shadow-composer);
   }
 
   // The two-pane layout uses a fixed height tuned for the centered
@@ -3282,5 +3288,21 @@
   .d-modal__container * {
     user-select: none;
   }
+}
+
+// Restore background page scroll while the docked workspace is open, so
+// the topic scrolls behind the dock like the composer. DModal otherwise
+// locks scroll two ways, both undone here for the docked experiment only:
+//   1. the `html.modal-open { overflow: hidden }` stylesheet rule, and
+//   2. an INLINE `overflow:hidden` + scrollbar `padding-right` that
+//      body-scroll-lock's `setOverflowForPc()` writes onto <html>.
+// A stylesheet `!important` declaration beats an inline non-important
+// one, so this wins over (2) as well as (1). The `:has()` scope keeps it
+// strictly limited to when our docked panel is mounted. On modal close
+// DModal's own unlock restores everything — we never touch its JS state.
+html.modal-open:has(.npn-critique-reply-modal--docked-experiment) {
+  overflow: auto !important;
+  padding-right: 0 !important;
+  scrollbar-gutter: auto !important;
 }
 

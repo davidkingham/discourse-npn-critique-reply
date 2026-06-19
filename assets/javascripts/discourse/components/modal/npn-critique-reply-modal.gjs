@@ -8582,9 +8582,10 @@ export default class NpnCritiqueReplyModal extends Component {
       <:aboveHeader>
         {{! Composer-style top-edge grippie. Drag to grow/shrink the
             docked panel; arrow keys nudge it for keyboard users. Only
-            rendered in the docked experiment — the named block itself
-            must stay unconditional (Glimmer forbids wrapping a
-            `<:block>` in `{{#if}}`), so the guard lives inside. }}
+            rendered in the docked experiment. The named block itself
+            must stay unconditional because Glimmer forbids conditionally
+            rendering a named block, so the guard lives inside. Keep this
+            comment free of template-token characters. }}
         {{#if this.dockedExperimentEnabled}}
           <div
             class="npn-critique-reply-modal__resizer"
