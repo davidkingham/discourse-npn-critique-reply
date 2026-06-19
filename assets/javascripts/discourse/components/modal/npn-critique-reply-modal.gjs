@@ -5,6 +5,7 @@ import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { getOwner } from "@ember/owner";
 import didInsert from "@ember/render-modifiers/modifiers/did-insert";
+import { next } from "@ember/runloop";
 import { service } from "@ember/service";
 import { htmlSafe } from "@ember/template";
 import { tracked } from "@glimmer/tracking";
@@ -1345,7 +1346,20 @@ export default class NpnCritiqueReplyModal extends Component {
     // longer "minimized", so clear any lingering dock session. Only an
     // explicit Minimize (on close) re-creates it. Prevents a stale dock
     // showing behind/after a workspace opened via a non-dock entry point.
-    this.npnCritiqueWorkspace.clear();
+    //
+    // Deferred via `next` because the dock (rendered in the application
+    // outlet) reads the service's `active` during this same render pass;
+    // mutating it synchronously in the constructor trips Ember's
+    // "modified after consumed" assertion. Running on the next runloop
+    // tick moves the write to a fresh computation. The one-frame window
+    // where the dock state is still set is invisible — the modal's
+    // backdrop is already covering the page.
+    next(() => {
+      if (this.isDestroying || this.isDestroyed) {
+        return;
+      }
+      this.npnCritiqueWorkspace.clear();
+    });
 
     // Set up window-level error capture so async failures that bypass
     // our explicit try/catch sites still leave a breadcrumb in
