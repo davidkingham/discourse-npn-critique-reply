@@ -1174,8 +1174,11 @@ export default class NpnCritiqueReplyModal extends Component {
       component: UserAutocompleteResults,
       key: UserAutocompleteResults.TRIGGER_KEY,
       width: "100%",
+      // `treatAsTextarea` computes the caret coords for a multi-line
+      // textarea. We intentionally DON'T set `fixedTextareaPosition` so
+      // the suggestion popup anchors at the cursor (like the standard
+      // composer) rather than pinned to the textarea's top edge.
       treatAsTextarea: true,
-      fixedTextareaPosition: true,
       autoSelectFirstSuggestion: true,
       transformComplete: (obj) => obj.username || obj.name,
       // Pass topic + category context so an empty `@` eagerly surfaces
