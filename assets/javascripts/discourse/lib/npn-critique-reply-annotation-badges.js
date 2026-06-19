@@ -137,8 +137,11 @@ function collectEligibleTextNodes(root) {
 
 // Rewrite a single text node, replacing valid annotation references
 // with badge <span>s and leaving everything else untouched. Returns
-// silently when there's nothing to replace.
-function replaceTokensInTextNode(textNode, labelMap) {
+// silently when there's nothing to replace. `resolveSuffix(label)`
+// returns the CSS-suffix for a token, or a falsy value to leave it as
+// plain text — the posted-critique path resolves via the annotations
+// labelMap, the modal Preview resolves by label pattern.
+function replaceTokensInTextNode(textNode, resolveSuffix) {
   const text = textNode.nodeValue;
   // Reset the global regex's lastIndex each call — String#matchAll
   // creates a fresh iterator so this is defensive against future
@@ -146,7 +149,7 @@ function replaceTokensInTextNode(textNode, labelMap) {
   TOKEN_PATTERN.lastIndex = 0;
   const matches = [];
   for (const match of text.matchAll(TOKEN_PATTERN)) {
-    if (labelMap.has(match[1])) {
+    if (resolveSuffix(match[1])) {
       matches.push(match);
     }
   }
@@ -158,7 +161,7 @@ function replaceTokensInTextNode(textNode, labelMap) {
   let cursor = 0;
   for (const match of matches) {
     const label = match[1];
-    const suffix = labelMap.get(label);
+    const suffix = resolveSuffix(label);
     if (match.index > cursor) {
       fragment.appendChild(
         document.createTextNode(text.slice(cursor, match.index))
@@ -198,8 +201,21 @@ export function decorateCriticueReplyAnnotations(cookedElement, helper) {
   if (labelMap.size === 0) {
     return;
   }
-  const nodes = collectEligibleTextNodes(cookedElement);
+  decorateAnnotationTokens(cookedElement, (label) => labelMap.get(label));
+}
+
+// Reusable: decorate an arbitrary element's annotation-reference tokens
+// into badge spans, given a `resolveSuffix(label) -> suffix|falsy`
+// function. Shares the TreeWalker + skip-ancestor rules with the posted-
+// critique decorator above, so the modal Preview (which cooks the draft
+// text and resolves variants by label pattern) stays in lockstep with how
+// the final post renders.
+export function decorateAnnotationTokens(element, resolveSuffix) {
+  if (!element || typeof resolveSuffix !== "function") {
+    return;
+  }
+  const nodes = collectEligibleTextNodes(element);
   for (const node of nodes) {
-    replaceTokensInTextNode(node, labelMap);
+    replaceTokensInTextNode(node, resolveSuffix);
   }
 }

@@ -16,6 +16,7 @@ import { ajax } from "discourse/lib/ajax";
 import dAutocomplete from "discourse/ui-kit/modifiers/d-autocomplete";
 import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { getURLWithCDN } from "discourse/lib/get-url";
+import { cook } from "discourse/lib/text";
 import TextareaTextManipulation, {
   TextareaAutocompleteHandler,
 } from "discourse/lib/textarea-text-manipulation";
@@ -25,6 +26,7 @@ import Draft from "discourse/models/draft";
 import { and, eq, or } from "discourse/truth-helpers";
 import { i18n } from "discourse-i18n";
 import NpnCritiqueImageReference from "../npn-critique-image-reference";
+import { decorateAnnotationTokens } from "../../lib/npn-critique-reply-annotation-badges";
 import {
   critiqueStyleLabel,
   feedbackFocusLabel,
@@ -235,17 +237,12 @@ function snapshotHasAnnotations(snapshot) {
   return countSnapshotAnnotations(snapshot) > 0;
 }
 
-// Annotation token shape — mirrors the cooked-post decorator's
-// TOKEN_PATTERN so the preview shows references using the same family
-// of badge styles. Variants resolve to CSS classes named in
-// `npn-critique-reply.scss` (.npn-annotation-badge--{variant}).
-// `Crop \d` covers the multi-crop labels stamped by the modal once a
-// critique has 2+ crops; the legacy `Crop` / `CROP` forms still
-// match for single-crop critiques and posts written before the
-// rename.
-const PREVIEW_TOKEN_PATTERN =
-  /\[([1-9]\d{0,2}|Crop \d{1,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
-
+// Maps an annotation-reference label to its badge CSS-suffix variant
+// (.npn-annotation-badge--{variant} in npn-critique-reply.scss), by the
+// same label family the cooked-post decorator recognises. Numeric → pins;
+// `Crop` / `CROP` / `Crop N` → crop; A/S/D/R/E prefixes → the other kinds.
+// Used to re-badge the cooked Preview HTML so previewed references match
+// the badges on the final post.
 function badgeVariantForLabel(label) {
   if (/^\d/.test(label)) {
     return "note";
@@ -268,65 +265,6 @@ function badgeVariantForLabel(label) {
     default:
       return null;
   }
-}
-
-// Build the preview's annotated-text HTML directly so template
-// whitespace can't leak into a `pre-wrap` container and visually
-// indent badges relative to the surrounding prose. Paragraphs split
-// on blank lines (`\n\n+`); single newlines inside a paragraph
-// become `<br>`. Badges become styled <span>s with the same .npn-
-// annotation-badge classes the cooked-post decorator uses, so the
-// preview reads as a faithful approximation of the final post.
-function buildPreviewTextHtml(text) {
-  const paragraphs = text.split(/\n{2,}/);
-  return paragraphs
-    .map(buildPreviewParagraphHtml)
-    .filter((p) => p && p.length > 0)
-    .join("");
-}
-
-function buildPreviewParagraphHtml(paragraph) {
-  if (!paragraph.trim()) {
-    return "";
-  }
-  PREVIEW_TOKEN_PATTERN.lastIndex = 0;
-  const parts = [];
-  let cursor = 0;
-  for (const match of paragraph.matchAll(PREVIEW_TOKEN_PATTERN)) {
-    const variant = badgeVariantForLabel(match[1]);
-    if (!variant) {
-      continue;
-    }
-    if (match.index > cursor) {
-      parts.push(escapePreviewHtml(paragraph.slice(cursor, match.index)));
-    }
-    const label = match[1];
-    parts.push(
-      `<span class="npn-annotation-badge npn-annotation-badge--${variant}"` +
-        ` data-label="${escapePreviewAttr(label)}">` +
-        `${escapePreviewHtml(label)}</span>`
-    );
-    cursor = match.index + match[0].length;
-  }
-  if (cursor < paragraph.length) {
-    parts.push(escapePreviewHtml(paragraph.slice(cursor)));
-  }
-  if (parts.length === 0) {
-    parts.push(escapePreviewHtml(paragraph));
-  }
-  const inner = parts.join("").replace(/\n/g, "<br>");
-  return `<p class="npn-critique-reply-modal__preview-paragraph">${inner}</p>`;
-}
-
-function escapePreviewHtml(text) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function escapePreviewAttr(text) {
-  return escapePreviewHtml(text).replace(/"/g, "&quot;");
 }
 
 export default class NpnCritiqueReplyModal extends Component {
@@ -6655,12 +6593,22 @@ export default class NpnCritiqueReplyModal extends Component {
         index: idx,
         label: this._sourceLabelForImageIndex(idx),
         objectUrl: objectUrlByIndex.get(idx) ?? null,
-        // SafeString of pre-rendered badge HTML (text with [A1] /
-        // [Crop 2] tokens styled), or null when this image has no notes.
-        paragraphsHtml: notes
-          ? htmlSafe(buildPreviewTextHtml(notes))
-          : null,
+        // Cooked HTML (real markdown — quotes, links, mentions, lists)
+        // with annotation tokens re-badged, or null when no notes. Cooked
+        // here (not in a getter) because the cooker is async.
+        paragraphsHtml: await this._cookPreviewHtml(notes),
       });
+    }
+
+    const textBody = this.overallCritiqueText.trim();
+    const textBodyHtml = await this._cookPreviewHtml(textBody);
+    if (this._destroyed) {
+      for (const e of visualNotesImages) {
+        if (e.objectUrl) {
+          URL.revokeObjectURL(e.objectUrl);
+        }
+      }
+      return;
     }
 
     this._previewSnapshot = {
@@ -6669,9 +6617,10 @@ export default class NpnCritiqueReplyModal extends Component {
       processingExampleUrl: this.processingExample?.url ?? null,
       processingExampleFilename:
         this.processingExample?.filename ?? null,
-      // textBody is the OVERALL critique only. Per-image notes live on
-      // each visualNotesImages[i].paragraphsHtml entry above.
-      textBody: this.overallCritiqueText.trim(),
+      // textBody is the OVERALL critique (raw, drives the empty-state
+      // gate); textBodyHtml is its cooked + re-badged HTML for display.
+      textBody,
+      textBodyHtml,
       hasVisualNotes: visualNotesImages.length > 0,
       hasProcessingExample: !!this.processingExample,
     };
@@ -6734,17 +6683,33 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   // Preview body HTML for the critique text section. Built directly
-  // (rather than via {{#each}} fragments) so template-source whitespace
-  // can't leak into the rendered DOM and indent badges relative to
-  // the surrounding prose. Paragraphs split on blank lines; tokens like
-  // [1] / [E1] / [A1] / [Crop] become the same styled spans the cooked-
-  // post decorator emits.
+  // Cooked + re-badged HTML for the overall critique, computed in
+  // enterPreview (the cooker is async) and stored on the snapshot.
   get previewTextHtml() {
-    const text = this._previewSnapshot?.textBody ?? "";
-    if (!text) {
+    return this._previewSnapshot?.textBodyHtml ?? null;
+  }
+
+  // Cook draft text through Discourse's real markdown cooker so the
+  // preview renders quotes, links, @mentions, lists, etc. exactly like
+  // the posted critique, then re-badge annotation references ([A1] /
+  // [Crop 2] / …) using the post decorator's walk + the modal's
+  // label→variant map. Returns a SafeString, or null for empty text.
+  async _cookPreviewHtml(text) {
+    const trimmed = (text ?? "").trim();
+    if (!trimmed) {
       return null;
     }
-    return htmlSafe(buildPreviewTextHtml(text));
+    let cooked;
+    try {
+      cooked = await cook(trimmed);
+    } catch (e) {
+      this._recordError("preview_cook", e, null, "warn");
+      return null;
+    }
+    const div = document.createElement("div");
+    div.innerHTML = cooked?.toString?.() ?? String(cooked ?? "");
+    decorateAnnotationTokens(div, badgeVariantForLabel);
+    return htmlSafe(div.innerHTML);
   }
 
   get previewHasText() {
@@ -10582,7 +10547,7 @@ export default class NpnCritiqueReplyModal extends Component {
                     }}
                   </h3>
                   <div
-                    class="npn-critique-reply-modal__preview-text"
+                    class="npn-critique-reply-modal__preview-text cooked"
                   >{{this.previewTextHtml}}</div>
                 </section>
               {{/if}}
@@ -10633,7 +10598,7 @@ export default class NpnCritiqueReplyModal extends Component {
                     </h3>
                     {{#if imgEntry.paragraphsHtml}}
                       <div
-                        class="npn-critique-reply-modal__preview-text"
+                        class="npn-critique-reply-modal__preview-text cooked"
                       >{{imgEntry.paragraphsHtml}}</div>
                     {{/if}}
                     {{#if imgEntry.objectUrl}}

@@ -313,23 +313,16 @@
     align-self: flex-start;
   }
 
+  // The preview text containers carry the `cooked` class, so quotes,
+  // links, @mentions, lists, etc. render with Discourse's standard cooked
+  // styling (matching the final post); annotation references are re-badged
+  // on top. This wrapper just sets the base type + wrapping.
   &__preview-text {
     margin: 0;
     color: var(--primary);
     font-size: var(--font-0);
     line-height: 1.55;
     word-wrap: break-word;
-  }
-
-  // Paragraphs inside the preview text. Real <p> elements (built by
-  // buildPreviewTextHtml) rather than pre-wrap'd line breaks so the
-  // template indentation can't slip in front of an inline badge and
-  // visually offset it from surrounding prose.
-  &__preview-paragraph {
-    margin: 0 0 0.85em;
-    &:last-child {
-      margin-bottom: 0;
-    }
   }
 
   &__preview-text-empty {
