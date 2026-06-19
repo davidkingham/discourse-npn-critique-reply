@@ -1281,9 +1281,16 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // Insert a quote handed in via `model.initialQuote` (the post-selection
   // "Copy to Critique" button). External quotes are general commentary, so
-  // they land in the Overall Critique. Runs after the draft restore;
-  // _insertQuoteMarkdown cursor-inserts when the textarea is mounted and
-  // falls back to appending the active text otherwise, so timing is safe.
+  // they land in the Overall Critique.
+  //
+  // Append through the TRACKED field (`_appendToActiveText`), not the
+  // DOM-based `_insertQuoteMarkdown`. This runs in a microtask right after
+  // `_restoreDraft` set `overallCritiqueText`, before Glimmer flushes the
+  // render — so the textarea's DOM `value` is still stale. A DOM insert
+  // there would read the empty textarea and its synthetic `input` event
+  // would overwrite the just-restored draft (clobbering an earlier quote
+  // when you Copy-to-Critique a second time). Appending to the tracked
+  // field is render-timing-independent, so multiple quotes accumulate.
   _maybeInsertInitialQuote() {
     if (this._destroyed) {
       return;
@@ -1293,7 +1300,7 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     this.activeWritingContext = WRITING_CONTEXT_OVERALL;
-    this._insertQuoteMarkdown(quote);
+    this._appendToActiveText(quote);
   }
 
   get metadata() {
