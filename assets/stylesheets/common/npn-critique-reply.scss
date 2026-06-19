@@ -3183,3 +3183,56 @@
   }
 }
 
+// ---------------------------------------------------------------------
+// EXPERIMENTAL (Phase-1 spike): composer-style docked workspace.
+//
+// Gated by the `npn_critique_reply_docked_experiment` site setting,
+// which appends `--docked-experiment` to the modal root (see
+// `modalClassNames`). This is purely a CSS/positioning experiment on
+// the existing DModal: anchor the card to the bottom of the screen
+// like the composer and let the topic behind it stay mouse-selectable
+// (select text -> Copy to Critique with the workspace open). The
+// DModal focus trap still applies, so keyboard focus is still
+// captured — this proves the docked look + the select-text-while-open
+// flow before committing to the larger non-modal panel refactor.
+//
+// Fully reversible: turn the setting off, or delete this block + the
+// setting + the `modalClassNames` branch.
+// ---------------------------------------------------------------------
+.d-modal.npn-critique-reply-modal--docked-experiment {
+  // Height of the docked panel. Leaving the upper viewport free is the
+  // whole point — that strip of topic stays visible and selectable
+  // above the dock.
+  --npn-docked-height: 60vh;
+
+  // Push the visible card to the bottom edge instead of centering it.
+  align-items: flex-end;
+
+  // The backdrop is a sibling rendered immediately after `.d-modal`.
+  // Drop its dimming and pointer capture so clicks/drags fall through
+  // to the topic underneath.
+  & ~ .d-modal__backdrop {
+    background-color: transparent;
+    pointer-events: none;
+  }
+
+  // Full-width card flush to the bottom, composer-style.
+  .d-modal__container {
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    --modal-max-height: var(--npn-docked-height);
+    max-height: var(--npn-docked-height);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.18);
+  }
+
+  // The two-pane layout uses a fixed height tuned for the centered
+  // modal (~85vh). Re-fit it inside the shorter dock so the panes and
+  // footer don't clip. The 9em accounts for the header + footer chrome.
+  .npn-critique-reply-modal__layout {
+    height: calc(var(--npn-docked-height) - 9em);
+  }
+}
+

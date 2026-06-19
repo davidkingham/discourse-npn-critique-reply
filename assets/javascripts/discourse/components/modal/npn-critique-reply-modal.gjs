@@ -1346,6 +1346,9 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.previewMode) {
       parts.push("npn-critique-reply-modal--preview");
     }
+    if (this.siteSettings.npn_critique_reply_docked_experiment) {
+      parts.push("npn-critique-reply-modal--docked-experiment");
+    }
     return parts.join(" ");
   }
 

@@ -61,6 +61,18 @@ plugins:
     default: true
     client: true
 
+  # EXPERIMENTAL (Phase-1 spike): dock the Critique Workspace to the
+  # bottom of the screen like the Discourse composer and disable the
+  # modal backdrop's pointer-events so the topic behind it stays
+  # mouse-selectable (select text -> Copy to Critique with the
+  # workspace open). Purely a CSS/positioning experiment on the
+  # existing modal — the DModal focus trap still applies, so keyboard
+  # focus is still captured. Off by default; flip on to evaluate the
+  # docked feel before the larger panel refactor.
+  npn_critique_reply_docked_experiment:
+    default: false
+    client: true
+
   # Drafts older than this are ignored on load (and may be cleaned up
   # by future tasks). Inactivity-based: each autosave bumps the
   # draft's updated_at, so the window resets on activity. Set to 0
