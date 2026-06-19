@@ -1,4 +1,5 @@
 import { apiInitializer } from "discourse/lib/api";
+import NpnCopyToCritiqueButton from "../components/npn-copy-to-critique-button";
 import NpnCritiqueDock from "../components/npn-critique-dock";
 import NpnCritiqueReplyInvitationPanel from "../components/npn-critique-reply-invitation-panel";
 import NpnCritiqueReplyStartButton from "../components/npn-critique-reply-start-button";
@@ -66,6 +67,14 @@ export default apiInitializer((api) => {
     "post-article",
     NpnCritiqueReplyInvitationPanel
   );
+
+  // "Copy to Critique" button in the post text-selection toolbar, beside
+  // the native Quote / Copy Quote. `post-text-buttons` is a wrapper
+  // outlet, so renderAfterWrapperOutlet adds our button after the native
+  // ones without replacing them, and the connector receives the toolbar's
+  // @data (topic, buildQuote, hideToolbar). The component self-gates on
+  // critique eligibility.
+  api.renderAfterWrapperOutlet("post-text-buttons", NpnCopyToCritiqueButton);
 
   // Persistent "Critique in progress" dock for the minimize-to-dock flow.
   // `below-footer` is an application-level outlet (always rendered, every

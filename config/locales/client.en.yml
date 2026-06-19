@@ -37,6 +37,13 @@ en:
         resume: "Resume Critique"
         dismiss_title: "Hide — your draft stays saved"
 
+      # "Copy to Critique" button added next to Discourse's native Quote /
+      # Copy Quote in the post text-selection toolbar. Quotes the selected
+      # text straight into the critic's workspace (opening or resuming it).
+      copy_to_critique:
+        label: "Copy to Critique"
+        title: "Quote this into your critique workspace"
+
       modal:
         title: "Start a Critique"
         intro: "Write your critique with the image, request, and photographer’s notes close at hand. Visual notes are optional."
@@ -119,22 +126,6 @@ en:
             insert: "Insert"
             cancel: "Cancel"
             markdown_note: "The link may look a little different while you’re editing, but it will appear as a normal clickable link in the preview and final post."
-          # Import-copied-quote toolbar action. Lets a critic pull in
-          # another member's critique: use Discourse's native "Copy
-          # Quote", then click Import here to drop the attributed quote
-          # into the active writing context. The label says "Import"
-          # (not "Quote") to make the Copy-Quote-first prerequisite clear
-          # and avoid confusion with Discourse's native Quote command.
-          import_quote: "Import copied quote"
-          import_quote_title: "First choose Copy Quote on a member’s selected text, then import it here."
-          quote_imported: "Quote added to your critique."
-          # Manual paste fallback (clipboard read blocked/unsupported, or
-          # the clipboard didn’t hold a quote).
-          quote_paste_label: "Paste the copied quote"
-          quote_paste_placeholder: "Paste a quote you copied with Copy Quote…"
-          quote_paste_hint: "On a member’s post, select their text and choose Copy Quote, then paste it here."
-          quote_paste_insert: "Insert quote"
-          quote_paste_cancel: "Cancel"
         reference_image: "Reference Image"
         # New section headings + helper copy for the Optional Visual
         # Notes / Optional Processing Example sections that frame the
