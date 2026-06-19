@@ -1294,7 +1294,18 @@ export default class NpnCritiqueReplyModal extends Component {
       fixedTextareaPosition: true,
       autoSelectFirstSuggestion: true,
       transformComplete: (obj) => obj.username || obj.name,
-      dataSource: (term) => userSearch({ term, includeGroups: true }),
+      // Pass topic + category context so an empty `@` eagerly surfaces
+      // the people active in THIS topic (and category), matching the
+      // standard composer. Without `topicId`, userSearch returns nothing
+      // until the critic types a character. See `performSearch` /
+      // `eagerCompleteSearch` in discourse/lib/user-search.
+      dataSource: (term) =>
+        userSearch({
+          term,
+          topicId: this.topic?.id,
+          categoryId: this.topic?.category_id,
+          includeGroups: true,
+        }),
       afterComplete: (text, event) => {
         event.preventDefault();
         textarea.value = text;
