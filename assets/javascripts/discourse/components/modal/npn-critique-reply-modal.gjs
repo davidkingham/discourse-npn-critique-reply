@@ -8538,13 +8538,13 @@ export default class NpnCritiqueReplyModal extends Component {
       @beforeClose={{this.beforeClose}}
       class={{this.modalClassNames}}
     >
-      {{! Minimize sits in the header next to the X, styled like the
-          composer's collapse control (transparent, angles-down). It
-          force-saves the draft and drops a "Critique in progress" dock
-          on the topic so the critic can step away and come back without
-          fear of losing work. Only when drafts are enabled (the dock
-          resumes from the server draft) and not in preview. }}
       <:headerBelowTitle>
+        {{! Minimize sits in the header next to the X, styled like the
+            composer's collapse control (transparent, angles-down). It
+            force-saves the draft and drops a "Critique in progress" dock
+            on the topic so the critic can step away and come back without
+            fear of losing work. Only when drafts are enabled (the dock
+            resumes from the server draft) and not in preview. }}
         {{#if this.canMinimize}}
           <DButton
             class="btn-transparent toggle-minimize npn-critique-reply-modal__minimize"
