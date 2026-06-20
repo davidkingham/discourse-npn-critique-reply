@@ -3492,9 +3492,9 @@
   }
 
   // Larger-Image (visual-focus) mode: grow the reference image to fill
-  // the docked panel's height instead of the fixed viewport clamp
-  // (`clamp(380px, 75vh - 10em, 790px)`), which ignores the panel height
-  // and wastes the vertical space below the toolbar on a tall dock.
+  // the docked panel's height instead of the measured-pane clamp
+  // (`clamp(380px, var(--npn-pane-px) - 8em, 790px)`), whose 790px cap
+  // would waste the vertical space below the toolbar on a tall dock.
   // Tie the cap to `--npn-docked-height`, reserving ~20em for the modal
   // header/footer, grippie, tool row + helper, the "More below" gradient
   // band, and the annotations summary so the toolbar stays on-screen
