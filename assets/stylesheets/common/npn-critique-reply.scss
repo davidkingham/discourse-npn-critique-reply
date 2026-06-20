@@ -3458,15 +3458,18 @@
     }
   }
 
-  // The two-pane layout uses a fixed height tuned for the centered
-  // modal (~85vh). Re-fit it inside the dock so the panes and footer
-  // don't clip. The 11em reserve covers the full chrome stack the
-  // layout sits inside: grippie (~0.75em) + modal header (~3.6em) +
-  // body padding (2em) + footer (~4em). 9em under-reserved by ~22px,
-  // which pushed each pane's absolutely-positioned "More below" scroll
-  // cue (anchored to the pane's bottom edge) below the fold.
+  // The two-pane layout uses a fixed height; inside the dock it's sized
+  // as `--npn-docked-height - <chrome reserve>` so the layout + chrome
+  // exactly fill the fixed-height panel and the footer lands flush at the
+  // bottom edge (like the composer) instead of floating with dead space
+  // below it. The reserve covers the chrome the layout sits inside:
+  // grippie (~0.75em) + compact modal header (~3em) + body padding (~2em)
+  // + the (now trimmed) footer (~3.4em) ≈ 9.5em. Earlier this was 11em —
+  // tuned before the header/helper trims and the footer slimming — which
+  // over-reserved and left the gap. The left pane still scrolls as a
+  // safety net if a short dock ever under-reserves.
   .npn-critique-reply-modal__layout {
-    height: calc(var(--npn-docked-height) - 11em);
+    height: calc(var(--npn-docked-height) - 9.5em);
   }
 
   // The panes carry a 2.5em bottom padding for breathing room above the
