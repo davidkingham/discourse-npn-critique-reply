@@ -3280,6 +3280,20 @@
     border-top-left-radius: var(--d-border-radius-large);
     border-top-right-radius: var(--d-border-radius-large);
     box-shadow: var(--shadow-composer);
+
+    // Open/close like the composer: slide up from the bottom rather than
+    // DModal's default desktop scale/fade, which reads wrong on a
+    // bottom-pinned drawer. Reuse core's mobile slide keyframes
+    // (`modal-enter-mobile` / `modal-exit-mobile` = translateY(100%) ↔ 0);
+    // we override only `animation-name`, so the 250ms duration, easing,
+    // and prefers-reduced-motion handling from DModal's own
+    // `.d-modal__container.is-entering` / `.is-exiting` rules carry over.
+    &.is-entering {
+      animation-name: modal-enter-mobile;
+    }
+    &.is-exiting {
+      animation-name: modal-exit-mobile;
+    }
   }
 
   // The two-pane layout uses a fixed height tuned for the centered

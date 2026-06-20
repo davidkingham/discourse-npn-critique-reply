@@ -8914,12 +8914,70 @@ export default class NpnCritiqueReplyModal extends Component {
                 </div>
               </div>
 
-              {{! Image first — moved up so the reference is the
-                  primary visual element under the header. Version
-                  selector + large-image-view-toggle (the "Showing X"
-                  status indicators) now sit below the image. The
-                  visual tools come further down, under their own
-                  "Optional Visual Notes" section header. }}
+              {{! Multi-image picker sits ABOVE the image so the
+                  Image 1 / Image 2 / … pills stay put as the critic
+                  flips through images. Image heights vary by aspect
+                  ratio, so a picker below the image would shift on
+                  every switch. Hidden for 0/1-image (legacy)
+                  submissions; switching uses the same
+                  confirm-clear-annotations flow as version switching. }}
+              {{#if this.hasMultipleSubmissionImages}}
+                <div
+                  class="npn-critique-reply-modal__image-picker"
+                  role="group"
+                  aria-label={{i18n
+                    "npn_critique_reply.modal.image_picker.label"
+                  }}
+                >
+                  <button
+                    type="button"
+                    class="npn-critique-reply-modal__image-picker-nav"
+                    aria-label={{i18n
+                      "npn_critique_reply.modal.image_picker.previous"
+                    }}
+                    disabled={{this.isOnFirstSubmissionImage}}
+                    {{on "click" this.selectPreviousImage}}
+                  >{{dIcon "chevron-left"}}</button>
+                  {{#each this.submissionImageNav as |img|}}
+                    <button
+                      type="button"
+                      class="npn-critique-reply-modal__image-picker-pill
+                        {{if
+                          (eq img.index this.selectedImageIndex)
+                          'is-selected'
+                        }}
+                        {{if img.hasActivity 'has-activity'}}"
+                      aria-pressed={{if
+                        (eq img.index this.selectedImageIndex)
+                        "true"
+                        "false"
+                      }}
+                      aria-label={{img.ariaLabel}}
+                      {{on "click" (fn this.selectImage img.index)}}
+                    >{{img.label}}{{#if img.hasActivity}}
+                        <span
+                          class="npn-critique-reply-modal__image-picker-pill-dot"
+                          aria-hidden="true"
+                        ></span>
+                      {{/if}}</button>
+                  {{/each}}
+                  <button
+                    type="button"
+                    class="npn-critique-reply-modal__image-picker-nav"
+                    aria-label={{i18n
+                      "npn_critique_reply.modal.image_picker.next"
+                    }}
+                    disabled={{this.isOnLastSubmissionImage}}
+                    {{on "click" this.selectNextImage}}
+                  >{{dIcon "chevron-right"}}</button>
+                </div>
+              {{/if}}
+
+              {{! Image sits under the picker — the primary visual
+                  element. Version selector + large-image-view toggle
+                  (the "Showing X" status) sit below the image; the
+                  visual tools come further down under the Optional
+                  Visual Notes section header. }}
               {{#if this.viewingProcessingExample}}
                 {{! The alt text on the <img> already carries the
                     accessible name; no separate figcaption needed. }}
@@ -9035,65 +9093,6 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onRedrawPendingNote={{this.redrawPendingPinNote}}
                 @pendingPinNoteCanConfirm={{this.pendingPinNoteCanConfirm}}
               />
-              {{/if}}
-
-              {{! Multi-image picker. Submissions can carry up to 5
-                  images; pills + prev/next chevrons let the critic
-                  flip through them without showing all at once.
-                  Hidden when the submission has 0 or 1 images (the
-                  legacy single-image case). Switching images uses the
-                  same confirm-clear-annotations flow as version
-                  switching. }}
-              {{#if this.hasMultipleSubmissionImages}}
-                <div
-                  class="npn-critique-reply-modal__image-picker"
-                  role="group"
-                  aria-label={{i18n
-                    "npn_critique_reply.modal.image_picker.label"
-                  }}
-                >
-                  <button
-                    type="button"
-                    class="npn-critique-reply-modal__image-picker-nav"
-                    aria-label={{i18n
-                      "npn_critique_reply.modal.image_picker.previous"
-                    }}
-                    disabled={{this.isOnFirstSubmissionImage}}
-                    {{on "click" this.selectPreviousImage}}
-                  >{{dIcon "chevron-left"}}</button>
-                  {{#each this.submissionImageNav as |img|}}
-                    <button
-                      type="button"
-                      class="npn-critique-reply-modal__image-picker-pill
-                        {{if
-                          (eq img.index this.selectedImageIndex)
-                          'is-selected'
-                        }}
-                        {{if img.hasActivity 'has-activity'}}"
-                      aria-pressed={{if
-                        (eq img.index this.selectedImageIndex)
-                        "true"
-                        "false"
-                      }}
-                      aria-label={{img.ariaLabel}}
-                      {{on "click" (fn this.selectImage img.index)}}
-                    >{{img.label}}{{#if img.hasActivity}}
-                        <span
-                          class="npn-critique-reply-modal__image-picker-pill-dot"
-                          aria-hidden="true"
-                        ></span>
-                      {{/if}}</button>
-                  {{/each}}
-                  <button
-                    type="button"
-                    class="npn-critique-reply-modal__image-picker-nav"
-                    aria-label={{i18n
-                      "npn_critique_reply.modal.image_picker.next"
-                    }}
-                    disabled={{this.isOnLastSubmissionImage}}
-                    {{on "click" this.selectNextImage}}
-                  >{{dIcon "chevron-right"}}</button>
-                </div>
               {{/if}}
 
               {{! Version (revision) selector. Revisions only apply to
