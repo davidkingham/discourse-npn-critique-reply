@@ -357,19 +357,20 @@
   // the user explicitly chose focus mode for the toolbar, not for
   // browsing existing annotations.
   //
-  //   clamp(420px, calc(75vh - 4em), 790px)
+  //   clamp(420px, calc(75vh - 6.5em), 790px)
   //
-  // At 1080p (real Chrome body ≈ 800px after browser chrome) this
-  // lands the image at ~746px. The image-col header (Reference
-  // Image title + Return-to-Critique button) is hidden in focus
-  // mode — the DModal X already runs `beforeClose` which clears
-  // `visualFocusMode` instead of closing the modal, so the X
-  // serves as the "Return to Critique" affordance. The freed
-  // ~48px lets the image grow without pushing the toolbar past
-  // the footer.
+  // The image-col header (Reference Image title + Return-to-Critique
+  // button) is hidden in focus mode — the DModal X already runs
+  // `beforeClose` which clears `visualFocusMode` instead of closing the
+  // modal, so the X serves as the "Return to Critique" affordance.
+  //
+  // The `- 6.5em` reserves room below the image for the visual-tools
+  // toolbar AND the "More below" scroll-cue gradient (a ~2.4em band
+  // pinned to the pane bottom). Without that extra clearance the toolbar
+  // scooted under the gradient on shorter viewports and faded out.
   &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus &__processing-example-large {
-    max-height: clamp(420px, calc(75vh - 4em), 790px);
+    max-height: clamp(420px, calc(75vh - 6.5em), 790px);
   }
 
   // Hide the image-col header in focus mode — the heading is
@@ -377,16 +378,6 @@
   // focus toggle button is replaced by DModal's X (which clears
   // focus mode via beforeClose).
   &.npn-critique-reply-modal--visual-focus &__image-col-header {
-    display: none;
-  }
-
-  // Drop the "More below" scroll cue in focus mode. Its gradient band is
-  // pinned to the bottom of the pane and was fading over the visual-tools
-  // toolbar (which sits just under the enlarged image). Focus mode is
-  // explicitly about the tools, and the only thing below the fold here is
-  // the secondary annotations list — so the cue isn't worth obscuring the
-  // tools. (The write-col cue is moot; that column is hidden in focus.)
-  &.npn-critique-reply-modal--visual-focus &__pane-scroll-cue {
     display: none;
   }
 
@@ -436,7 +427,9 @@
     .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--crop-mode.npn-critique-reply-modal--visual-focus
     &__processing-example-large {
-    max-height: clamp(380px, calc(70vh - 4em), 740px);
+    // Match the focus-mode clearance (toolbar + crop chips + the
+    // "More below" gradient band) so nothing scoots under the cue.
+    max-height: clamp(380px, calc(70vh - 6.5em), 740px);
   }
 
   // -- Image column ------------------------------------------------------
@@ -3492,7 +3485,7 @@
 
   // Larger-Image (visual-focus) mode: grow the reference image to fill
   // the docked panel's height instead of the fixed viewport clamp
-  // (`clamp(420px, 75vh - 4em, 790px)`), which ignores the panel height
+  // (`clamp(420px, 75vh - 6.5em, 790px)`), which ignores the panel height
   // and wastes the vertical space below the toolbar on a tall dock.
   // Tie the cap to `--npn-docked-height`, reserving ~17em for the modal
   // header/footer, grippie, tool row + helper, and the annotations
