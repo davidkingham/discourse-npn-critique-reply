@@ -3411,7 +3411,8 @@
   // header keeps its symmetric padding and the title reads balanced.
   .npn-critique-reply-modal__resizer {
     position: absolute;
-    top: 0;
+    // Small gap above the grip to match the composer's grippie inset.
+    top: 4px;
     left: 50%;
     transform: translateX(-50%);
     width: min(160px, 40%);
