@@ -380,6 +380,16 @@
     display: none;
   }
 
+  // Drop the "More below" scroll cue in focus mode. Its gradient band is
+  // pinned to the bottom of the pane and was fading over the visual-tools
+  // toolbar (which sits just under the enlarged image). Focus mode is
+  // explicitly about the tools, and the only thing below the fold here is
+  // the secondary annotations list — so the cue isn't worth obscuring the
+  // tools. (The write-col cue is moot; that column is hidden in focus.)
+  &.npn-critique-reply-modal--visual-focus &__pane-scroll-cue {
+    display: none;
+  }
+
   // Surface "Return to Critique" next to the DModal X when in
   // focus mode so the affordance reads as intentional rather than
   // a generic close. The X's beforeClose hook clears
