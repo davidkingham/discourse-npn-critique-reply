@@ -64,6 +64,10 @@
     align-items: stretch;
     height: calc(85vh - 4em);
     overflow: hidden;
+    // Positioning context for the absolutely-positioned Photographer's
+    // Notes overlay (which uses the write column's grid area as its
+    // containing block — see `&__notes-panel`).
+    position: relative;
   }
 
   // Left pane wraps image-col + processing-example-row in a single
@@ -1232,19 +1236,21 @@
     font-size: var(--font-down-1);
   }
 
-  // The overlay panel: a grid sibling of the write column, placed in the
-  // SAME (last) grid cell so it overlays ONLY the right writing pane —
-  // the reference image and visual tools in the left column stay visible.
-  // The layout row is a fixed height, so the panel fills the cell and
-  // scrolls internally (no scroll-with-content issue an absolute child of
-  // the scrolling write-col would hit). Own header + scroll area; neither
-  // column is moved or resized.
+  // The overlay panel: absolutely positioned, with the write column's
+  // grid area as its containing block (`grid-column/grid-row` set the
+  // abspos static position; `inset: 0` fills that area). Because it's
+  // out of grid FLOW, it overlays the write column WITHOUT displacing it
+  // — the reference image and visual tools in the left column stay put,
+  // and the editor stays in its own cell. The layout has a fixed height
+  // and `overflow: hidden`, so the panel doesn't scroll with content
+  // (unlike an absolute child of the scrolling write-col would). Own
+  // header + scroll area; neither column is moved or resized.
   &__notes-panel {
+    position: absolute;
     grid-column: -2 / -1;
     grid-row: 1;
-    align-self: stretch;
+    inset: 0;
     z-index: 5;
-    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1257,12 +1263,10 @@
       outline: none;
     }
 
-    // Mobile: the two-pane grid collapses to a single stacked column, so
-    // escape the grid entirely and become a full-screen sheet over the
-    // (already full-screen) modal.
+    // Mobile: the two-pane grid collapses, so escape the grid area and
+    // become a full-screen sheet over the (already full-screen) modal.
     @media (max-width: 720px) {
       position: fixed;
-      inset: 0;
       z-index: 200;
       border: none;
       border-radius: 0;
