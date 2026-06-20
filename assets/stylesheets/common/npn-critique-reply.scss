@@ -3240,9 +3240,12 @@
     right: 0;
     margin-inline: auto;
     width: 100%;
-    // Mirrors the composer's `$reply-area-max-width` (1475px); the
-    // calc guarantees a visible side gap on narrower viewports too.
-    max-width: min(1475px, calc(100vw - 3em));
+    // Wider than the composer's 1475px so the reference image gets more
+    // room on high-res displays (the image pane is ~52% of the panel).
+    // Hard-capped at 2200px and gutter-limited via the calc so it never
+    // fills the screen: ~64px side margins on a 1920px display, ~180px
+    // on a 2560px one.
+    max-width: min(2200px, calc(100vw - 8em));
     height: var(--npn-docked-height);
     --modal-max-height: var(--npn-docked-height);
     max-height: var(--npn-docked-height);

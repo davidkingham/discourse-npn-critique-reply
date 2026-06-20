@@ -346,6 +346,9 @@ export default class NpnCritiqueReplyModal extends Component {
   // the drag keeps tracking even when the cursor leaves the handle.
   #dockedPointerMove = null;
   #dockedPointerUp = null;
+  // Bound window-resize handler that re-clamps the panel height so the
+  // grippie can't end up scrolled off the top after the window shrinks.
+  #dockedWindowResize = null;
 
   // Writing state --------------------------------------------------------
   //
@@ -1248,6 +1251,16 @@ export default class NpnCritiqueReplyModal extends Component {
     // willDestroy).
     this._setupGlobalErrorCapture();
 
+    // Docked experiment: keep the dragged panel height within the
+    // current viewport. Without this, dragging the panel tall and then
+    // shrinking the window leaves the stored px height taller than the
+    // viewport, pushing the top-edge grippie off-screen with no way to
+    // drag it back down. Re-clamp on every window resize.
+    if (this.dockedExperimentEnabled) {
+      this.#dockedWindowResize = () => this._reclampDockedHeight();
+      window.addEventListener("resize", this.#dockedWindowResize);
+    }
+
     if (this.isEditing) {
       // Edit flow: restore directly from the post's saved metadata
       // and parsed raw — no draft involvement. Drafts are an
@@ -1488,6 +1501,21 @@ export default class NpnCritiqueReplyModal extends Component {
     writeNumber(STORAGE_KEY_DOCKED_HEIGHT, this._dockedHeightPx);
   }
 
+  // Re-clamp the stored height to the current viewport. Only ever
+  // shrinks (clamp's max is viewport-relative), so a tall panel collapses
+  // to fit when the window gets shorter — keeping the top-edge grippie
+  // on-screen — and the persisted value follows.
+  _reclampDockedHeight() {
+    if (this._dockedHeightPx == null) {
+      return;
+    }
+    const clamped = this._clampDockedHeight(this._dockedHeightPx);
+    if (clamped !== this._dockedHeightPx) {
+      this._dockedHeightPx = clamped;
+      writeNumber(STORAGE_KEY_DOCKED_HEIGHT, this._dockedHeightPx);
+    }
+  }
+
   _teardownDockedResize() {
     if (this.#dockedPointerMove) {
       window.removeEventListener("pointermove", this.#dockedPointerMove);
@@ -1497,6 +1525,10 @@ export default class NpnCritiqueReplyModal extends Component {
       window.removeEventListener("pointerup", this.#dockedPointerUp);
       window.removeEventListener("pointercancel", this.#dockedPointerUp);
       this.#dockedPointerUp = null;
+    }
+    if (this.#dockedWindowResize) {
+      window.removeEventListener("resize", this.#dockedWindowResize);
+      this.#dockedWindowResize = null;
     }
   }
 
