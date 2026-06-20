@@ -3231,12 +3231,14 @@
 // left of the close X.
 //
 // Core's `.d-modal__header` is `justify-content: space-between` and gives
-// `.modal-close` `margin-left: auto`. If we ALSO give the minimize button
-// an auto margin, the free space splits between the two and the button
-// lands dead-centre. So: the minimize button takes the auto margin (it
-// absorbs the gap after the title and pushes itself + the close button to
-// the right), and we drop the close button's auto margin within our modal
-// so the two sit together. Scoped under the modal root for specificity.
+// `.modal-close` `margin-left: auto`. If more than one control takes an
+// auto margin, the free space splits and they drift to the centre. So a
+// SINGLE control absorbs the gap after the title and carries the whole
+// right-edge cluster (fullscreen + minimize + close) over: the fullscreen
+// toggle owns it on desktop (it always renders and sits first), and the
+// close button's own auto margin is dropped so the controls sit together.
+// On mobile the fullscreen toggle is hidden, so minimize takes the auto
+// margin instead. Scoped under the modal root for specificity.
 .npn-critique-reply-modal .d-modal__header {
   // Compact header (~44-48px): the default desktop title is a page-sized
   // `--font-up-3`, which makes the bar read as a large heading and eats
@@ -3252,12 +3254,23 @@
     line-height: 1.3;
   }
 
-  .npn-critique-reply-modal__minimize.btn {
+  // Fullscreen toggle owns the auto margin (first right-edge control,
+  // always rendered on desktop) so the cluster hugs the right edge.
+  .npn-critique-reply-modal__fullscreen-toggle.btn {
     margin-left: auto;
+    align-self: start;
+    color: var(--primary-medium);
+
+    &:hover,
+    &:focus {
+      color: var(--primary);
+    }
+  }
+
+  .npn-critique-reply-modal__minimize.btn {
     // Top-align to match core's `.modal-close { align-self: start }` so
-    // the two controls stay level when the title wraps to two lines on
-    // narrow widths (the default center-alignment put Minimize lower
-    // than the X).
+    // the controls stay level when the title wraps to two lines on narrow
+    // widths (the default center-alignment put Minimize lower than the X).
     align-self: start;
     color: var(--primary-medium);
 
@@ -3269,6 +3282,14 @@
 
   .modal-close {
     margin-left: 0;
+  }
+
+  // Mobile hides the fullscreen toggle (the modal is already full-screen),
+  // so minimize inherits the auto margin to keep the cluster right-aligned.
+  @media (max-width: 720px) {
+    .npn-critique-reply-modal__minimize.btn {
+      margin-left: auto;
+    }
   }
 }
 
