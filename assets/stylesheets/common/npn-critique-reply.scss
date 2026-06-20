@@ -2797,10 +2797,29 @@
   color: var(--primary-medium);
   border-top: 1px solid var(--primary-low);
 
+  // This disclosure holds the review / select / remove controls for
+  // existing annotations, so it gets a slightly clearer affordance than
+  // a purely informational row: stronger text contrast + an explicit
+  // rotating chevron (matching the Photographer's Notes disclosure).
+  // Still secondary — not a prominent control.
   & > summary {
     cursor: pointer;
     padding: 0.25em 0;
-    color: var(--primary-medium);
+    color: var(--primary-high);
+    font-weight: 600;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+    &::after {
+      content: "▾";
+      margin-left: 0.35em;
+      color: var(--primary-medium);
+      font-size: 0.85em;
+      transition: transform 0.15s ease;
+      display: inline-block;
+    }
     &:hover {
       color: var(--primary);
     }
@@ -2808,6 +2827,10 @@
       outline: 2px solid var(--tertiary);
       outline-offset: 2px;
     }
+  }
+
+  &[open] > summary::after {
+    transform: rotate(180deg);
   }
 
   &-items {

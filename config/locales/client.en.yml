@@ -104,6 +104,12 @@ en:
           visual_notes: "Visual Notes"
           image_notes: "Image Notes"
           editing_image: "Writing notes for Image %{current} of %{total}."
+          # Tooltip + accessible label for the numeric badge on the Image
+          # Notes tab. Counting rule: visual annotations on the currently
+          # selected image (NOT the image number, NOT image-note text).
+          annotation_count:
+            one: "%{count} visual annotation"
+            other: "%{count} visual annotations"
           overall_helper: "Write your overall response to the photograph or series."
           visual_notes_heading: "Visual Notes"
           visual_notes_helper: "Explain the visual notes you added to this image."
@@ -155,9 +161,11 @@ en:
           next: "Next image"
           # Accessible names for each image pill. `_active` is used when the
           # image already has critique work (annotations or notes) so the
-          # activity dot isn't conveyed by color/shape alone.
-          pill: "Image %{number}"
-          pill_active: "Image %{number}, critique added"
+          # activity dot isn't conveyed by color/shape alone; the inactive
+          # form states the absence explicitly. Selected state is carried
+          # separately by aria-pressed on the pill.
+          pill: "Image %{number}, no image notes"
+          pill_active: "Image %{number}, has image notes"
         post_critique: "Post Critique"
         posting: "Posting…"
         # Edit-existing-critique flow. Same modal, primary action
@@ -543,6 +551,11 @@ en:
         eye_path: "Eye path"
         eye_path_title: "Mark how your eye moves"
         eye_path_done: "Done with eye path"
+        # Completion action shown in the Eye Path sub-tool row (the main
+        # tool button stays "Eye path", selected). Exits Eye Path mode;
+        # the current path is preserved.
+        eye_path_finish: "Finish Eye Path"
+        eye_path_finish_title: "Finish and exit Eye Path; your path is kept"
         # Generic hint kept for backward compat with any cached
         # client copies; the active surface uses the mode-specific
         # variants below.
@@ -712,7 +725,7 @@ en:
         switch_and_clear: "Switch and clear annotations"
         # Accessible annotation list (keyboard / screen reader mirror)
         a11y_list_label: "Visual annotations"
-        a11y_list_summary: "Visual annotations (%{count})"
+        a11y_list_summary: "Annotations (%{count})"
         a11y_select: "Select"
         a11y_remove: "Remove"
 

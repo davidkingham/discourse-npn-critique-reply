@@ -2018,6 +2018,17 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.annotationCount;
   }
 
+  // Tooltip + accessible label that disambiguates the numeric badge on
+  // the Image Notes tab ("1 visual annotation" / "2 visual annotations"),
+  // so the bare "1" can't be misread as the image number or note count.
+  // Counting rule: visual annotations on the currently selected image
+  // (same value as the badge); image-note text is NOT counted.
+  get imageNotesCountLabel() {
+    return i18n("npn_critique_reply.modal.writing_context.annotation_count", {
+      count: this.annotationCount,
+    });
+  }
+
   // "Editing notes for Image 2 of 4" — only meaningful for multi-image
   // submissions while the Image Notes context is active. Null otherwise
   // so the template can omit the indicator.
@@ -9357,16 +9368,18 @@ export default class NpnCritiqueReplyModal extends Component {
                     @title="npn_critique_reply.visual_notes.crop_suggestion_title"
                     @disabled={{this.isPosting}}
                   />
+                  {{! Eye Path stays "selected" (the tool's own label +
+                      icon) while active rather than turning into a
+                      dominant "Done with eye path" CTA — completion now
+                      lives as a smaller "Finish Eye Path" in the sub-tool
+                      row below. aria-pressed announces the active state. }}
                   <DButton
                     class={{if this.eyePathMode "btn-primary" "btn-default"}}
                     @action={{this.toggleEyePathMode}}
-                    @icon={{if this.eyePathMode "check" "route"}}
-                    @label={{if
-                      this.eyePathMode
-                      "npn_critique_reply.visual_notes.eye_path_done"
-                      "npn_critique_reply.visual_notes.eye_path"
-                    }}
+                    @icon="route"
+                    @label="npn_critique_reply.visual_notes.eye_path"
                     @title="npn_critique_reply.visual_notes.eye_path_title"
+                    @ariaPressed={{this.eyePathMode}}
                     @disabled={{this.isPosting}}
                   />
                   {{! Unified Area tool. Internally still routes
@@ -9770,6 +9783,18 @@ export default class NpnCritiqueReplyModal extends Component {
                           />
                         {{/if}}
                       {{/if}}
+                      {{! Completion action for Eye Path. Small, but the
+                          check icon + primary tint keep it clearly
+                          findable; exits the mode and preserves the
+                          path (same action the main button used to be). }}
+                      <DButton
+                        class="btn-primary btn-small npn-critique-reply-modal__finish-eye-path"
+                        @icon="check"
+                        @action={{this.toggleEyePathMode}}
+                        @label="npn_critique_reply.visual_notes.eye_path_finish"
+                        @title="npn_critique_reply.visual_notes.eye_path_finish_title"
+                        @disabled={{this.isPosting}}
+                      />
                     {{/if}}
 
                     {{! Oval / Draw Area shape sub-toggle. Visible
@@ -10488,6 +10513,8 @@ export default class NpnCritiqueReplyModal extends Component {
                   >{{this.imageNotesTabLabel}}{{#if this.activeImageMarkCount}}
                       <span
                         class="npn-critique-reply-modal__context-tab-count"
+                        title={{this.imageNotesCountLabel}}
+                        aria-label={{this.imageNotesCountLabel}}
                       >{{this.activeImageMarkCount}}</span>
                     {{/if}}</button>
                 {{/if}}
