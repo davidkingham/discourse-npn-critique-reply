@@ -3266,6 +3266,22 @@
     height: calc(var(--npn-docked-height) - 11em);
   }
 
+  // Keep each pane's "More below" cue glued to the visible bottom while
+  // the pane scrolls. The base rule positions it `absolute; bottom: 0`,
+  // which anchors to the scroll *content* — so it scrolls out of view as
+  // you move down. `sticky` pins it to the scrollport's bottom edge
+  // instead, staying put until the sentinel reaches the viewport and the
+  // cue is removed (`_leftPaneHasMore` / `_rightPaneHasMore`). It's the
+  // last in-flow child of each pane, so sticky has a rest position; the
+  // negative top margin pulls its ~2.3em flow box back over the trailing
+  // content so it overlays (fades) exactly like the absolute version,
+  // without adding a blank strip at the very end of the scroll.
+  .npn-critique-reply-modal__pane-scroll-cue {
+    position: sticky;
+    width: 100%;
+    margin-top: -2.3em;
+  }
+
   // Larger-Image (visual-focus) mode: grow the reference image to fill
   // the docked panel's height instead of the fixed viewport clamp
   // (`clamp(420px, 75vh - 4em, 790px)`), which ignores the panel height
