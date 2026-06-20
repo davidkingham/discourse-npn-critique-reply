@@ -3257,9 +3257,13 @@
 
   // The two-pane layout uses a fixed height tuned for the centered
   // modal (~85vh). Re-fit it inside the dock so the panes and footer
-  // don't clip. The 9em accounts for the grippie + header + footer.
+  // don't clip. The 11em reserve covers the full chrome stack the
+  // layout sits inside: grippie (~0.75em) + modal header (~3.6em) +
+  // body padding (2em) + footer (~4em). 9em under-reserved by ~22px,
+  // which pushed each pane's absolutely-positioned "More below" scroll
+  // cue (anchored to the pane's bottom edge) below the fold.
   .npn-critique-reply-modal__layout {
-    height: calc(var(--npn-docked-height) - 9em);
+    height: calc(var(--npn-docked-height) - 11em);
   }
 
   // Larger-Image (visual-focus) mode: grow the reference image to fill
