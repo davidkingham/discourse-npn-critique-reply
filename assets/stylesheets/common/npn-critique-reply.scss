@@ -3376,6 +3376,31 @@
     max-height: max(380px, calc(var(--npn-docked-height) - 20em));
   }
 
+  // Normal (non-focus, non-crop) docked view: same idea as the
+  // visual-focus override above, applied to the standard two-pane layout
+  // so the reference image grows to fill the empty space at the bottom of
+  // the left pane on a tall dock instead of stopping at the fixed clamp.
+  // Reserves more (~25em) than visual-focus because normal view also
+  // shows the image heading, the Optional Visual Notes heading/helper,
+  // and the in-flow Processing Example row below the image. The clamp is
+  // the floor via max(), so on a short dock the image keeps its normal
+  // size and the left pane scrolls; the calc only takes over once the
+  // panel is tall enough to otherwise leave a gap. Crop and visual-focus
+  // are excluded so their own (tighter / larger) caps still apply.
+  &:not(.npn-critique-reply-modal--visual-focus):not(
+      .npn-critique-reply-modal--crop-mode
+    )
+    .npn-critique-image-reference__img,
+  &:not(.npn-critique-reply-modal--visual-focus):not(
+      .npn-critique-reply-modal--crop-mode
+    )
+    .npn-critique-reply-modal__processing-example-large {
+    max-height: max(
+      clamp(380px, calc(60vh - 4em), 660px),
+      calc(var(--npn-docked-height) - 25em)
+    );
+  }
+
   // Top-edge resize grippie (rendered in DModal's `<:aboveHeader>`).
   // Full-width hit strip with a centered visual handle, like the
   // composer's grippie.
