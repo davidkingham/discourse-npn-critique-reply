@@ -831,6 +831,10 @@ export default class NpnCritiqueReplyModal extends Component {
     this._autosaver = null;
     // Drop any in-flight docked-resize window listeners.
     this._teardownDockedResize();
+    // Stop advertising this as the open workspace so the native-Quote
+    // override reverts to native quoting. Covers close AND minimize
+    // (minimize destroys the modal too).
+    this.npnCritiqueWorkspace.unregisterOpenInstance(this);
     // Drop refs so the GC can clear the textarea and the
     // TextareaTextManipulation helper. The dAutocomplete modifier
     // wires its own teardown when the textarea is removed from the
@@ -1300,6 +1304,42 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this.activeWritingContext = WRITING_CONTEXT_OVERALL;
     this._appendToActiveText(quote);
+  }
+
+  // Lifecycle hook for the native-Quote override (see the
+  // `topic:quote-post` handler in the api-initializer): advertise this
+  // live modal to the workspace service on insert so a Quote selected from
+  // the topic routes straight here. Unregistered in willDestroy.
+  @action
+  registerOpenInstance() {
+    this.npnCritiqueWorkspace.registerOpenInstance(
+      this,
+      this.topic?.id ?? null
+    );
+  }
+
+  // Public entry point for the native-Quote override: a quote selected from
+  // the topic post stream while this workspace is open. Treated as general
+  // commentary → Overall Critique context (never image notes). Appends via
+  // the TRACKED field (same render-safe path as `_maybeInsertInitialQuote`);
+  // the cursor-based `_insertQuoteMarkdown` is wrong here because focus is on
+  // the topic, not the textarea, when quoting externally.
+  @action
+  insertExternalQuote(markdown) {
+    if (this._destroyed || !markdown) {
+      return;
+    }
+    this.activeWritingContext = WRITING_CONTEXT_OVERALL;
+    this._appendToActiveText(markdown);
+    // Pull focus to the Overall Critique textarea so the critic sees the
+    // inserted quote and can keep typing. Deferred a tick so the tracked
+    // append has flushed to the DOM first.
+    setTimeout(() => {
+      if (this._destroyed) {
+        return;
+      }
+      document.getElementById("npn-critique-reply-textarea")?.focus?.();
+    }, 0);
   }
 
   get metadata() {
@@ -8610,6 +8650,7 @@ export default class NpnCritiqueReplyModal extends Component {
       @beforeClose={{this.beforeClose}}
       class={{this.modalClassNames}}
       style={{this.dockedStyle}}
+      {{didInsert this.registerOpenInstance}}
     >
       <:aboveHeader>
         {{! Composer-style top-edge grippie. Drag to grow/shrink the

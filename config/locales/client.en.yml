@@ -37,12 +37,14 @@ en:
         resume: "Resume Critique"
         dismiss_title: "Hide — your draft stays saved"
 
-      # "Copy to Critique" button added next to Discourse's native Quote /
-      # Copy Quote in the post text-selection toolbar. Quotes the selected
-      # text straight into the critic's workspace (opening or resuming it).
-      copy_to_critique:
-        label: "Copy to Critique"
-        title: "Quote this into your critique workspace"
+      # Shown when the native Quote button is used on a critique-eligible
+      # topic with nothing open: a small dialog lets the critic choose
+      # whether the quote starts a critique or a normal reply.
+      quote_choice:
+        title: "Quote into…"
+        message: "Where should this quote go?"
+        start: "Start a Critique"
+        reply: "Quote in a reply"
 
       modal:
         title: "Start a Critique"

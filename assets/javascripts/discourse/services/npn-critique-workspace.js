@@ -44,6 +44,19 @@ export default class NpnCritiqueWorkspaceService extends Service {
   // never steals focus.
   @tracked focusRequested = false;
 
+  // Live, currently-OPEN workspace session — distinct from the minimized
+  // dock session tracked above. Used by the native-Quote override
+  // (`topic:quote-post` handler in the api-initializer) to route a quote
+  // into the open workspace instead of the composer.
+  //
+  // These are PLAIN (non-@tracked) fields on purpose: they're read
+  // imperatively from the appEvent handler, never in a template, so
+  // mutating them must not schedule a rerender. Making them @tracked
+  // would risk the backtracking-rerender assertion this codebase has hit
+  // before when service state changes mid-render.
+  openInstance = null; // the live NpnCritiqueReplyModal component, or null
+  openTopicId = null; // topic id the open workspace belongs to
+
   constructor() {
     super(...arguments);
     this.appEvents.on(DRAFT_CHANGED_EVENT, this, "_onDraftChanged");
@@ -91,6 +104,45 @@ export default class NpnCritiqueWorkspaceService extends Service {
     this.summary = null;
     this.dismissed = false;
     this.focusRequested = false;
+  }
+
+  // --- Open-workspace tracking (native-Quote override) -----------------
+  //
+  // The modal registers itself on insert and unregisters in willDestroy
+  // (which also covers minimize, since minimizing destroys the modal). One
+  // modal exists at a time (the modal service serializes opens), so a
+  // plain overwrite on register is safe; unregister guards against a newer
+  // modal having already replaced the reference. `clear()` deliberately
+  // does NOT touch these — they're owned by the modal lifecycle, not the
+  // minimize/dock session.
+  registerOpenInstance(instance, topicId) {
+    this.openInstance = instance;
+    this.openTopicId = topicId ?? null;
+  }
+
+  unregisterOpenInstance(instance) {
+    if (this.openInstance === instance) {
+      this.openInstance = null;
+      this.openTopicId = null;
+    }
+  }
+
+  // Bridge used by the topic:quote-post handler. Inserts the quote into the
+  // open workspace and returns true if it was consumed; false (→ native
+  // quoting) when no workspace is open or it belongs to another topic.
+  insertQuote(markdown, topicId) {
+    if (!markdown || !this.openInstance) {
+      return false;
+    }
+    if (
+      topicId != null &&
+      this.openTopicId != null &&
+      topicId !== this.openTopicId
+    ) {
+      return false;
+    }
+    this.openInstance.insertExternalQuote(markdown);
+    return true;
   }
 
   // Auto-clear when the matching topic's draft goes away. Post-success and
