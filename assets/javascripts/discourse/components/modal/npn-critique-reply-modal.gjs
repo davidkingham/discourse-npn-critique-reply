@@ -3663,6 +3663,11 @@ export default class NpnCritiqueReplyModal extends Component {
       // Some browsers throw on removeAllRanges in odd states; not
       // critical — the highlight will clear on the next click.
     }
+    // Close the notes panel so the critic sees the quote that just
+    // landed in their critique (the insert is otherwise invisible behind
+    // the open panel) and can keep typing from there. closePhotographers-
+    // Notes also returns focus to the textarea.
+    this.closePhotographersNotes();
   }
 
   // Insert a fully-formed `[quote=…]…[/quote]` block into the ACTIVE
