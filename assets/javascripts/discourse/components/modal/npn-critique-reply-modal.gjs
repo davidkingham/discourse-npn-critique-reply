@@ -6878,16 +6878,13 @@ export default class NpnCritiqueReplyModal extends Component {
     this._appendToImageNotes(marker);
   }
 
-  // Generic append into whichever context the textarea is editing.
-  // Used by the quote-insert fallback (which should land in the
-  // critic's current writing surface). Always a single `\n\n` between
-  // existing content and the addition; never a run of blank lines.
+  // Generic append into whichever context the editor is writing. Used by
+  // the quote-insert fallback and Copy-to-Critique. Always a single
+  // `\n\n` between existing content and the addition; never a run of
+  // blank lines. See `_appendToActiveSurface` for the rich vs textarea
+  // mechanics.
   _appendToActiveText(addition) {
-    const trimmed = (this.activeWritingText ?? "").trimEnd();
-    this.activeWritingText =
-      trimmed.length > 0 ? `${trimmed}\n\n${addition}` : addition;
-    this.validationMessage = null;
-    this.errorMessage = null;
+    this._appendToActiveSurface(addition);
   }
 
   // Append an annotation reference into the SELECTED image's notes.
@@ -6895,8 +6892,7 @@ export default class NpnCritiqueReplyModal extends Component {
   // and must never land in the overall critique, so this first flips
   // the writing context to Image Notes (the marker's image is the
   // active one — the annotation was just created on it), then appends.
-  // Switching context makes the inserted marker visible immediately and
-  // focuses the critic on the notes they're now building for the image.
+  // Switching context makes the inserted marker visible immediately.
   _appendToImageNotes(addition) {
     // First annotation reference for this session reveals the Image/Visual
     // Notes context (sticky — see `_imageNotesRevealed`).
@@ -6904,20 +6900,67 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.activeWritingContext !== WRITING_CONTEXT_IMAGE) {
       this.activeWritingContext = WRITING_CONTEXT_IMAGE;
     }
-    const trimmed = (this._activeImageNotes ?? "").trimEnd();
-    this._activeImageNotes =
-      trimmed.length > 0 ? `${trimmed}\n\n${addition}` : addition;
+    // On the rich path the context switch re-seeds the editor with the
+    // image-notes document; the in-place insert is deferred (putCursorAtEnd
+    // + next) so it lands after that re-seed, at the end of the right doc,
+    // and focuses the editor itself.
+    const insertedInPlace = this.#usingDEditor && this.#textManipulation;
+    this._appendToActiveSurface(addition);
+    // Textarea path: pull focus into the field so the critic can keep
+    // typing right after the reference (the rich path focuses itself as
+    // part of the insert, so we skip the extra hop there).
+    if (!insertedInPlace) {
+      setTimeout(() => {
+        if (this._destroyed) {
+          return;
+        }
+        this._focusWritingSurface();
+      }, 0);
+    }
+  }
+
+  // Shared append. Rich editor inserts in place at the END of the active
+  // document — no value re-seed, so the editor keeps its cursor and undo
+  // history. `putCursorAtEnd` defers its selection by one runloop tick, so
+  // the block insert is scheduled with a matching `next` (FIFO → runs
+  // after the cursor lands, and after any context-switch re-seed). Falls
+  // back to a value mutation if the in-place insert throws. Textarea path
+  // mutates the bound value directly.
+  _appendToActiveSurface(addition) {
+    if (this.#usingDEditor && this.#textManipulation) {
+      const tm = this.#textManipulation;
+      try {
+        tm.putCursorAtEnd();
+        next(() => {
+          if (this._destroyed) {
+            return;
+          }
+          try {
+            tm.insertBlock(addition);
+          } catch (e) {
+            this._recordError("append_insert", e, null, "warn");
+            this._appendViaValue(addition);
+          }
+        });
+      } catch (e) {
+        this._recordError("append_insert", e, null, "warn");
+        this._appendViaValue(addition);
+      }
+    } else {
+      this._appendViaValue(addition);
+    }
     this.validationMessage = null;
     this.errorMessage = null;
-    // Pull focus into the textarea so the critic can keep typing notes
-    // right after the reference, and screen readers land on the
-    // now-active Image Notes surface.
-    setTimeout(() => {
-      if (this._destroyed) {
-        return;
-      }
-      this._focusWritingSurface();
-    }, 0);
+  }
+
+  // Append to the active context's markdown via the bound value. Always a
+  // single `\n\n` separator. Used by the textarea path and as the
+  // rich-path fallback. The `activeWritingText` setter targets whichever
+  // context is active (overall critique or the selected image's notes).
+  _appendViaValue(addition) {
+    const trimmed = (this.activeWritingText ?? "").trimEnd();
+    this.activeWritingText =
+      trimmed.length > 0 ? `${trimmed}\n\n${addition}` : addition;
   }
 
   // Questions-to-consider expand/collapse. The compact view shows
