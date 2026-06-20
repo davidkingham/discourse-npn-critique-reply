@@ -2170,15 +2170,6 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   // Helper copy below the heading, per active context.
-  get writingPanelHelper() {
-    if (!this.writingContextIsImage) {
-      return i18n("npn_critique_reply.modal.writing_context.overall_helper");
-    }
-    return this.hasMultipleSubmissionImages
-      ? i18n("npn_critique_reply.modal.writing_context.image_notes_helper")
-      : i18n("npn_critique_reply.modal.writing_context.visual_notes_helper");
-  }
-
   // Switch the textarea between Overall Critique and Image Notes. No-op
   // when the target context is already active or when the Image Notes
   // tab isn't available yet (single-image, no marks/notes). Moves focus

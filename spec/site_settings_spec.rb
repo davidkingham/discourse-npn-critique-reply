@@ -41,4 +41,13 @@ describe SiteSetting do
       SiteSetting.respond_to?(:npn_critique_reply_visual_notes_allowed_group_ids),
     ).to eq(true)
   end
+
+  it "registers npn_critique_reply_rich_editor_experiment (default: false)" do
+    expect(SiteSetting.respond_to?(:npn_critique_reply_rich_editor_experiment)).to eq(
+      true,
+    )
+    expect(
+      SiteSetting.defaults[:npn_critique_reply_rich_editor_experiment],
+    ).to eq(false)
+  end
 end

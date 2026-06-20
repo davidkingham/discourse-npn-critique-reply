@@ -113,11 +113,8 @@ en:
           annotation_count:
             one: "%{count} visual annotation"
             other: "%{count} visual annotations"
-          overall_helper: "Write your overall response to the photograph or series."
           visual_notes_heading: "Visual Notes"
-          visual_notes_helper: "Explain the visual notes you added to this image."
           image_notes_heading: "Image Notes"
-          image_notes_helper: "Add comments connected to this image and its visual notes."
         # Quiet hint sitting next to the Insert-link button above the
         # textarea — signals that the field behaves like the composer
         # for the parts that matter (links, mentions, markdown).

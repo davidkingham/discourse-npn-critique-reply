@@ -1675,14 +1675,6 @@
     font-style: italic;
   }
 
-  // Per-context helper copy under the heading.
-  &__writing-helper {
-    margin: 0;
-    font-size: var(--font-down-1);
-    color: var(--primary-medium);
-    line-height: 1.4;
-  }
-
   // -- Inline messages (validation + server error) ----------------------
   //
   // Sit between the label and the textarea so the user sees them right
