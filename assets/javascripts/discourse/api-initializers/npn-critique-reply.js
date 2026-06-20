@@ -1,5 +1,7 @@
 import { apiInitializer } from "discourse/lib/api";
 import { buildQuote } from "discourse/lib/quote";
+import Composer from "discourse/models/composer";
+import Draft from "discourse/models/draft";
 import { i18n } from "discourse-i18n";
 import NpnCritiqueDock from "../components/npn-critique-dock";
 import NpnCritiqueReplyInvitationPanel from "../components/npn-critique-reply-invitation-panel";
@@ -83,21 +85,48 @@ export default apiInitializer((api) => {
   //      quote drops into that reply).
   //   3. Nothing open, critique-eligible topic → ask via a small dialog:
   //      "Start a Critique" (open the workspace pre-filled) or "Quote in a
-  //      reply" (re-run native quoting behind a one-shot bypass).
+  //      reply" (open the normal reply composer with the quote).
   //   4. Nothing open, non-eligible topic → native.
   const workspace = api.container.lookup("service:npn-critique-workspace");
   const quoteSettings = api.container.lookup("service:site-settings");
   const quoteCurrentUser = api.container.lookup("service:current-user");
-  // Re-entrancy guard: when the user picks "Quote in a reply" we re-call
-  // `selectText()`, which re-fires `topic:quote-post`. This flag makes that
-  // second pass fall straight through to native quoting.
-  let quoteBypass = false;
+
+  // Open the normal reply composer pre-filled with `markdown`, reproducing
+  // core topic.js#selectText()'s composer-closed branch from the data we
+  // already captured (post + built quote). We can't re-run selectText()
+  // itself: by the time the user clicks a dialog button the selection is
+  // gone and `quoteState.postId` is null (→ GET /posts/null). Merges into
+  // an existing server draft just like core, so a quote doesn't clobber a
+  // draft the critic already has for this topic.
+  const openReplyWithQuote = async (post, markdown, topic) => {
+    const composer = api.container.lookup("service:composer");
+    const draftKey = post?.topic?.draft_key ?? topic?.draft_key;
+    const opts = {
+      action: Composer.REPLY,
+      draftKey,
+      draftSequence: post?.topic?.draft_sequence ?? topic?.draft_sequence,
+    };
+    if (post?.post_number === 1) {
+      opts.topic = post?.topic ?? topic;
+    } else {
+      opts.post = post;
+    }
+    try {
+      const draftData = draftKey ? await Draft.get(draftKey) : null;
+      if (draftData?.draft) {
+        const data = JSON.parse(draftData.draft);
+        opts.draftSequence = draftData.draft_sequence;
+        opts.reply = data.reply + "\n" + markdown;
+      } else {
+        opts.quote = markdown;
+      }
+    } catch {
+      opts.quote = markdown;
+    }
+    composer.open(opts);
+  };
 
   api.onAppEvent("topic:quote-post", (event) => {
-    if (quoteBypass) {
-      quoteBypass = false;
-      return;
-    }
     if (!event || event.handled) {
       return;
     }
@@ -160,10 +189,9 @@ export default apiInitializer((api) => {
         {
           label: i18n("npn_critique_reply.quote_choice.reply"),
           action: () => {
-            // Re-run native quoting; the bypass makes our handler fall
-            // through on the re-fired event.
-            quoteBypass = true;
-            api.container.lookup("controller:topic")?.selectText();
+            // Fire-and-forget (block body, no returned promise) so the
+            // dialog closes immediately; the composer opens right after.
+            openReplyWithQuote(event.post, markdown, topic);
           },
         },
       ],
