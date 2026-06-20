@@ -3266,20 +3266,30 @@
     height: calc(var(--npn-docked-height) - 11em);
   }
 
+  // The panes carry a 2.5em bottom padding for breathing room above the
+  // (non-docked) sticky footer. In the dock the layout already reserves
+  // 11em below itself, so that padding is redundant here — and it shrinks
+  // each pane's content box, which is the box a `sticky` child is
+  // constrained to. With it present the sticky cue (below) can't reach
+  // the visible bottom edge and floats ~2.5em up. Zero it in the dock so
+  // the cue sticks flush.
+  .npn-critique-reply-modal__left-pane,
+  .npn-critique-reply-modal__write-col {
+    padding-bottom: 0;
+  }
+
   // Keep each pane's "More below" cue glued to the visible bottom while
   // the pane scrolls. The base rule positions it `absolute; bottom: 0`,
   // which anchors to the scroll *content* — so it scrolls out of view as
-  // you move down. `sticky` pins it to the scrollport's bottom edge
-  // instead, staying put until the sentinel reaches the viewport and the
-  // cue is removed (`_leftPaneHasMore` / `_rightPaneHasMore`). It's the
-  // last in-flow child of each pane, so sticky has a rest position; the
-  // negative top margin pulls its ~2.3em flow box back over the trailing
-  // content so it overlays (fades) exactly like the absolute version,
-  // without adding a blank strip at the very end of the scroll.
+  // you move down. `sticky; bottom: 0` (inherited) pins it to the
+  // scrollport's bottom edge instead, staying put until the sentinel
+  // reaches the viewport and the cue is removed (`_leftPaneHasMore` /
+  // `_rightPaneHasMore`). It's the last in-flow child of each pane, so
+  // sticky has a rest position; width:100% restores the full-width band
+  // (sticky is in-flow, unlike the stretched absolute box).
   .npn-critique-reply-modal__pane-scroll-cue {
     position: sticky;
     width: 100%;
-    margin-top: -2.3em;
   }
 
   // Larger-Image (visual-focus) mode: grow the reference image to fill
