@@ -42,12 +42,12 @@ describe SiteSetting do
     ).to eq(true)
   end
 
-  it "registers npn_critique_reply_rich_editor_experiment (default: false)" do
+  it "registers npn_critique_reply_rich_editor_experiment (default: true)" do
     expect(SiteSetting.respond_to?(:npn_critique_reply_rich_editor_experiment)).to eq(
       true,
     )
     expect(
       SiteSetting.defaults[:npn_critique_reply_rich_editor_experiment],
-    ).to eq(false)
+    ).to eq(true)
   end
 end
