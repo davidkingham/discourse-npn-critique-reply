@@ -3402,12 +3402,24 @@
   // Top-edge resize grippie (rendered in DModal's `<:aboveHeader>`).
   // Full-width hit strip with a centered visual handle, like the
   // composer's grippie.
+  // Out of flow: a centered drag band pinned to the top edge of the
+  // panel rather than an in-flow strip above the header. In flow it
+  // pushed the whole header (and title) down, leaving more space above
+  // the title than below it. Absolutely positioned and width-limited to
+  // the center, it overlays only the empty middle of the header — the
+  // title (left) and Minimize/Close (right) stay clickable — so the
+  // header keeps its symmetric padding and the title reads balanced.
   .npn-critique-reply-modal__resizer {
-    flex: 0 0 auto;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(160px, 40%);
+    height: 14px;
+    z-index: 5;
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 12px;
     cursor: ns-resize;
     touch-action: none;
     user-select: none;
