@@ -10687,81 +10687,148 @@ export default class NpnCritiqueReplyModal extends Component {
                   {{i18n "npn_critique_reply.modal.request_heading"}}
                 </h3>
 
-                {{#if this.hasRequestSummary}}
-                  <dl class="npn-critique-reply-modal__request-list">
-                    {{#if this.critiqueStyleLabel}}
-                      <div class="npn-critique-reply-modal__request-row">
-                        <dt>{{i18n
-                            "npn_critique_reply.modal.critique_style"
-                          }}</dt>
-                        <dd><span
-                            class="npn-critique-reply-modal__request-value"
-                          >{{this.critiqueStyleLabel}}</span></dd>
-                      </div>
-                    {{/if}}
-                    {{#if this.feedbackFocusLabel}}
-                      <div class="npn-critique-reply-modal__request-row">
-                        <dt>{{i18n
-                            "npn_critique_reply.modal.feedback_focus"
-                          }}</dt>
-                        <dd><span
-                            class="npn-critique-reply-modal__request-value"
-                          >{{this.feedbackFocusLabel}}</span></dd>
-                      </div>
-                    {{/if}}
-                    {{#if this.weeklyChallengeTitle}}
-                      <div class="npn-critique-reply-modal__request-row">
-                        <dt>{{i18n
-                            "npn_critique_reply.modal.weekly_challenge"
-                          }}</dt>
-                        <dd><span
-                            class="npn-critique-reply-modal__request-value"
-                          >{{this.weeklyChallengeTitle}}</span></dd>
-                      </div>
-                    {{/if}}
-                    {{#if this.weeklyChallengeDates}}
-                      <div class="npn-critique-reply-modal__request-row">
-                        <dt>{{i18n
-                            "npn_critique_reply.modal.weekly_challenge_dates"
-                          }}</dt>
-                        <dd><span
-                            class="npn-critique-reply-modal__request-value"
-                          >{{this.weeklyChallengeDates}}</span></dd>
-                      </div>
-                    {{/if}}
-                  </dl>
-                {{else}}
-                  <span class="npn-critique-reply-modal__no-request">
-                    {{i18n "npn_critique_reply.modal.no_request_found"}}
-                  </span>
-                {{/if}}
+                {{! One row under the heading: request pills aligned left,
+                    the "View Photographer's Notes" action aligned right
+                    (request + notes are both "what the photographer told
+                    you"). Stays on one line at desktop widths; on narrow
+                    widths the pills stay grouped and the button wraps
+                    below. Opens the notes overlay over the right pane
+                    only; the reference image stays visible. }}
+                <div class="npn-critique-reply-modal__request-bar">
+                  {{#if this.hasRequestSummary}}
+                    <dl class="npn-critique-reply-modal__request-list">
+                      {{#if this.critiqueStyleLabel}}
+                        <div class="npn-critique-reply-modal__request-row">
+                          <dt>{{i18n
+                              "npn_critique_reply.modal.critique_style"
+                            }}</dt>
+                          <dd><span
+                              class="npn-critique-reply-modal__request-value"
+                            >{{this.critiqueStyleLabel}}</span></dd>
+                        </div>
+                      {{/if}}
+                      {{#if this.feedbackFocusLabel}}
+                        <div class="npn-critique-reply-modal__request-row">
+                          <dt>{{i18n
+                              "npn_critique_reply.modal.feedback_focus"
+                            }}</dt>
+                          <dd><span
+                              class="npn-critique-reply-modal__request-value"
+                            >{{this.feedbackFocusLabel}}</span></dd>
+                        </div>
+                      {{/if}}
+                      {{#if this.weeklyChallengeTitle}}
+                        <div class="npn-critique-reply-modal__request-row">
+                          <dt>{{i18n
+                              "npn_critique_reply.modal.weekly_challenge"
+                            }}</dt>
+                          <dd><span
+                              class="npn-critique-reply-modal__request-value"
+                            >{{this.weeklyChallengeTitle}}</span></dd>
+                        </div>
+                      {{/if}}
+                      {{#if this.weeklyChallengeDates}}
+                        <div class="npn-critique-reply-modal__request-row">
+                          <dt>{{i18n
+                              "npn_critique_reply.modal.weekly_challenge_dates"
+                            }}</dt>
+                          <dd><span
+                              class="npn-critique-reply-modal__request-value"
+                            >{{this.weeklyChallengeDates}}</span></dd>
+                        </div>
+                      {{/if}}
+                    </dl>
+                  {{else}}
+                    <span class="npn-critique-reply-modal__no-request">
+                      {{i18n "npn_critique_reply.modal.no_request_found"}}
+                    </span>
+                  {{/if}}
 
-                {{! "View Photographer's Notes" — trailing action in the
-                    request row (request + notes are both "what the
-                    photographer told you"). Opens the notes overlay over
-                    the right pane only; the reference image stays visible.
-                    Wraps to its own line on narrow widths. }}
-                <button
-                  type="button"
-                  class="btn btn-default btn-small btn-icon-text
-                    npn-critique-reply-modal__view-notes-trigger"
-                  aria-haspopup="dialog"
-                  aria-expanded={{if this.photographersNotesOpen "true" "false"}}
-                  {{on "click" this.togglePhotographersNotes}}
-                >
-                  {{dIcon "far-file-lines"}}
-                  <span class="d-button-label">{{i18n
-                      "npn_critique_reply.modal.photographers_notes.view"
-                    }}</span>
-                </button>
+                  <button
+                    type="button"
+                    class="btn btn-default btn-small btn-icon-text
+                      npn-critique-reply-modal__view-notes-trigger"
+                    aria-haspopup="dialog"
+                    aria-expanded={{if
+                      this.photographersNotesOpen
+                      "true"
+                      "false"
+                    }}
+                    {{on "click" this.togglePhotographersNotes}}
+                  >
+                    {{dIcon "far-file-lines"}}
+                    <span class="d-button-label">{{i18n
+                        "npn_critique_reply.modal.photographers_notes.view"
+                      }}</span>
+                  </button>
+                </div>
               </section>
 
-              <label
-                for="npn-critique-reply-textarea"
-                class="npn-critique-reply-modal__textarea-label"
-              >
-                {{this.writingPanelHeading}}
-              </label>
+              {{! Critique editor header — the "Your Critique" heading on
+                  the left, the icon-only formatting + link controls on the
+                  right, on one line. The controls hide while the inline
+                  link form is open (it takes their place below). }}
+              <div class="npn-critique-reply-modal__editor-header">
+                <label
+                  for="npn-critique-reply-textarea"
+                  class="npn-critique-reply-modal__textarea-label"
+                >
+                  {{this.writingPanelHeading}}
+                </label>
+
+                {{#unless this.linkFormOpen}}
+                  <div
+                    class="npn-critique-reply-modal__toolbar"
+                    role="toolbar"
+                    aria-label={{i18n "npn_critique_reply.modal.toolbar.label"}}
+                  >
+                    {{#if this.richEditorEnabled}}
+                      {{! Two compact icon-only controls grouped to the
+                          right: the "font" toggle reveals DEditor's
+                          formatting toolbar (which also carries the
+                          Markdown/WYSIWYG switch) and stays hidden by
+                          default; the "link" icon opens the inline
+                          insert-link form. No "markdown supported" hint —
+                          in WYSIWYG that copy would be misleading. }}
+                      <div class="npn-critique-reply-modal__toolbar-actions">
+                        <DButton
+                          @icon="font"
+                          @translatedTitle={{this.formatToggleLabel}}
+                          @translatedAriaLabel={{this.formatToggleLabel}}
+                          @action={{this.toggleCritiqueToolbar}}
+                          @disabled={{this.isPosting}}
+                          aria-pressed={{if
+                            this.critiqueToolbarOpen
+                            "true"
+                            "false"
+                          }}
+                          class="btn-flat btn-small npn-critique-reply-modal__toolbar-button npn-critique-reply-modal__toolbar-icon npn-critique-reply-modal__format-toggle
+                            {{if this.critiqueToolbarOpen '--active'}}"
+                        />
+                        <DButton
+                          @icon="link"
+                          @title="npn_critique_reply.modal.toolbar.insert_link"
+                          @ariaLabel="npn_critique_reply.modal.toolbar.insert_link"
+                          @action={{this.openLinkForm}}
+                          @disabled={{this.isPosting}}
+                          class="btn-flat btn-small npn-critique-reply-modal__toolbar-button npn-critique-reply-modal__toolbar-icon"
+                        />
+                      </div>
+                    {{else}}
+                      <span class="npn-critique-reply-modal__toolbar-hint">
+                        {{i18n "npn_critique_reply.modal.markdown_supported"}}
+                      </span>
+                      <DButton
+                        @icon="link"
+                        @label="npn_critique_reply.modal.toolbar.insert_link"
+                        @action={{this.openLinkForm}}
+                        @disabled={{this.isPosting}}
+                        class="btn-flat btn-small npn-critique-reply-modal__toolbar-button"
+                      />
+                    {{/if}}
+                  </div>
+                {{/unless}}
+              </div>
 
               {{#if this.imageNotesContextLabel}}
                 <p
@@ -10836,14 +10903,12 @@ export default class NpnCritiqueReplyModal extends Component {
                 </p>
               {{/if}}
 
-              {{! Insert-link toolbar OR inline form. Both sit directly
-                  above the textarea so the affordance is adjacent to
-                  the field it acts on. We render one or the other —
-                  never both — so the layout doesn't jump while the
-                  form is open. The form is INLINE (not a sub-modal):
-                  Discourse's modal service swaps the active modal
-                  instead of stacking, which would dismiss the
-                  critique workspace if we used DModal here. }}
+              {{! Inline insert-link form. Replaces the header's toolbar
+                  controls while open (rendered here, just below the
+                  header). INLINE, not a sub-modal: Discourse's modal
+                  service swaps the active modal instead of stacking,
+                  which would dismiss the critique workspace if we used
+                  DModal here. }}
               {{#if this.linkFormOpen}}
                 <form
                   class="npn-critique-reply-modal__link-form"
@@ -10900,59 +10965,6 @@ export default class NpnCritiqueReplyModal extends Component {
                     }}
                   </p>
                 </form>
-              {{else}}
-                <div
-                  class="npn-critique-reply-modal__toolbar"
-                  role="toolbar"
-                  aria-label={{i18n
-                    "npn_critique_reply.modal.toolbar.label"
-                  }}
-                >
-                  {{#if this.richEditorEnabled}}
-                    {{! Two compact icon-only controls, grouped to the
-                        right above the editor: the "font" toggle reveals
-                        DEditor's formatting toolbar (which also carries the
-                        Markdown/WYSIWYG switch) and stays hidden by
-                        default; the "link" icon opens the inline insert-
-                        link form. No "markdown supported" hint here — in
-                        WYSIWYG that copy would be misleading. }}
-                    <div class="npn-critique-reply-modal__toolbar-actions">
-                      <DButton
-                        @icon="font"
-                        @translatedTitle={{this.formatToggleLabel}}
-                        @translatedAriaLabel={{this.formatToggleLabel}}
-                        @action={{this.toggleCritiqueToolbar}}
-                        @disabled={{this.isPosting}}
-                        aria-pressed={{if
-                          this.critiqueToolbarOpen
-                          "true"
-                          "false"
-                        }}
-                        class="btn-flat btn-small npn-critique-reply-modal__toolbar-button npn-critique-reply-modal__toolbar-icon npn-critique-reply-modal__format-toggle
-                          {{if this.critiqueToolbarOpen '--active'}}"
-                      />
-                      <DButton
-                        @icon="link"
-                        @title="npn_critique_reply.modal.toolbar.insert_link"
-                        @ariaLabel="npn_critique_reply.modal.toolbar.insert_link"
-                        @action={{this.openLinkForm}}
-                        @disabled={{this.isPosting}}
-                        class="btn-flat btn-small npn-critique-reply-modal__toolbar-button npn-critique-reply-modal__toolbar-icon"
-                      />
-                    </div>
-                  {{else}}
-                    <span class="npn-critique-reply-modal__toolbar-hint">
-                      {{i18n "npn_critique_reply.modal.markdown_supported"}}
-                    </span>
-                    <DButton
-                      @icon="link"
-                      @label="npn_critique_reply.modal.toolbar.insert_link"
-                      @action={{this.openLinkForm}}
-                      @disabled={{this.isPosting}}
-                      class="btn-flat btn-small npn-critique-reply-modal__toolbar-button"
-                    />
-                  {{/if}}
-                </div>
               {{/if}}
 
               {{#if this.richEditorEnabled}}

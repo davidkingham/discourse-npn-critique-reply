@@ -1211,9 +1211,21 @@
   &__request {
     margin: 0;
     padding: 0;
+    // Heading on its own line, then a single pills + notes-button row
+    // (see __request-bar). Tight gap so the block reads as one unit.
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
+  }
+
+  // The row under the heading: request pills aligned left, the "View
+  // Photographer's Notes" button aligned right (margin-left:auto on the
+  // trigger). One line at desktop widths; on narrow widths the pills stay
+  // grouped (they're their own flex item) and the button wraps below.
+  &__request-bar {
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
+    align-items: center;
     column-gap: 0.6em;
     row-gap: 0.4em;
   }
@@ -1345,8 +1357,8 @@
   &__request-heading {
     @extend %npn-critique-section-heading;
     margin: 0;
-    // Sits inline at the start of the compact request row; let it keep
-    // its own line on a true wrap rather than splitting mid-heading.
+    // On its own line above the pills/notes row; keep it from splitting
+    // mid-heading.
     white-space: nowrap;
   }
 
@@ -1545,7 +1557,10 @@
   &__textarea-section {
     display: flex;
     flex-direction: column;
-    gap: 0.55em;
+    // Tight, even rhythm so the switcher, request block, editor header,
+    // and editor read as one coherent writing panel rather than separate
+    // blocks.
+    gap: 0.45em;
     padding: 0.85em 1em 1em;
     background: var(--primary-very-low);
     border: 1px solid var(--primary-low);
@@ -1555,6 +1570,17 @@
   &__textarea-label {
     @extend %npn-critique-section-heading;
     margin: 0; // override the section-heading default — label sits next to its input
+  }
+
+  // Critique editor header: the "Your Critique" heading on the left, the
+  // icon-only formatting + link controls on the right, on one line. Wraps
+  // gracefully (controls drop below the heading) only when space is tight.
+  &__editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.35em 0.75em;
   }
 
   // -- Writing-context switcher -----------------------------------------
