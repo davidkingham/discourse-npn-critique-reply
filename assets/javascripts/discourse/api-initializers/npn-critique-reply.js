@@ -142,14 +142,20 @@ export default apiInitializer((api) => {
         {
           label: i18n("npn_critique_reply.quote_choice.start"),
           class: "btn-primary",
-          action: () =>
+          action: () => {
+            // Fire-and-forget: a block body (not an arrow expression) so
+            // we DON'T return modal.show()'s promise. The dialog's button
+            // handler `await`s the action before closing, and modal.show()
+            // resolves only when the workspace closes — returning it would
+            // leave this dialog open behind the workspace.
             modal.show(NpnCritiqueReplyModal, {
               model: {
                 topic,
                 metadata: topic?.npn_critique_reply ?? null,
                 initialQuote: markdown,
               },
-            }),
+            });
+          },
         },
         {
           label: i18n("npn_critique_reply.quote_choice.reply"),
