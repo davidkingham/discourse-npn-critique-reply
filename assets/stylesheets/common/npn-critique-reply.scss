@@ -3262,6 +3262,33 @@
     height: calc(var(--npn-docked-height) - 9em);
   }
 
+  // Larger-Image (visual-focus) mode: grow the reference image to fill
+  // the docked panel's height instead of the fixed viewport clamp
+  // (`clamp(420px, 75vh - 4em, 790px)`), which ignores the panel height
+  // and wastes the vertical space below the toolbar on a tall dock.
+  // Tie the cap to `--npn-docked-height`, reserving ~17em for the modal
+  // header/footer, grippie, tool row + helper, and the annotations
+  // summary so the toolbar stays on-screen (the left pane still scrolls
+  // as a safety net on a very short dock). The IMG stays in normal flow
+  // — sized by max-height, never flex-stretched — so the absolutely-
+  // positioned Konva overlay keeps aligning to the pixel image. Growing
+  // the height grows the (landscape) image's width in proportion too, up
+  // to the column width, so it reads larger in both dimensions.
+  &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
+  &.npn-critique-reply-modal--visual-focus
+    .npn-critique-reply-modal__processing-example-large {
+    max-height: max(420px, calc(var(--npn-docked-height) - 17em));
+  }
+
+  // Crop mode adds the aspect-ratio chip row below the toolbar (~3em);
+  // reserve a little more so those chips stay visible.
+  &.npn-critique-reply-modal--visual-focus.npn-critique-reply-modal--crop-mode
+    .npn-critique-image-reference__img,
+  &.npn-critique-reply-modal--visual-focus.npn-critique-reply-modal--crop-mode
+    .npn-critique-reply-modal__processing-example-large {
+    max-height: max(380px, calc(var(--npn-docked-height) - 20em));
+  }
+
   // Top-edge resize grippie (rendered in DModal's `<:aboveHeader>`).
   // Full-width hit strip with a centered visual handle, like the
   // composer's grippie.
