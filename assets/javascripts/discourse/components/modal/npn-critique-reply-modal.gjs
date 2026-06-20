@@ -10874,6 +10874,7 @@ export default class NpnCritiqueReplyModal extends Component {
                     "npn_critique_reply.modal.textarea_placeholder"
                   }}
                   @disabled={{this.isPosting}}
+                  @showLink={{false}}
                   @textAreaId="npn-critique-reply-textarea"
                   class="npn-critique-reply-modal__editor"
                 />
