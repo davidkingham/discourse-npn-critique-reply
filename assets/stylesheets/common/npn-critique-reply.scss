@@ -2083,9 +2083,13 @@
 
   // Let footer buttons wrap on narrow viewports rather than overflow.
   // DModal's footer is flex by default; we only nudge wrapping + gap.
+  // Tighten the vertical padding to reclaim the dead space the default
+  // footer leaves below the action buttons — a comfortable gap under the
+  // divider up top, a trimmer band below the buttons.
   .d-modal__footer {
     flex-wrap: wrap;
     gap: 0.5em;
+    padding-block: 0.85em 0.5em;
   }
 
   // -- Responsive --------------------------------------------------------
