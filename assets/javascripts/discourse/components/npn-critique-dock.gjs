@@ -106,9 +106,7 @@ export default class NpnCritiqueDock extends Component {
     this.npnCritiqueWorkspace.focusRequested = false;
     // Defer so focus wins after the closing modal's focus-trap teardown.
     setTimeout(() => {
-      element
-        ?.querySelector?.(".npn-critique-dock__resume")
-        ?.focus?.();
+      element?.querySelector?.(".npn-critique-dock__resume")?.focus?.();
     }, 0);
   }
 
