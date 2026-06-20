@@ -1219,13 +1219,16 @@
   }
 
   // The row under the heading: request pills aligned left, the "View
-  // Photographer's Notes" button aligned right (margin-left:auto on the
-  // trigger). One line at desktop widths; on narrow widths the pills stay
-  // grouped (they're their own flex item) and the button wraps below.
+  // Photographer's Notes" button aligned right. On one line the pills
+  // (flex-grow) push the button to the right edge; space-between handles
+  // the no-request case. When the row is too narrow the button wraps to
+  // its own line and — because it has NO margin-left:auto — falls back to
+  // the left (start) edge rather than sitting awkwardly on the right.
   &__request-bar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: space-between;
     column-gap: 0.6em;
     row-gap: 0.4em;
   }
@@ -1243,7 +1246,9 @@
   // own line when the row wraps on narrow widths).
   &__view-notes-trigger.btn {
     align-self: center;
-    margin-left: auto;
+    // No margin-left:auto — on a shared line the pills' flex-grow already
+    // pushes this to the right; when it wraps to its own line it then sits
+    // at the left edge instead of awkwardly on the right.
     flex: 0 0 auto;
     font-size: var(--font-down-1);
   }
