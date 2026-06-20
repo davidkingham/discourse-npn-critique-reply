@@ -679,7 +679,13 @@
   }
 
   &__image-picker-nav {
-    display: inline-flex;
+    // Prev/next chevrons are hidden on desktop/tablet — the (max 5)
+    // short "Image N" pills all fit there, so direct pill clicks are
+    // enough. They're restored only on narrow/mobile (<= 720px), where
+    // the pills may wrap or no longer fit comfortably. Keyboard nav is
+    // preserved: the pills are focusable buttons, so tabbing through
+    // them still works when the chevrons are hidden.
+    display: none;
     align-items: center;
     justify-content: center;
     width: 1.85em;
@@ -711,6 +717,12 @@
     &:disabled {
       opacity: 0.45;
       cursor: not-allowed;
+    }
+
+    // Narrow / mobile: bring the chevrons back as a fallback for when the
+    // pills wrap or run out of horizontal room.
+    @media (max-width: 720px) {
+      display: inline-flex;
     }
   }
 
