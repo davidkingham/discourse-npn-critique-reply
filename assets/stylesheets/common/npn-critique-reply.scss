@@ -1858,6 +1858,58 @@
     }
   }
 
+  // -- Rich (WYSIWYG) editor experiment ----------------------------------
+  //
+  // When the rich-editor flag is on we swap the <textarea> for Discourse's
+  // DEditor. The "Aa" toggle (in the toolbar row above) reveals DEditor's
+  // own formatting toolbar — which also carries the built-in
+  // Markdown/WYSIWYG switch — so the writing surface stays calm by default
+  // but the full toolset is one click away.
+  &__editor-wrap {
+    // DEditor's toolbar lives in `.d-editor-button-bar__wrap`. Hide it by
+    // default; the "Aa" toggle adds `--toolbar-open` to reveal it.
+    .d-editor-button-bar__wrap {
+      display: none;
+    }
+
+    &.--toolbar-open .d-editor-button-bar__wrap {
+      display: flex;
+    }
+  }
+
+  &__editor.d-editor {
+    width: 100%;
+
+    // Match the plain-textarea writing surface: a real, generous editing
+    // area framed like the rest of the panel, with the same focus ring.
+    .d-editor-input {
+      min-height: 320px;
+      padding: 0.75em;
+      background: var(--secondary);
+      border: 1px solid var(--primary-low-mid);
+      border-radius: var(--d-border-radius, 4px);
+      color: var(--primary);
+      line-height: 1.55;
+      box-sizing: border-box;
+
+      &:focus,
+      &:focus-visible {
+        outline: none;
+        border-color: var(--tertiary);
+        box-shadow: 0 0 0 3px var(--tertiary-low);
+      }
+    }
+  }
+
+  // "Aa" formatting toggle: a quiet toolbar button that reads as pressed
+  // (tinted) while DEditor's toolbar is revealed.
+  &__format-toggle.npn-critique-reply-modal__format-toggle {
+    &.--active {
+      background: var(--primary-low);
+      color: var(--primary);
+    }
+  }
+
   // -- Footer ------------------------------------------------------------
   //
   // Layout: primary on the left, secondary/accent next, neutral after,

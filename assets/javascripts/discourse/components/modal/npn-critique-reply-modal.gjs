@@ -341,6 +341,12 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked linkFormOpen = false;
   @tracked linkFormUrl = "";
   @tracked linkFormText = "";
+
+  // Rich-editor experiment only: whether DEditor's formatting toolbar is
+  // revealed. It's hidden by default (the writing surface stays calm) and
+  // the "Aa" toggle shows it — which also surfaces the built-in
+  // Markdown/WYSIWYG switch that lives in that toolbar.
+  @tracked critiqueToolbarOpen = false;
   _linkPreservedSelection = null;
 
   // Docked-experiment resize state (gated by the
@@ -1147,6 +1153,15 @@ export default class NpnCritiqueReplyModal extends Component {
   onCritiqueChange(event) {
     this.activeWritingText = event?.target?.value ?? "";
     this.clearValidationOnInput();
+  }
+
+  // Reveal/hide DEditor's formatting toolbar (rich-editor path). Hidden
+  // by default to keep the writing surface uncluttered; the toolbar also
+  // carries the built-in Markdown/WYSIWYG toggle, so this is the single
+  // "show me the formatting tools" affordance.
+  @action
+  toggleCritiqueToolbar() {
+    this.critiqueToolbarOpen = !this.critiqueToolbarOpen;
   }
 
   // Move focus to whichever writing surface is mounted. The rich editor
@@ -10843,9 +10858,31 @@ export default class NpnCritiqueReplyModal extends Component {
                     "npn_critique_reply.modal.toolbar.label"
                   }}
                 >
-                  <span class="npn-critique-reply-modal__toolbar-hint">
-                    {{i18n "npn_critique_reply.modal.markdown_supported"}}
-                  </span>
+                  {{#if this.richEditorEnabled}}
+                    {{! "Aa" reveals DEditor's formatting toolbar (and the
+                        Markdown/WYSIWYG toggle that lives in it), which is
+                        otherwise hidden so the writing surface stays calm.
+                        No "markdown supported" hint here — in WYSIWYG that
+                        copy would be misleading. }}
+                    <DButton
+                      @icon="font"
+                      @label="npn_critique_reply.modal.toolbar.formatting"
+                      @title="npn_critique_reply.modal.toolbar.formatting_title"
+                      @action={{this.toggleCritiqueToolbar}}
+                      @disabled={{this.isPosting}}
+                      aria-pressed={{if
+                        this.critiqueToolbarOpen
+                        "true"
+                        "false"
+                      }}
+                      class="btn-flat btn-small npn-critique-reply-modal__toolbar-button npn-critique-reply-modal__format-toggle
+                        {{if this.critiqueToolbarOpen '--active'}}"
+                    />
+                  {{else}}
+                    <span class="npn-critique-reply-modal__toolbar-hint">
+                      {{i18n "npn_critique_reply.modal.markdown_supported"}}
+                    </span>
+                  {{/if}}
                   <DButton
                     @icon="link"
                     @label="npn_critique_reply.modal.toolbar.insert_link"
@@ -10864,20 +10901,25 @@ export default class NpnCritiqueReplyModal extends Component {
                     inserts); @change mirrors the markdown back into the
                     active writing context. @topicId/@categoryId give it
                     native @mention/#hashtag/:emoji autocomplete. }}
-                <DEditor
-                  @value={{this.activeWritingText}}
-                  @change={{this.onCritiqueChange}}
-                  @onSetup={{this.setupEditorManipulation}}
-                  @topicId={{this.topic.id}}
-                  @categoryId={{this.topic.category_id}}
-                  @placeholder={{i18n
-                    "npn_critique_reply.modal.textarea_placeholder"
-                  }}
-                  @disabled={{this.isPosting}}
-                  @showLink={{false}}
-                  @textAreaId="npn-critique-reply-textarea"
-                  class="npn-critique-reply-modal__editor"
-                />
+                <div
+                  class="npn-critique-reply-modal__editor-wrap
+                    {{if this.critiqueToolbarOpen '--toolbar-open'}}"
+                >
+                  <DEditor
+                    @value={{this.activeWritingText}}
+                    @change={{this.onCritiqueChange}}
+                    @onSetup={{this.setupEditorManipulation}}
+                    @topicId={{this.topic.id}}
+                    @categoryId={{this.topic.category_id}}
+                    @placeholder={{i18n
+                      "npn_critique_reply.modal.textarea_placeholder"
+                    }}
+                    @disabled={{this.isPosting}}
+                    @showLink={{false}}
+                    @textAreaId="npn-critique-reply-textarea"
+                    class="npn-critique-reply-modal__editor"
+                  />
+                </div>
               {{else}}
                 <Textarea
                   id="npn-critique-reply-textarea"
