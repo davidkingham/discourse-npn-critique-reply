@@ -371,6 +371,15 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked _activeImageNotes = "";
   _imageNotesByImageIndex = new Map();
   @tracked activeWritingContext = WRITING_CONTEXT_OVERALL;
+  // Sticky reveal flag for the Image/Visual Notes writing context. A
+  // fresh critique opens with ONLY Overall Critique; the second context
+  // is revealed once the first annotation is created (see
+  // `_appendToImageNotes`) or when a draft/edit restores image content.
+  // Once revealed in a session it stays available so deleting the last
+  // annotation never yanks away a context the critic just used (and any
+  // image-note text would keep it available regardless via
+  // `hasAnyImageNotes`).
+  @tracked _imageNotesRevealed = false;
 
   // Post Critique state. `isPosting` disables the action buttons + close
   // path while the request is in flight; `errorMessage` is shown inline
@@ -1645,6 +1654,45 @@ export default class NpnCritiqueReplyModal extends Component {
     );
   }
 
+  // Per-image activity: does this image carry any critique work yet —
+  // visual annotations or image-specific notes text? Drives the subtle
+  // "has notes" marker on the image-navigation pills. The active image
+  // reads its live tracked annotation fields; others read cold storage.
+  _imageHasActivity(index) {
+    if (index === this._selectedImageIndex) {
+      if (this.hasVisualAnnotations) {
+        return true;
+      }
+    } else if (
+      snapshotHasAnnotations(this._annotationsByImageIndex.get(index))
+    ) {
+      return true;
+    }
+    return this._imageNotesForIndex(index).trim().length > 0;
+  }
+
+  // Image-navigation pills enriched with per-image activity + an
+  // accessible label, leaving the raw `submissionImages` array untouched.
+  // `number` is 1-based for display/aria. Recomputes on image switch
+  // (`_selectedImageIndex`) and on active-image annotation/notes edits
+  // (tracked), which is when a pill's activity can change.
+  get submissionImageNav() {
+    return this.submissionImages.map((img) => {
+      const hasActivity = this._imageHasActivity(img.index);
+      return {
+        index: img.index,
+        label: img.label,
+        hasActivity,
+        ariaLabel: i18n(
+          hasActivity
+            ? "npn_critique_reply.modal.image_picker.pill_active"
+            : "npn_critique_reply.modal.image_picker.pill",
+          { number: img.index + 1 }
+        ),
+      };
+    });
+  }
+
   // Revision/version chain only applies to the PRIMARY image. When the
   // critic has switched to a secondary submission image, the version
   // picker hides and we don't try to splice in revision URLs.
@@ -1934,14 +1982,19 @@ export default class NpnCritiqueReplyModal extends Component {
     return false;
   }
 
-  // The Image Notes / Visual Notes tab. Multi-image submissions always
-  // expose it (Image Notes is a first-class context). Single-image
-  // submissions keep it subdued until there's something to put there —
-  // the first annotation, or restored/typed image-specific text — so a
-  // plain written critique never sees a second tab it doesn't need.
+  // The Image Notes / Visual Notes tab. BOTH single- and multi-image
+  // critiques open with only Overall Critique — the second context is
+  // revealed once it's actually needed, so a plain written critique
+  // never sees a tab it doesn't use. It becomes available when:
+  //   • the first annotation has been created (sticky `_imageNotesRevealed`),
+  //   • the active writing context is already Image Notes (restore/edit
+  //     resumed there — never strand the active context without its tab),
+  //   • any image carries annotations, or
+  //   • any image carries notes text (never hide a field with content).
   get imageNotesTabAvailable() {
     return (
-      this.hasMultipleSubmissionImages ||
+      this._imageNotesRevealed ||
+      this.writingContextIsImage ||
       this.hasAnyImageAnnotations ||
       this.hasAnyImageNotes
     );
@@ -6674,6 +6727,9 @@ export default class NpnCritiqueReplyModal extends Component {
   // Switching context makes the inserted marker visible immediately and
   // focuses the critic on the notes they're now building for the image.
   _appendToImageNotes(addition) {
+    // First annotation reference for this session reveals the Image/Visual
+    // Notes context (sticky — see `_imageNotesRevealed`).
+    this._imageNotesRevealed = true;
     if (this.activeWritingContext !== WRITING_CONTEXT_IMAGE) {
       this.activeWritingContext = WRITING_CONTEXT_IMAGE;
     }
@@ -8019,6 +8075,17 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.hasVisualAnnotations) {
       this.mobileVisualToolsOpen = true;
     }
+
+    // Reveal Image Notes when editing a critique that already carries
+    // image-specific content or resumed in the image context — the tab
+    // must be present immediately and never hide existing text.
+    if (
+      this.activeWritingContext === WRITING_CONTEXT_IMAGE ||
+      this.hasAnyImageAnnotations ||
+      this.hasAnyImageNotes
+    ) {
+      this._imageNotesRevealed = true;
+    }
   }
 
   // Async helper: fetch the post's raw markdown over the network
@@ -8242,6 +8309,18 @@ export default class NpnCritiqueReplyModal extends Component {
         this.largeImageView = LARGE_IMAGE_VIEW_PROCESSING_EXAMPLE;
       } else {
         this.largeImageView = LARGE_IMAGE_VIEW_REFERENCE;
+      }
+
+      // Reveal Image Notes immediately when resuming a draft that already
+      // has image-specific content (annotations or notes text) or was last
+      // editing image notes — so the tab is present on resume and existing
+      // text is never hidden.
+      if (
+        this.activeWritingContext === WRITING_CONTEXT_IMAGE ||
+        this.hasAnyImageAnnotations ||
+        this.hasAnyImageNotes
+      ) {
+        this._imageNotesRevealed = true;
       }
     } finally {
       // Defer clearing the restoring flag until the next microtask so
@@ -8971,21 +9050,28 @@ export default class NpnCritiqueReplyModal extends Component {
                     disabled={{this.isOnFirstSubmissionImage}}
                     {{on "click" this.selectPreviousImage}}
                   >{{dIcon "chevron-left"}}</button>
-                  {{#each this.submissionImages as |img|}}
+                  {{#each this.submissionImageNav as |img|}}
                     <button
                       type="button"
                       class="npn-critique-reply-modal__image-picker-pill
                         {{if
                           (eq img.index this.selectedImageIndex)
                           'is-selected'
-                        }}"
+                        }}
+                        {{if img.hasActivity 'has-activity'}}"
                       aria-pressed={{if
                         (eq img.index this.selectedImageIndex)
                         "true"
                         "false"
                       }}
+                      aria-label={{img.ariaLabel}}
                       {{on "click" (fn this.selectImage img.index)}}
-                    >{{img.label}}</button>
+                    >{{img.label}}{{#if img.hasActivity}}
+                        <span
+                          class="npn-critique-reply-modal__image-picker-pill-dot"
+                          aria-hidden="true"
+                        ></span>
+                      {{/if}}</button>
                   {{/each}}
                   <button
                     type="button"
@@ -10886,21 +10972,22 @@ export default class NpnCritiqueReplyModal extends Component {
       </:body>
 
       <:footer>
-        {{! Primary action is always Post / Update — the critic can
-            submit directly without a forced preview gate. In preview
-            state the same button confirms; in edit state Preview is
-            offered as a quieter secondary option for users who DO
-            want to look first. Label changes to "Update critique"
-            in edit-existing-post mode. }}
-        <DButton
-          class="btn-primary npn-critique-reply-modal__post"
-          @action={{this.postCritique}}
-          @icon="reply"
-          @label={{this.postButtonLabel}}
-          @disabled={{this.isPosting}}
-          @isLoading={{this.isPosting}}
-        />
+        {{! Footer hierarchy: Preview is the natural next step, so in the
+            editing state it leads as the primary action and Post Critique
+            follows as a clearly-available secondary (Post still submits
+            directly — no forced preview gate). In PREVIEW state the order
+            flips: Post is the confirm action (primary) and "Back to edit"
+            returns. Post's label becomes "Update critique" when editing an
+            existing post. }}
         {{#if this.previewMode}}
+          <DButton
+            class="btn-primary npn-critique-reply-modal__post"
+            @action={{this.postCritique}}
+            @icon="reply"
+            @label={{this.postButtonLabel}}
+            @disabled={{this.isPosting}}
+            @isLoading={{this.isPosting}}
+          />
           <DButton
             class="npn-critique-reply-modal__back-to-edit"
             @action={{this.exitPreview}}
@@ -10910,13 +10997,21 @@ export default class NpnCritiqueReplyModal extends Component {
           />
         {{else}}
           <DButton
-            class="btn-default npn-critique-reply-modal__preview-button"
+            class="btn-primary npn-critique-reply-modal__preview-button"
             @action={{this.enterPreview}}
             @icon="eye"
             @label={{this.previewButtonLabel}}
             @title={{this.previewButtonTitle}}
             @disabled={{this.previewBuilding}}
             @isLoading={{this.previewBuilding}}
+          />
+          <DButton
+            class="btn-default npn-critique-reply-modal__post"
+            @action={{this.postCritique}}
+            @icon="reply"
+            @label={{this.postButtonLabel}}
+            @disabled={{this.isPosting}}
+            @isLoading={{this.isPosting}}
           />
         {{/if}}
         {{! The standard-composer hand-off used to live here. Beta

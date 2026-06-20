@@ -400,9 +400,11 @@
   // The user explicitly entered focus mode to use the visual
   // tools; labeling them as "Optional" reads redundant and eats
   // ~50px that the toolbar needs to stay above the footer.
-  &.npn-critique-reply-modal--visual-focus &__optional-visual-notes
+  &.npn-critique-reply-modal--visual-focus
+    &__optional-visual-notes
     > &__optional-section-heading,
-  &.npn-critique-reply-modal--visual-focus &__optional-visual-notes
+  &.npn-critique-reply-modal--visual-focus
+    &__optional-visual-notes
     > &__optional-section-helper {
     display: none;
   }
@@ -752,6 +754,31 @@
       &.is-selected {
         border-width: 2px;
       }
+    }
+  }
+
+  // Subtle "has critique work" marker on an image pill (annotations or
+  // image-notes text on that image). A small filled dot — its presence,
+  // not its hue, carries the meaning, and each pill also gets an
+  // accessible label ("Image 2, critique added"), so nothing relies on
+  // color alone. Sits just right of the pill number; doesn't widen the
+  // pill meaningfully.
+  &__image-picker-pill-dot {
+    display: inline-block;
+    width: 0.4em;
+    height: 0.4em;
+    margin-left: 0.4em;
+    border-radius: 50%;
+    background: var(--tertiary);
+    flex: 0 0 auto;
+
+    .npn-critique-reply-modal__image-picker-pill.is-selected & {
+      background: currentColor;
+    }
+
+    @media (forced-colors: active) {
+      background: ButtonText;
+      outline: 1px solid ButtonText;
     }
   }
 
@@ -1175,11 +1202,19 @@
 
   &__request {
     margin: 0;
-    padding: 0.65em 0.85em 0.75em;
+    padding: 0.5em 0.85em;
     background: var(--primary-very-low);
     border: 1px solid var(--primary-low);
     border-left: 3px solid var(--primary-low-mid);
     border-radius: var(--d-border-radius, 4px);
+    // Compact: the heading and the value pills share one line and wrap
+    // to extra rows only when the values are long. Saves the vertical
+    // space the old stacked label/value rows used for a little content.
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 0.75em;
+    row-gap: 0.4em;
   }
 
   // -- Photographer's Notes panel -----------------------------------------
@@ -1302,32 +1337,45 @@
 
   &__request-heading {
     @extend %npn-critique-section-heading;
-    margin: 0 0 0.5em;
+    margin: 0;
+    // Sits inline at the start of the compact request row; let it keep
+    // its own line on a true wrap rather than splitting mid-heading.
+    white-space: nowrap;
   }
 
   &__request-list {
     margin: 0;
     display: flex;
-    flex-direction: column;
-    gap: 0.3em;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35em 0.45em;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
+  // Rows collapse to their contents so each value pill becomes a direct
+  // flex child of the list (compact, scannable pills). The per-field
+  // "Style" / "Focus" labels are preserved for screen readers but hidden
+  // visually — the descriptive value pills read fine on their own and
+  // the heading already frames the group.
   &__request-row {
-    display: grid;
-    grid-template-columns: minmax(4.5em, 5.5em) 1fr;
-    gap: 0.4em 0.8em;
-    align-items: center;
-    margin: 0;
+    display: contents;
 
     dt {
-      font-weight: 600;
-      color: var(--primary-medium);
-      font-size: var(--font-down-1);
-      margin: 0;
+      // Visually hidden, still in the accessibility tree.
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
     }
     dd {
       margin: 0;
-      min-width: 0; // let pills wrap inside the grid cell
+      min-width: 0; // let pills wrap
     }
   }
 
@@ -1511,9 +1559,12 @@
   &__context-switcher {
     display: inline-flex;
     align-self: flex-start;
-    gap: 2px;
+    // No gap: the tabs adjoin inside a single shared track so the two
+    // contexts read as one segmented control rather than two buttons.
+    gap: 0;
     padding: 2px;
     background: var(--primary-low);
+    border: 1px solid var(--primary-low-mid);
     border-radius: var(--d-border-radius, 4px);
     // Wrap only if the viewport is genuinely narrow; avoids horizontal
     // overflow on small desktop / mobile widths.
@@ -1543,13 +1594,17 @@
       background: var(--primary-very-low);
     }
 
-    // Active context. Uses background + weight + an underline accent so
-    // selection isn't conveyed by color alone (req. 16).
+    // Active context. A raised "pill" against the track (background +
+    // soft lift) plus bold weight and an underline accent, so selection
+    // is conveyed by elevation/weight/underline — never color alone
+    // (req. 16). Restrained: same compact height as the inactive tabs.
     &.is-active {
       background: var(--secondary);
       color: var(--primary);
       font-weight: 700;
-      box-shadow: inset 0 -2px 0 var(--tertiary);
+      box-shadow:
+        inset 0 -2px 0 var(--tertiary),
+        0 1px 2px rgba(0, 0, 0, 0.12);
     }
 
     // Keep a visible keyboard focus ring (req. 16).
@@ -2023,11 +2078,6 @@
 
     &__write-col {
       gap: 1.25em;
-    }
-
-    &__request-row {
-      grid-template-columns: 1fr;
-      gap: 0.2em;
     }
 
     &__questions-list,
@@ -3377,4 +3427,3 @@ html.modal-open:has(.npn-critique-reply-modal--docked-experiment) {
   padding-right: 0 !important;
   scrollbar-gutter: auto !important;
 }
-
