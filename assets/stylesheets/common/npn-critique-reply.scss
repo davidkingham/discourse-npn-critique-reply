@@ -357,23 +357,27 @@
   // the user explicitly chose focus mode for the toolbar, not for
   // browsing existing annotations.
   //
-  //   clamp(380px, calc(75vh - 10em), 790px)
+  //   clamp(380px, calc(var(--npn-pane-px, 75vh) - 8em), 790px)
   //
   // The image-col header (Reference Image title + Return-to-Critique
   // button) is hidden in focus mode — the DModal X already runs
   // `beforeClose` which clears `visualFocusMode` instead of closing the
   // modal, so the X serves as the "Return to Critique" affordance.
   //
-  // The `- 10em` reserves room below the image for the helper line, the
-  // visual-tools toolbar, AND the "More below" scroll-cue gradient (a
-  // ~2.4em band pinned to the pane bottom). The floor is lowered to 380px
-  // so the calc can actually shrink the image on short viewports (e.g.
-  // 1366×768) — at the old 420px floor the toolbar stayed pinned under
-  // the gradient. Focus mode still reads "larger" because the write
-  // column is hidden, so the image also gets much WIDER.
+  // `--npn-pane-px` is the left pane's MEASURED visible height, published
+  // by a ResizeObserver in `setupLeftPane` (falls back to `75vh` for the
+  // first frame). Sizing against the real available space — rather than a
+  // viewport-proportional guess — means the `- 8em` reserve (helper +
+  // visual-tools toolbar + the ~2.4em "More below" gradient band + the
+  // image-col padding) holds at EVERY screen size: the image shrinks just
+  // enough to keep the toolbar clear of the gradient on a short pane (e.g.
+  // 1366×768) and stays large on a tall one, instead of `75vh` needlessly
+  // cropping it. The 380px floor lets it shrink on very short panes; focus
+  // mode still reads "larger" because the write column is hidden, so the
+  // image also gets much WIDER.
   &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus &__processing-example-large {
-    max-height: clamp(380px, calc(75vh - 10em), 790px);
+    max-height: clamp(380px, calc(var(--npn-pane-px, 75vh) - 8em), 790px);
   }
 
   // Hide the image-col header in focus mode — the heading is
@@ -430,9 +434,10 @@
     .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--crop-mode.npn-critique-reply-modal--visual-focus
     &__processing-example-large {
-    // Match the focus-mode clearance (helper + toolbar + crop chips + the
+    // Match the focus-mode clearance against the measured pane height,
+    // with extra room (helper + toolbar + crop's aspect-chip row + the
     // "More below" gradient band) so nothing scoots under the cue.
-    max-height: clamp(340px, calc(70vh - 10em), 740px);
+    max-height: clamp(340px, calc(var(--npn-pane-px, 70vh) - 11em), 740px);
   }
 
   // -- Image column ------------------------------------------------------

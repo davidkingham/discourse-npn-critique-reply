@@ -798,6 +798,9 @@ export default class NpnCritiqueReplyModal extends Component {
   _leftPaneElement = null;
   _rightPaneElement = null;
   _paneSentinelObservers = [];
+  // Watches the left pane's height and publishes it as `--npn-pane-px`
+  // so the focus-mode image cap sizes against real available space.
+  _paneResizeObserver = null;
 
   // -- Processing Example header popover -------------------------------
   //
@@ -3520,6 +3523,28 @@ export default class NpnCritiqueReplyModal extends Component {
   @action
   setupLeftPane(element) {
     this._leftPaneElement = element;
+
+    // Publish the pane's live visible height as a CSS custom property so
+    // the Larger-Image (focus-mode) cap can size the reference image
+    // against the ACTUAL available space instead of a viewport-proportional
+    // `75vh` guess. That way the image shrinks only when the pane is
+    // genuinely short — lifting the visual-tools toolbar clear of the
+    // "More below" gradient on a 1366×768 screen — while staying large on
+    // tall screens (where `75vh` was needlessly cropping it). `clientHeight`
+    // is the scroll viewport (padding box) and is independent of the
+    // image's own height, so there's no measure→resize feedback loop.
+    if (typeof ResizeObserver !== "undefined") {
+      const writeHeight = () => {
+        if (this._destroyed || !element.isConnected) {
+          return;
+        }
+        element.style.setProperty("--npn-pane-px", `${element.clientHeight}px`);
+      };
+      writeHeight();
+      this._paneResizeObserver?.disconnect?.();
+      this._paneResizeObserver = new ResizeObserver(writeHeight);
+      this._paneResizeObserver.observe(element);
+    }
   }
 
   @action
@@ -3604,6 +3629,12 @@ export default class NpnCritiqueReplyModal extends Component {
       }
     }
     this._paneSentinelObservers = [];
+    try {
+      this._paneResizeObserver?.disconnect?.();
+    } catch {
+      // Target may already be gone — fine.
+    }
+    this._paneResizeObserver = null;
     this._leftPaneElement = null;
     this._rightPaneElement = null;
   }
