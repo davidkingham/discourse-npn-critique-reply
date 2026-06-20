@@ -1214,82 +1214,78 @@
     row-gap: 0.4em;
   }
 
-  // -- Photographer's Notes panel -----------------------------------------
+  // -- Photographer's Notes (overlay panel) -------------------------------
   //
-  // Collapsed-by-default disclosure sitting between Photographer's
-  // Request and Questions to Consider. Card styling matches __request
-  // (same tinted background, hairline border, left accent) so the
-  // two cards read as a paired "what the photographer said" cluster.
-  &__photographers-notes {
-    margin: 0;
-    background: var(--primary-very-low);
-    border: 1px solid var(--primary-low);
-    border-left: 3px solid var(--primary-low-mid);
-    border-radius: var(--d-border-radius, 4px);
-    // Note: NO `overflow: hidden` here. A clipped <details> wrapper
-    // was eating the bottom of long photographer descriptions
-    // regardless of how the content panel was sized.
+  // The photographer's own description / questions / context. Formerly an
+  // inline collapsed disclosure under the editor; now opened on demand in
+  // an overlay panel so reading never pushes the editor down or shrinks
+  // the image. The lazy-loaded cooked OP body + the in-notes Quote
+  // selection are reused as-is.
+
+  // Make the modal body the positioning context for the overlay. The
+  // body does not scroll on desktop (the two-pane layout is sized to fit
+  // it), so an `inset: 0` child reliably covers the visible body.
+  .d-modal__body {
+    position: relative;
   }
 
-  &__photographers-notes-summary {
-    padding: 0.65em 0.85em 0.75em;
-    cursor: pointer;
+  // Trigger button under the Photographer's Request. Compact; stays at
+  // its natural width instead of stretching the full write-col.
+  &__view-notes-trigger.btn {
+    align-self: flex-start;
+    font-size: var(--font-down-1);
+  }
+
+  // The overlay panel: fills the modal body on desktop (full-screen sheet
+  // on mobile — see the media query). Own header + scroll area; the
+  // editor and reference image beneath are neither moved nor resized.
+  &__notes-panel {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
     display: flex;
     flex-direction: column;
-    gap: 0.15em;
-    list-style: none;
-    // Hide the default details-summary marker; the title's own
-    // typography + the hint underneath read as a clickable header.
-    &::-webkit-details-marker {
-      display: none;
+    background: var(--secondary);
+    border-top: 1px solid var(--primary-low);
+
+    &:focus {
+      outline: none;
     }
-    &:hover {
-      background: rgba(var(--tertiary-rgb, 0, 136, 204), 0.04);
-    }
-    &:focus-visible {
-      outline: 2px solid var(--tertiary);
-      outline-offset: 2px;
+
+    // Mobile: a full-screen sheet over the (already full-screen) modal.
+    @media (max-width: 720px) {
+      position: fixed;
+      z-index: 200;
     }
   }
 
-  &__photographers-notes-title {
+  &__notes-panel-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5em;
+    padding: 0.5em 0.5em 0.5em 0.85em;
+    border-bottom: 1px solid var(--primary-low);
+    background: var(--primary-very-low);
+  }
+
+  &__notes-panel-title {
     @extend %npn-critique-section-heading;
     margin: 0;
-    // Chevron via ::after — rotates when the details element is open.
-    &::after {
-      content: "▾";
-      margin-left: 0.4em;
-      color: var(--primary-medium);
-      font-size: 0.85em;
-      transition: transform 0.15s ease;
-      display: inline-block;
-    }
   }
 
-  &__photographers-notes[open] &__photographers-notes-title::after {
-    transform: rotate(180deg);
+  &__notes-panel-close.btn {
+    flex: 0 0 auto;
   }
 
-  &__photographers-notes-hint {
-    margin: 0;
-    color: var(--primary-medium);
-    font-size: var(--font-down-1);
-    line-height: 1.4;
-  }
-
-  &__photographers-notes-content {
-    border-top: 1px solid var(--primary-low);
-    padding: 0.7em 0.85em 0.85em;
-    background: var(--secondary);
-    // No max-height / overflow here. The previous viewport-based
-    // cap and the wrapper's `overflow: hidden` (now also removed)
-    // were combining to clip the bottom of long descriptions in
-    // ways the user couldn't bypass — neither nested-scroll nor
-    // outer-scroll reached the end. Letting the panel grow to fit
-    // its content means __write-col's own overflow:auto handles
-    // long posts: the user scrolls the writing column normally to
-    // read past the notes and on to the textarea, same gesture
-    // they already know.
+  &__notes-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.85em 1em;
+    // Respect the mobile safe-area at the bottom of the sheet.
+    padding-bottom: calc(1em + env(safe-area-inset-bottom, 0px));
   }
 
   &__photographers-notes-body {

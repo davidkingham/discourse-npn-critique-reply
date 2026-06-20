@@ -64,6 +64,10 @@ en:
         # leaving the workspace. Lazy-loaded on first expand.
         photographers_notes:
           title: "Photographer’s Notes"
+          # Trigger button (under the Photographer's Request) that opens
+          # the notes overlay panel.
+          view: "View Photographer’s Notes"
+          close: "Close photographer’s notes"
           hint: "View the photographer’s description, questions, and details."
           loading: "Loading the photographer’s post…"
           failed: "Couldn’t load the photographer’s post. You can close and reopen the original topic in a new tab if needed."

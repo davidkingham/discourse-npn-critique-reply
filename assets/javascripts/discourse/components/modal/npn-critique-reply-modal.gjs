@@ -5,6 +5,7 @@ import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { getOwner } from "@ember/owner";
 import didInsert from "@ember/render-modifiers/modifiers/did-insert";
+import willDestroy from "@ember/render-modifiers/modifiers/will-destroy";
 import { next } from "@ember/runloop";
 import { service } from "@ember/service";
 import { htmlSafe } from "@ember/template";
@@ -735,6 +736,13 @@ export default class NpnCritiqueReplyModal extends Component {
   // when either is missing.
   _opUsername = null;
   _opPostNumber = null;
+
+  // Whether the Photographer's Notes panel is open. The notes were a
+  // collapsed inline `<details>` below the editor; they're now an
+  // overlay panel the workspace renders over its own body, opened by a
+  // "View Photographer's Notes" trigger. Ephemeral session state — not
+  // persisted to the draft.
+  @tracked photographersNotesOpen = false;
 
   // -- Photographer's Notes quote action -------------------------------
   //
@@ -3104,6 +3112,15 @@ export default class NpnCritiqueReplyModal extends Component {
   // is already half-closed by the time we'd get to ignore the call.
   @action
   beforeClose() {
+    // Photographer's Notes panel is the topmost layer — X / Escape /
+    // click-outside closes it first, leaving the workspace open. (DModal
+    // listens for Escape in the capture phase on documentElement, so an
+    // in-panel keydown handler can't beat it; routing through beforeClose
+    // is the reliable interception, same pattern as visual-focus below.)
+    if (this.photographersNotesOpen) {
+      this.closePhotographersNotes();
+      return false;
+    }
     if (this.visualFocusMode) {
       this.visualFocusMode = false;
       if (this.siteSettings.npn_critique_reply_debug_enabled) {
@@ -3230,28 +3247,49 @@ export default class NpnCritiqueReplyModal extends Component {
     return htmlSafe(this._opCookedHtml);
   }
 
-  // Fires when the `<details>` for Photographer's Notes opens. First
-  // open triggers a single GET to /posts/<op>.json; subsequent opens
-  // reuse the cached cooked HTML. The OP's first post id comes from
-  // either the topic model's `first_post_id` or the post stream — we
-  // tolerate both shapes so a future Discourse upgrade that reshapes
-  // the topic JSON still resolves.
+  // Open / close the Photographer's Notes overlay panel. First open
+  // triggers a single GET to /posts/<op>.json; subsequent opens reuse
+  // the cached cooked HTML. The OP's first post id comes from either the
+  // topic model's `first_post_id` or the post stream — we tolerate both
+  // shapes so a future Discourse upgrade that reshapes the topic JSON
+  // still resolves.
   @action
-  onPhotographersNotesToggle(event) {
-    if (!event?.target?.open) {
-      // Collapsing the panel dismisses the floating Quote button so
-      // it doesn't dangle over later content. The body element
-      // remains in the DOM under the collapsed details, so the
-      // setup/teardown lifecycle does not re-run — we explicitly
-      // reset the button state here.
-      this._quoteButtonPosition = null;
-      this._quoteSelectionText = "";
+  togglePhotographersNotes() {
+    if (this.photographersNotesOpen) {
+      this.closePhotographersNotes();
       return;
     }
-    if (this._opCookedFetched || this._opCookedLoading) {
+    this.photographersNotesOpen = true;
+    if (!this._opCookedFetched && !this._opCookedLoading) {
+      this._loadOpCooked();
+    }
+  }
+
+  // Close the panel and return focus to the critique textarea. Resets
+  // the floating Quote button (the selection-listener teardown runs via
+  // the panel body's willDestroy when the panel leaves the DOM).
+  @action
+  closePhotographersNotes() {
+    if (!this.photographersNotesOpen) {
       return;
     }
-    this._loadOpCooked();
+    this.photographersNotesOpen = false;
+    this._quoteButtonPosition = null;
+    this._quoteSelectionText = "";
+    setTimeout(() => {
+      if (this._destroyed) {
+        return;
+      }
+      document.getElementById("npn-critique-reply-textarea")?.focus?.();
+    }, 0);
+  }
+
+  // Move focus into the panel on open so keyboard + screen-reader users
+  // land in the dialog (the panel root is `tabindex=-1`). Focus is
+  // restored to the textarea on close (see `closePhotographersNotes`).
+  @action
+  focusNotesPanel(element) {
+    element?.focus?.();
   }
 
   async _loadOpCooked() {
@@ -8834,6 +8872,66 @@ export default class NpnCritiqueReplyModal extends Component {
           </button>
         {{/if}}
 
+        {{! Photographer's Notes overlay panel. Rendered at the body root
+            and absolutely positioned over the modal body (full-screen
+            sheet on mobile) so reading the notes never moves or resizes
+            the editor or the reference image. Non-modal — the parent
+            DModal already owns the focus trap; Escape is handled locally
+            so it closes only this panel. Lazy-loaded cooked OP content
+            (reused as-is) supports the same in-notes text selection +
+            Quote that the old inline disclosure did. }}
+        {{#if this.photographersNotesOpen}}
+          <div
+            class="npn-critique-reply-modal__notes-panel"
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="npn-critique-reply-notes-panel-title"
+            tabindex="-1"
+            {{didInsert this.focusNotesPanel}}
+          >
+            <div class="npn-critique-reply-modal__notes-panel-header">
+              <h3
+                id="npn-critique-reply-notes-panel-title"
+                class="npn-critique-reply-modal__notes-panel-title"
+              >
+                {{i18n "npn_critique_reply.modal.photographers_notes.title"}}
+              </h3>
+              <DButton
+                class="btn-flat npn-critique-reply-modal__notes-panel-close"
+                @icon="xmark"
+                @action={{this.closePhotographersNotes}}
+                @title="npn_critique_reply.modal.photographers_notes.close"
+                @ariaLabel="npn_critique_reply.modal.photographers_notes.close"
+              />
+            </div>
+            <div class="npn-critique-reply-modal__notes-panel-body">
+              {{#if this._opCookedLoading}}
+                <p
+                  class="npn-critique-reply-modal__photographers-notes-status"
+                  aria-live="polite"
+                >
+                  {{i18n "npn_critique_reply.modal.photographers_notes.loading"}}
+                </p>
+              {{else if this.opCookedSafe}}
+                <div
+                  class="npn-critique-reply-modal__photographers-notes-body cooked"
+                  {{didInsert this.setupPhotographersNotes}}
+                  {{willDestroy this.teardownPhotographersNotes}}
+                >
+                  {{this.opCookedSafe}}
+                </div>
+              {{else if this._opCookedError}}
+                <p
+                  class="npn-critique-reply-modal__photographers-notes-status --error"
+                  role="alert"
+                >
+                  {{i18n "npn_critique_reply.modal.photographers_notes.failed"}}
+                </p>
+              {{/if}}
+            </div>
+          </div>
+        {{/if}}
+
         {{#if this.draftImageVersionMissingMessage}}
           <div
             class="npn-critique-reply-modal__draft-notice
@@ -10522,6 +10620,25 @@ export default class NpnCritiqueReplyModal extends Component {
                 </p>
               {{/if}}
 
+              {{! Opens the Photographer's Notes overlay panel (the
+                  photographer's own description / questions / context).
+                  Sits just under the request — both are "what the
+                  photographer told you" — and reads it in a temporary
+                  panel rather than pushing the editor down. }}
+              <button
+                type="button"
+                class="btn btn-default btn-icon-text
+                  npn-critique-reply-modal__view-notes-trigger"
+                aria-haspopup="dialog"
+                aria-expanded={{if this.photographersNotesOpen "true" "false"}}
+                {{on "click" this.togglePhotographersNotes}}
+              >
+                {{dIcon "far-file-lines"}}
+                <span class="d-button-label">{{i18n
+                    "npn_critique_reply.modal.photographers_notes.view"
+                  }}</span>
+              </button>
+
               <label
                 for="npn-critique-reply-textarea"
                 class="npn-critique-reply-modal__textarea-label"
@@ -10704,66 +10821,11 @@ export default class NpnCritiqueReplyModal extends Component {
               />
             </section>
 
-            {{! Photographer's Notes — collapsed-by-default disclosure
-                showing the cooked OP content. Lazy-fetched on first
-                expand via `onPhotographersNotesToggle`; cached in
-                state for the rest of the session. Permissions are
-                inherited from the standard /posts/:id.json endpoint
-                — the user only sees content they can already see in
-                the topic. }}
-            <details
-              class="npn-critique-reply-modal__photographers-notes"
-              {{on "toggle" this.onPhotographersNotesToggle}}
-            >
-              <summary
-                class="npn-critique-reply-modal__photographers-notes-summary"
-              >
-                <span
-                  class="npn-critique-reply-modal__photographers-notes-title"
-                >
-                  {{i18n
-                    "npn_critique_reply.modal.photographers_notes.title"
-                  }}
-                </span>
-                <span
-                  class="npn-critique-reply-modal__photographers-notes-hint"
-                >
-                  {{i18n
-                    "npn_critique_reply.modal.photographers_notes.hint"
-                  }}
-                </span>
-              </summary>
-              <div
-                class="npn-critique-reply-modal__photographers-notes-content"
-              >
-                {{#if this._opCookedLoading}}
-                  <p
-                    class="npn-critique-reply-modal__photographers-notes-status"
-                    aria-live="polite"
-                  >
-                    {{i18n
-                      "npn_critique_reply.modal.photographers_notes.loading"
-                    }}
-                  </p>
-                {{else if this.opCookedSafe}}
-                  <div
-                    class="npn-critique-reply-modal__photographers-notes-body cooked"
-                    {{didInsert this.setupPhotographersNotes}}
-                  >
-                    {{this.opCookedSafe}}
-                  </div>
-                {{else if this._opCookedError}}
-                  <p
-                    class="npn-critique-reply-modal__photographers-notes-status --error"
-                    role="alert"
-                  >
-                    {{i18n
-                      "npn_critique_reply.modal.photographers_notes.failed"
-                    }}
-                  </p>
-                {{/if}}
-              </div>
-            </details>
+            {{! Photographer's Notes are no longer an inline disclosure
+                here — they open in an overlay panel (rendered in the
+                modal body) via the "View Photographer's Notes" trigger
+                under the request, so reading them never pushes the
+                editor down. }}
 
             <section
               class="npn-critique-reply-modal__questions"
