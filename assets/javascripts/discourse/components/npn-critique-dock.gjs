@@ -95,20 +95,6 @@ export default class NpnCritiqueDock extends Component {
     );
   }
 
-  // "Image 2 of 4" when the minimized critique spans multiple images;
-  // null for single-image critiques (no clutter).
-  get imageContextLabel() {
-    const summary = this.npnCritiqueWorkspace.summary;
-    const total = summary?.imageCount ?? 1;
-    if (!total || total < 2) {
-      return null;
-    }
-    return i18n("npn_critique_reply.dock.image_context", {
-      current: (summary?.imageIndex ?? 0) + 1,
-      total,
-    });
-  }
-
   // When the dock appears because of a Minimize (not a navigation/composer
   // re-show), move focus to Resume so keyboard + screen-reader users land
   // on the way back. Consumed once, then cleared.
@@ -165,10 +151,6 @@ export default class NpnCritiqueDock extends Component {
             {{i18n "npn_critique_reply.dock.title"}}
           </span>
           <span class="npn-critique-dock__status">
-            {{#if this.imageContextLabel}}
-              {{this.imageContextLabel}}
-              ·
-            {{/if}}
             {{i18n "npn_critique_reply.dock.saved"}}
           </span>
         </div>

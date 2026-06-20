@@ -33,7 +33,6 @@ en:
         aria_label: "Critique in progress"
         title: "Critique in progress"
         saved: "Draft saved"
-        image_context: "Image %{current} of %{total}"
         resume: "Resume Critique"
         dismiss_title: "Hide — your draft stays saved"
 
