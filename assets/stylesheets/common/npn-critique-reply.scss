@@ -357,20 +357,23 @@
   // the user explicitly chose focus mode for the toolbar, not for
   // browsing existing annotations.
   //
-  //   clamp(420px, calc(75vh - 6.5em), 790px)
+  //   clamp(380px, calc(75vh - 10em), 790px)
   //
   // The image-col header (Reference Image title + Return-to-Critique
   // button) is hidden in focus mode — the DModal X already runs
   // `beforeClose` which clears `visualFocusMode` instead of closing the
   // modal, so the X serves as the "Return to Critique" affordance.
   //
-  // The `- 6.5em` reserves room below the image for the visual-tools
-  // toolbar AND the "More below" scroll-cue gradient (a ~2.4em band
-  // pinned to the pane bottom). Without that extra clearance the toolbar
-  // scooted under the gradient on shorter viewports and faded out.
+  // The `- 10em` reserves room below the image for the helper line, the
+  // visual-tools toolbar, AND the "More below" scroll-cue gradient (a
+  // ~2.4em band pinned to the pane bottom). The floor is lowered to 380px
+  // so the calc can actually shrink the image on short viewports (e.g.
+  // 1366×768) — at the old 420px floor the toolbar stayed pinned under
+  // the gradient. Focus mode still reads "larger" because the write
+  // column is hidden, so the image also gets much WIDER.
   &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus &__processing-example-large {
-    max-height: clamp(420px, calc(75vh - 6.5em), 790px);
+    max-height: clamp(380px, calc(75vh - 10em), 790px);
   }
 
   // Hide the image-col header in focus mode — the heading is
@@ -427,9 +430,9 @@
     .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--crop-mode.npn-critique-reply-modal--visual-focus
     &__processing-example-large {
-    // Match the focus-mode clearance (toolbar + crop chips + the
+    // Match the focus-mode clearance (helper + toolbar + crop chips + the
     // "More below" gradient band) so nothing scoots under the cue.
-    max-height: clamp(380px, calc(70vh - 6.5em), 740px);
+    max-height: clamp(340px, calc(70vh - 10em), 740px);
   }
 
   // -- Image column ------------------------------------------------------
@@ -3485,20 +3488,21 @@
 
   // Larger-Image (visual-focus) mode: grow the reference image to fill
   // the docked panel's height instead of the fixed viewport clamp
-  // (`clamp(420px, 75vh - 6.5em, 790px)`), which ignores the panel height
+  // (`clamp(380px, 75vh - 10em, 790px)`), which ignores the panel height
   // and wastes the vertical space below the toolbar on a tall dock.
-  // Tie the cap to `--npn-docked-height`, reserving ~17em for the modal
-  // header/footer, grippie, tool row + helper, and the annotations
-  // summary so the toolbar stays on-screen (the left pane still scrolls
-  // as a safety net on a very short dock). The IMG stays in normal flow
-  // — sized by max-height, never flex-stretched — so the absolutely-
-  // positioned Konva overlay keeps aligning to the pixel image. Growing
-  // the height grows the (landscape) image's width in proportion too, up
-  // to the column width, so it reads larger in both dimensions.
+  // Tie the cap to `--npn-docked-height`, reserving ~20em for the modal
+  // header/footer, grippie, tool row + helper, the "More below" gradient
+  // band, and the annotations summary so the toolbar stays on-screen
+  // (the left pane still scrolls as a safety net on a very short dock).
+  // The IMG stays in normal flow — sized by max-height, never
+  // flex-stretched — so the absolutely-positioned Konva overlay keeps
+  // aligning to the pixel image. Growing the height grows the (landscape)
+  // image's width in proportion too, up to the column width, so it reads
+  // larger in both dimensions.
   &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus
     .npn-critique-reply-modal__processing-example-large {
-    max-height: max(420px, calc(var(--npn-docked-height) - 17em));
+    max-height: max(380px, calc(var(--npn-docked-height) - 20em));
   }
 
   // Crop mode adds the aspect-ratio chip row below the toolbar (~3em);
@@ -3507,7 +3511,7 @@
     .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus.npn-critique-reply-modal--crop-mode
     .npn-critique-reply-modal__processing-example-large {
-    max-height: max(380px, calc(var(--npn-docked-height) - 20em));
+    max-height: max(340px, calc(var(--npn-docked-height) - 23em));
   }
 
   // Normal (non-focus, non-crop) docked view: same idea as the
