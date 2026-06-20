@@ -3436,7 +3436,8 @@
   }
 
   .npn-critique-reply-modal__resizer-grip {
-    width: 36px;
+    // Matches the composer grippie's 3em handle width (was 36px).
+    width: 3em;
     height: 4px;
     border-radius: 2px;
     background-color: var(--primary-low-mid);
