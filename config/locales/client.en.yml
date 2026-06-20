@@ -47,7 +47,7 @@ en:
         reply: "Quote in a reply"
 
       modal:
-        title: "Start a Critique"
+        title: "Critique Workspace"
         intro: "Write your critique with the image and photographer’s context close at hand."
         # Bottom-fade "more below" cue at the bottom of a pane when
         # content extends past the visible viewport. The cue is a

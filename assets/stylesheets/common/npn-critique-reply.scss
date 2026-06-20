@@ -3095,6 +3095,20 @@
 // the right), and we drop the close button's auto margin within our modal
 // so the two sit together. Scoped under the modal root for specificity.
 .npn-critique-reply-modal .d-modal__header {
+  // Compact header (~44-48px): the default desktop title is a page-sized
+  // `--font-up-3`, which makes the bar read as a large heading and eats
+  // vertical space in this workspace layout. Shrink the title to a
+  // modal-sized label and tighten the block padding, while leaving the
+  // Minimize / Close buttons at their default size for comfortable hit
+  // targets. The title stays a clear, visible <h*> — not removed.
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+
+  .d-modal__title-text {
+    font-size: var(--font-up-1);
+    line-height: 1.3;
+  }
+
   .npn-critique-reply-modal__minimize.btn {
     margin-left: auto;
     color: var(--primary-medium);
