@@ -79,3 +79,14 @@ plugins:
   # to disable expiry.
   npn_critique_reply_draft_ttl_days:
     default: 30
+
+  # EXPERIMENTAL: replace the plain critique <textarea> with Discourse's
+  # rich (ProseMirror/WYSIWYG) DEditor. The stored value stays markdown
+  # in both modes, so drafts, preview, and post composition are
+  # unchanged. The formatting toolbar is hidden behind a small "Aa"
+  # reveal (which also exposes the built-in Markdown/WYSIWYG toggle).
+  # Off by default — flip on to run the round-trip / cursor /
+  # context-switch spike before any wider rollout.
+  npn_critique_reply_rich_editor_experiment:
+    default: false
+    client: true

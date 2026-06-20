@@ -12,6 +12,7 @@ import { htmlSafe } from "@ember/template";
 import { tracked } from "@glimmer/tracking";
 import UserAutocompleteResults from "discourse/components/user-autocomplete-results";
 import DButton from "discourse/ui-kit/d-button";
+import DEditor from "discourse/ui-kit/d-editor";
 import DModal from "discourse/ui-kit/d-modal";
 import { ajax } from "discourse/lib/ajax";
 import dAutocomplete from "discourse/ui-kit/modifiers/d-autocomplete";
@@ -315,6 +316,13 @@ export default class NpnCritiqueReplyModal extends Component {
   // and so the autocomplete `afterComplete` callback can refocus.
   #textarea = null;
   #textManipulation = null;
+  // True once DEditor (the rich-editor experiment) has handed us its
+  // unified TextManipulation via @onSetup. Both of DEditor's sub-modes
+  // (WYSIWYG and Markdown) share that interface and fire @change on
+  // programmatic writes, so when this is set the insert helpers route
+  // through `#textManipulation` and skip the textarea-only `.value` /
+  // synthetic-`input` plumbing. Stays false on the legacy textarea path.
+  #usingDEditor = false;
 
   // Inline Insert-link form state. The form lives INSIDE this modal
   // (it replaces the toolbar row when open) instead of opening a
@@ -859,6 +867,7 @@ export default class NpnCritiqueReplyModal extends Component {
     // manually deregister listeners here.
     this.#textarea = null;
     this.#textManipulation = null;
+    this.#usingDEditor = false;
     // Drop the Processing Example menu click-outside listener if it
     // happens to still be attached when the modal closes.
     if (this._processingExampleMenuOutsideHandler) {
@@ -1092,6 +1101,69 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
+  // DEditor (rich-editor experiment) counterpart to setupTextarea.
+  // `@onSetup` hands us the unified TextManipulation for the CURRENT
+  // sub-mode (WYSIWYG or Markdown) and is re-invoked whenever the user
+  // toggles between them, so `#textManipulation` always points at the
+  // live editor. We deliberately don't wire dAutocomplete/userSearch
+  // here — DEditor provides @mention/#hashtag/:emoji autocomplete from
+  // @topicId/@categoryId natively. The returned function is DEditor's
+  // teardown callback.
+  @action
+  setupEditorManipulation(textManipulation) {
+    this.#textManipulation = textManipulation;
+    this.#usingDEditor = true;
+
+    // Resume-from-dock asks us to land focus in the writing field;
+    // deferred so it wins after DModal's focus-trap setup.
+    if (this.args.model?.focusWriting) {
+      setTimeout(() => {
+        if (this._destroyed) {
+          return;
+        }
+        try {
+          textManipulation.focus();
+        } catch {
+          // focus() can throw if the editor is mid-teardown; harmless.
+        }
+      }, 0);
+    }
+
+    return () => {
+      // Only clear if this is still the active manipulation (a mode
+      // toggle replaces it with a fresh one before tearing down the old).
+      if (this.#textManipulation === textManipulation) {
+        this.#textManipulation = null;
+      }
+    };
+  }
+
+  // DEditor keeps the markdown internally and notifies us via @change;
+  // mirror it into the bound writing context so the markdown-based
+  // drafts/preview/post pipeline and inline validation stay in sync.
+  // (The legacy <Textarea> uses Ember's two-way binding instead, so this
+  // handler only runs on the rich-editor path.)
+  @action
+  onCritiqueChange(event) {
+    this.activeWritingText = event?.target?.value ?? "";
+    this.clearValidationOnInput();
+  }
+
+  // Move focus to whichever writing surface is mounted. The rich editor
+  // exposes focus() on its TextManipulation; the legacy textarea is
+  // reachable by id. Used by post-insert/post-quote/validation flows.
+  _focusWritingSurface() {
+    if (this.#usingDEditor && this.#textManipulation) {
+      try {
+        this.#textManipulation.focus();
+        return;
+      } catch {
+        // Fall through to the id lookup below.
+      }
+    }
+    document.getElementById("npn-critique-reply-textarea")?.focus?.();
+  }
+
   @action
   openLinkForm() {
     // Capture the textarea's selection BEFORE the form's first input
@@ -1123,9 +1195,9 @@ export default class NpnCritiqueReplyModal extends Component {
     this.linkFormUrl = "";
     this.linkFormText = "";
     this._linkPreservedSelection = null;
-    // Return focus to the textarea so keyboard users land back on the
-    // writing surface after dismissing the helper.
-    this.#textarea?.focus();
+    // Return focus to the writing surface so keyboard users land back on
+    // it after dismissing the helper.
+    this._focusWritingSurface();
   }
 
   @action
@@ -1233,9 +1305,12 @@ export default class NpnCritiqueReplyModal extends Component {
       // component, which listens to the native `input` event. The
       // helper writes directly to .value, so without this dispatch
       // the tracked property would diverge from the DOM until the
-      // user next typed a character.
-      this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
-      this.#textarea?.focus();
+      // user next typed a character. DEditor fires its own @change on
+      // programmatic writes, so the dispatch is the textarea path only.
+      if (!this.#usingDEditor) {
+        this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      this._focusWritingSurface();
     } catch (e) {
       this._recordError("insert_link", e, null, "warn");
     }
@@ -1355,7 +1430,7 @@ export default class NpnCritiqueReplyModal extends Component {
       if (this._destroyed) {
         return;
       }
-      document.getElementById("npn-critique-reply-textarea")?.focus?.();
+      this._focusWritingSurface();
     }, 0);
   }
 
@@ -1482,6 +1557,14 @@ export default class NpnCritiqueReplyModal extends Component {
 
   get dockedExperimentEnabled() {
     return this.siteSettings.npn_critique_reply_docked_experiment;
+  }
+
+  // EXPERIMENTAL: render the rich (WYSIWYG) DEditor instead of the plain
+  // <Textarea> for the critique writing surface. Markdown stays the
+  // stored value in both editor modes, so drafts/preview/post are
+  // unaffected. Off by default — see the matching site setting.
+  get richEditorEnabled() {
+    return this.siteSettings.npn_critique_reply_rich_editor_experiment;
   }
 
   // Inline `style` for the modal root. Sets the height custom property
@@ -2092,8 +2175,7 @@ export default class NpnCritiqueReplyModal extends Component {
       if (this._destroyed) {
         return;
       }
-      const el = document.getElementById("npn-critique-reply-textarea");
-      el?.focus?.();
+      this._focusWritingSurface();
     }, 0);
   }
 
@@ -3287,7 +3369,7 @@ export default class NpnCritiqueReplyModal extends Component {
       if (this._destroyed) {
         return;
       }
-      document.getElementById("npn-critique-reply-textarea")?.focus?.();
+      this._focusWritingSurface();
     }, 0);
   }
 
@@ -3680,6 +3762,19 @@ export default class NpnCritiqueReplyModal extends Component {
   // the bound `activeWritingText` + draft autosaver see the change,
   // then refocuses the textarea.
   _insertQuoteMarkdown(quoteText) {
+    // Rich-editor path: insertBlock drops the quote at the caret as its
+    // own block (handling the surrounding blank lines itself) and fires
+    // @change, so we skip the textarea `.value`/synthetic-input plumbing.
+    if (this.#usingDEditor && this.#textManipulation) {
+      try {
+        this.#textManipulation.insertBlock(quoteText);
+      } catch (e) {
+        this._recordError("quote_insert", e, null, "warn");
+        this._appendToActiveText(quoteText);
+      }
+      this._focusWritingSurface();
+      return;
+    }
     if (!this.#textManipulation || !this.#textarea) {
       // Defensive fallback — append to the end of the active context.
       // The textarea ref is set by didInsert and lives for the modal's
@@ -6806,8 +6901,7 @@ export default class NpnCritiqueReplyModal extends Component {
       if (this._destroyed) {
         return;
       }
-      const el = document.getElementById("npn-critique-reply-textarea");
-      el?.focus?.();
+      this._focusWritingSurface();
     }, 0);
   }
 
@@ -6839,8 +6933,7 @@ export default class NpnCritiqueReplyModal extends Component {
       this.validationMessage = i18n(
         "npn_critique_reply.modal.validation_empty"
       );
-      const el = document.getElementById("npn-critique-reply-textarea");
-      el?.focus?.();
+      this._focusWritingSurface();
       return;
     }
     this.validationMessage = null;
@@ -6999,8 +7092,7 @@ export default class NpnCritiqueReplyModal extends Component {
       if (this._destroyed) {
         return;
       }
-      const el = document.getElementById("npn-critique-reply-textarea");
-      el?.focus?.();
+      this._focusWritingSurface();
     }, 0);
   }
 
@@ -7085,8 +7177,7 @@ export default class NpnCritiqueReplyModal extends Component {
       );
       this.errorMessage = null;
       this.visualNotesFailureContext = null;
-      const el = document.getElementById("npn-critique-reply-textarea");
-      el?.focus?.();
+      this._focusWritingSurface();
       return;
     }
 
@@ -10765,17 +10856,40 @@ export default class NpnCritiqueReplyModal extends Component {
                 </div>
               {{/if}}
 
-              <Textarea
-                id="npn-critique-reply-textarea"
-                class="npn-critique-reply-modal__textarea"
-                @value={{this.activeWritingText}}
-                placeholder={{i18n
-                  "npn_critique_reply.modal.textarea_placeholder"
-                }}
-                disabled={{this.isPosting}}
-                {{on "input" this.clearValidationOnInput}}
-                {{didInsert this.setupTextarea}}
-              />
+              {{#if this.richEditorEnabled}}
+                {{! EXPERIMENTAL rich (WYSIWYG) editor. The value stays
+                    markdown, so it feeds the same draft/preview/post
+                    pipeline as the textarea. @onSetup captures the
+                    unified TextManipulation (for Insert-link / quote
+                    inserts); @change mirrors the markdown back into the
+                    active writing context. @topicId/@categoryId give it
+                    native @mention/#hashtag/:emoji autocomplete. }}
+                <DEditor
+                  @value={{this.activeWritingText}}
+                  @change={{this.onCritiqueChange}}
+                  @onSetup={{this.setupEditorManipulation}}
+                  @topicId={{this.topic.id}}
+                  @categoryId={{this.topic.category_id}}
+                  @placeholder={{i18n
+                    "npn_critique_reply.modal.textarea_placeholder"
+                  }}
+                  @disabled={{this.isPosting}}
+                  @textAreaId="npn-critique-reply-textarea"
+                  class="npn-critique-reply-modal__editor"
+                />
+              {{else}}
+                <Textarea
+                  id="npn-critique-reply-textarea"
+                  class="npn-critique-reply-modal__textarea"
+                  @value={{this.activeWritingText}}
+                  placeholder={{i18n
+                    "npn_critique_reply.modal.textarea_placeholder"
+                  }}
+                  disabled={{this.isPosting}}
+                  {{on "input" this.clearValidationOnInput}}
+                  {{didInsert this.setupTextarea}}
+                />
+              {{/if}}
             </section>
 
             {{! Photographer's Notes are no longer an inline disclosure
