@@ -1222,40 +1222,50 @@
   // the image. The lazy-loaded cooked OP body + the in-notes Quote
   // selection are reused as-is.
 
-  // Make the modal body the positioning context for the overlay. The
-  // body does not scroll on desktop (the two-pane layout is sized to fit
-  // it), so an `inset: 0` child reliably covers the visible body.
-  .d-modal__body {
-    position: relative;
-  }
-
-  // Trigger button under the Photographer's Request. Compact; stays at
-  // its natural width instead of stretching the full write-col.
+  // Trigger button — a compact secondary action at the end of the
+  // Photographer's Request row (pushed right of the pills; drops to its
+  // own line when the row wraps on narrow widths).
   &__view-notes-trigger.btn {
-    align-self: flex-start;
+    align-self: center;
+    margin-left: auto;
+    flex: 0 0 auto;
     font-size: var(--font-down-1);
   }
 
-  // The overlay panel: fills the modal body on desktop (full-screen sheet
-  // on mobile — see the media query). Own header + scroll area; the
-  // editor and reference image beneath are neither moved nor resized.
+  // The overlay panel: a grid sibling of the write column, placed in the
+  // SAME (last) grid cell so it overlays ONLY the right writing pane —
+  // the reference image and visual tools in the left column stay visible.
+  // The layout row is a fixed height, so the panel fills the cell and
+  // scrolls internally (no scroll-with-content issue an absolute child of
+  // the scrolling write-col would hit). Own header + scroll area; neither
+  // column is moved or resized.
   &__notes-panel {
-    position: absolute;
-    inset: 0;
-    z-index: 50;
+    grid-column: -2 / -1;
+    grid-row: 1;
+    align-self: stretch;
+    z-index: 5;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
     background: var(--secondary);
-    border-top: 1px solid var(--primary-low);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+    box-shadow: 0 2px 14px rgba(0, 0, 0, 0.14);
 
     &:focus {
       outline: none;
     }
 
-    // Mobile: a full-screen sheet over the (already full-screen) modal.
+    // Mobile: the two-pane grid collapses to a single stacked column, so
+    // escape the grid entirely and become a full-screen sheet over the
+    // (already full-screen) modal.
     @media (max-width: 720px) {
       position: fixed;
+      inset: 0;
       z-index: 200;
+      border: none;
+      border-radius: 0;
     }
   }
 

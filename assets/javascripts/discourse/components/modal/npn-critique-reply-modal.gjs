@@ -3087,6 +3087,13 @@ export default class NpnCritiqueReplyModal extends Component {
   @action
   toggleVisualFocusMode() {
     this.visualFocusMode = !this.visualFocusMode;
+    // Larger Image collapses to a single (image) column where the notes
+    // panel's write-column slot doesn't exist — close it so it can't
+    // cover the image. (Its trigger lives in the now-hidden write column,
+    // so it can't be reopened until you return to the two-pane view.)
+    if (this.visualFocusMode && this.photographersNotesOpen) {
+      this.closePhotographersNotes();
+    }
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] visual-focus-mode", {
@@ -8872,65 +8879,10 @@ export default class NpnCritiqueReplyModal extends Component {
           </button>
         {{/if}}
 
-        {{! Photographer's Notes overlay panel. Rendered at the body root
-            and absolutely positioned over the modal body (full-screen
-            sheet on mobile) so reading the notes never moves or resizes
-            the editor or the reference image. Non-modal — the parent
-            DModal already owns the focus trap; Escape is handled locally
-            so it closes only this panel. Lazy-loaded cooked OP content
-            (reused as-is) supports the same in-notes text selection +
-            Quote that the old inline disclosure did. }}
-        {{#if this.photographersNotesOpen}}
-          <div
-            class="npn-critique-reply-modal__notes-panel"
-            role="dialog"
-            aria-modal="false"
-            aria-labelledby="npn-critique-reply-notes-panel-title"
-            tabindex="-1"
-            {{didInsert this.focusNotesPanel}}
-          >
-            <div class="npn-critique-reply-modal__notes-panel-header">
-              <h3
-                id="npn-critique-reply-notes-panel-title"
-                class="npn-critique-reply-modal__notes-panel-title"
-              >
-                {{i18n "npn_critique_reply.modal.photographers_notes.title"}}
-              </h3>
-              <DButton
-                class="btn-flat npn-critique-reply-modal__notes-panel-close"
-                @icon="xmark"
-                @action={{this.closePhotographersNotes}}
-                @title="npn_critique_reply.modal.photographers_notes.close"
-                @ariaLabel="npn_critique_reply.modal.photographers_notes.close"
-              />
-            </div>
-            <div class="npn-critique-reply-modal__notes-panel-body">
-              {{#if this._opCookedLoading}}
-                <p
-                  class="npn-critique-reply-modal__photographers-notes-status"
-                  aria-live="polite"
-                >
-                  {{i18n "npn_critique_reply.modal.photographers_notes.loading"}}
-                </p>
-              {{else if this.opCookedSafe}}
-                <div
-                  class="npn-critique-reply-modal__photographers-notes-body cooked"
-                  {{didInsert this.setupPhotographersNotes}}
-                  {{willDestroy this.teardownPhotographersNotes}}
-                >
-                  {{this.opCookedSafe}}
-                </div>
-              {{else if this._opCookedError}}
-                <p
-                  class="npn-critique-reply-modal__photographers-notes-status --error"
-                  role="alert"
-                >
-                  {{i18n "npn_critique_reply.modal.photographers_notes.failed"}}
-                </p>
-              {{/if}}
-            </div>
-          </div>
-        {{/if}}
+        {{! The Photographer's Notes overlay panel is rendered inside the
+            two-pane layout (as a grid sibling of the write column) so it
+            covers ONLY the right writing pane — the reference image and
+            visual tools on the left stay visible. See below. }}
 
         {{#if this.draftImageVersionMissingMessage}}
           <div
@@ -10559,18 +10511,18 @@ export default class NpnCritiqueReplyModal extends Component {
                   request is relevant to either. All values preserved;
                   per-field labels are kept for screen readers (visually
                   hidden) and the pills wrap gracefully on narrow widths. }}
-              {{#if this.hasRequestSummary}}
-                <section
-                  class="npn-critique-reply-modal__request"
-                  aria-labelledby="npn-critique-reply-request-heading"
+              <section
+                class="npn-critique-reply-modal__request"
+                aria-labelledby="npn-critique-reply-request-heading"
+              >
+                <h3
+                  id="npn-critique-reply-request-heading"
+                  class="npn-critique-reply-modal__request-heading"
                 >
-                  <h3
-                    id="npn-critique-reply-request-heading"
-                    class="npn-critique-reply-modal__request-heading"
-                  >
-                    {{i18n "npn_critique_reply.modal.request_heading"}}
-                  </h3>
+                  {{i18n "npn_critique_reply.modal.request_heading"}}
+                </h3>
 
+                {{#if this.hasRequestSummary}}
                   <dl class="npn-critique-reply-modal__request-list">
                     {{#if this.critiqueStyleLabel}}
                       <div class="npn-critique-reply-modal__request-row">
@@ -10613,31 +10565,31 @@ export default class NpnCritiqueReplyModal extends Component {
                       </div>
                     {{/if}}
                   </dl>
-                </section>
-              {{else}}
-                <p class="npn-critique-reply-modal__no-request">
-                  {{i18n "npn_critique_reply.modal.no_request_found"}}
-                </p>
-              {{/if}}
+                {{else}}
+                  <span class="npn-critique-reply-modal__no-request">
+                    {{i18n "npn_critique_reply.modal.no_request_found"}}
+                  </span>
+                {{/if}}
 
-              {{! Opens the Photographer's Notes overlay panel (the
-                  photographer's own description / questions / context).
-                  Sits just under the request — both are "what the
-                  photographer told you" — and reads it in a temporary
-                  panel rather than pushing the editor down. }}
-              <button
-                type="button"
-                class="btn btn-default btn-icon-text
-                  npn-critique-reply-modal__view-notes-trigger"
-                aria-haspopup="dialog"
-                aria-expanded={{if this.photographersNotesOpen "true" "false"}}
-                {{on "click" this.togglePhotographersNotes}}
-              >
-                {{dIcon "far-file-lines"}}
-                <span class="d-button-label">{{i18n
-                    "npn_critique_reply.modal.photographers_notes.view"
-                  }}</span>
-              </button>
+                {{! "View Photographer's Notes" — trailing action in the
+                    request row (request + notes are both "what the
+                    photographer told you"). Opens the notes overlay over
+                    the right pane only; the reference image stays visible.
+                    Wraps to its own line on narrow widths. }}
+                <button
+                  type="button"
+                  class="btn btn-default btn-small btn-icon-text
+                    npn-critique-reply-modal__view-notes-trigger"
+                  aria-haspopup="dialog"
+                  aria-expanded={{if this.photographersNotesOpen "true" "false"}}
+                  {{on "click" this.togglePhotographersNotes}}
+                >
+                  {{dIcon "far-file-lines"}}
+                  <span class="d-button-label">{{i18n
+                      "npn_critique_reply.modal.photographers_notes.view"
+                    }}</span>
+                </button>
+              </section>
 
               <label
                 for="npn-critique-reply-textarea"
@@ -10924,6 +10876,69 @@ export default class NpnCritiqueReplyModal extends Component {
               </button>
             {{/if}}
           </div>
+
+          {{! Photographer's Notes overlay — a grid sibling of the write
+              column, placed in the same (last) grid cell so it covers
+              ONLY the right writing pane; the reference image + visual
+              tools on the left stay visible. Non-modal (the parent DModal
+              owns the focus trap); on mobile it becomes a full-screen
+              sheet (see SCSS). Lazy-loaded cooked OP content reuses the
+              same in-notes text selection + Quote. }}
+          {{#if this.photographersNotesOpen}}
+            <div
+              class="npn-critique-reply-modal__notes-panel"
+              role="dialog"
+              aria-modal="false"
+              aria-labelledby="npn-critique-reply-notes-panel-title"
+              tabindex="-1"
+              {{didInsert this.focusNotesPanel}}
+            >
+              <div class="npn-critique-reply-modal__notes-panel-header">
+                <h3
+                  id="npn-critique-reply-notes-panel-title"
+                  class="npn-critique-reply-modal__notes-panel-title"
+                >
+                  {{i18n "npn_critique_reply.modal.photographers_notes.title"}}
+                </h3>
+                <DButton
+                  class="btn-flat npn-critique-reply-modal__notes-panel-close"
+                  @icon="xmark"
+                  @action={{this.closePhotographersNotes}}
+                  @title="npn_critique_reply.modal.photographers_notes.close"
+                  @ariaLabel="npn_critique_reply.modal.photographers_notes.close"
+                />
+              </div>
+              <div class="npn-critique-reply-modal__notes-panel-body">
+                {{#if this._opCookedLoading}}
+                  <p
+                    class="npn-critique-reply-modal__photographers-notes-status"
+                    aria-live="polite"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.photographers_notes.loading"
+                    }}
+                  </p>
+                {{else if this.opCookedSafe}}
+                  <div
+                    class="npn-critique-reply-modal__photographers-notes-body cooked"
+                    {{didInsert this.setupPhotographersNotes}}
+                    {{willDestroy this.teardownPhotographersNotes}}
+                  >
+                    {{this.opCookedSafe}}
+                  </div>
+                {{else if this._opCookedError}}
+                  <p
+                    class="npn-critique-reply-modal__photographers-notes-status --error"
+                    role="alert"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.photographers_notes.failed"
+                    }}
+                  </p>
+                {{/if}}
+              </div>
+            </div>
+          {{/if}}
 
         </div>
 
