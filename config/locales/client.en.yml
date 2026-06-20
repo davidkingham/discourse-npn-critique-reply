@@ -141,7 +141,6 @@ en:
         # buried this under "Image & Visual Notes" which read like
         # markup tools were the workspace's primary purpose.
         optional_visual_notes_heading: "Optional Visual Notes"
-        optional_visual_notes_helper: "Add marks only when they help clarify your critique."
         optional_processing_example_heading: "Optional Processing Example"
         optional_processing_example_helper: "Upload an edited example only when it helps show a possible direction."
         image_alt: "Image being critiqued"

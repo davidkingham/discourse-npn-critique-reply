@@ -9286,12 +9286,19 @@ export default class NpnCritiqueReplyModal extends Component {
                     "npn_critique_reply.modal.optional_visual_notes_heading"
                   }}
                 </h3>
+                {{! Contextual tool help sits directly under the heading
+                    (the old "Add marks only…" line was removed and the
+                    duplicate below the toolbar was removed too). Defaults
+                    to "Select a tool, then click or drag…" and is replaced
+                    by the active tool/sub-tool's instructions while a tool
+                    is engaged. role=status + aria-live=polite so screen
+                    readers hear the change. }}
                 <p
                   class="npn-critique-reply-modal__optional-section-helper"
+                  role="status"
+                  aria-live="polite"
                 >
-                  {{i18n
-                    "npn_critique_reply.modal.optional_visual_notes_helper"
-                  }}
+                  {{this.activeToolHelpText}}
                 </p>
                 {{#if this.viewingProcessingExample}}
                   <p
@@ -9968,23 +9975,6 @@ export default class NpnCritiqueReplyModal extends Component {
                       {{/if}}
                     {{/if}}
                 </div>
-
-                {{! Unified contextual help line. Lives just below the
-                    secondary toolbar so it always reads as "what the
-                    selected tool / sub-tool will do here." Updates
-                    automatically as the user picks a tool, switches
-                    sub-mode, or kicks off a retrace. aria-live=polite
-                    so screen-reader users hear the change without it
-                    interrupting whatever they were focused on. }}
-                <p
-                  class="npn-visual-tools-help"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <span
-                    class="npn-visual-tools-help__text"
-                  >{{this.activeToolHelpText}}</span>
-                </p>
                   </div>
                 </div>
                 {{! Closes the else branch above: toolbar + secondary
