@@ -3464,12 +3464,12 @@
   // bottom edge (like the composer) instead of floating with dead space
   // below it. The reserve covers the chrome the layout sits inside:
   // grippie (~0.75em) + compact modal header (~3em) + body padding (~2em)
-  // + the (now trimmed) footer (~3.4em) ≈ 9.5em. Earlier this was 11em —
+  // + the (now trimmed) footer (~3.25em) ≈ 9em. Earlier this was 11em —
   // tuned before the header/helper trims and the footer slimming — which
   // over-reserved and left the gap. The left pane still scrolls as a
   // safety net if a short dock ever under-reserves.
   .npn-critique-reply-modal__layout {
-    height: calc(var(--npn-docked-height) - 9.5em);
+    height: calc(var(--npn-docked-height) - 9em);
   }
 
   // The panes carry a 2.5em bottom padding for breathing room above the
