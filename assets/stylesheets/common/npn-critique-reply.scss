@@ -3123,6 +3123,11 @@
 
   .npn-critique-reply-modal__minimize.btn {
     margin-left: auto;
+    // Top-align to match core's `.modal-close { align-self: start }` so
+    // the two controls stay level when the title wraps to two lines on
+    // narrow widths (the default center-alignment put Minimize lower
+    // than the X).
+    align-self: start;
     color: var(--primary-medium);
 
     &:hover,
@@ -3454,6 +3459,26 @@
     border-radius: 2px;
     background-color: var(--primary-low-mid);
     transition: background-color 120ms ease;
+  }
+
+  // Mobile / narrow: take over the whole screen like the composer instead
+  // of a centered drawer. Full width + full (dynamic) viewport height, no
+  // side gutters or rounded top corners, and no resize grippie (it's
+  // already full-screen). Driving `--npn-docked-height` keeps the inner
+  // layout + image caps in sync; declaring it on the container overrides
+  // the dragged-height inline var that lives on the modal root.
+  @media (max-width: 720px) {
+    .d-modal__container {
+      --npn-docked-height: calc(var(--composer-vh, 1dvh) * 100);
+      width: 100%;
+      max-width: 100%;
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+
+    .npn-critique-reply-modal__resizer {
+      display: none;
+    }
   }
 }
 
