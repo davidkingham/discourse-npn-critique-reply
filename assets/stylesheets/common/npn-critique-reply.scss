@@ -3586,17 +3586,19 @@
     max-height: max(340px, calc(var(--npn-docked-height) - 23em));
   }
 
-  // Normal (non-focus, non-crop) docked view: same idea as the
-  // visual-focus override above, applied to the standard two-pane layout
-  // so the reference image grows to fill the empty space at the bottom of
-  // the left pane on a tall dock instead of stopping at the fixed clamp.
-  // Reserves more (~25em) than visual-focus because normal view also
-  // shows the image heading, the Optional Visual Notes heading/helper,
-  // and the in-flow Processing Example row below the image. The clamp is
-  // the floor via max(), so on a short dock the image keeps its normal
-  // size and the left pane scrolls; the calc only takes over once the
-  // panel is tall enough to otherwise leave a gap. Crop and visual-focus
-  // are excluded so their own (tighter / larger) caps still apply.
+  // Normal (non-focus, non-crop) docked view: size the reference image to
+  // the MEASURED left-pane height (`--npn-pane-px`, published by the
+  // ResizeObserver in setupLeftPane) so it shrinks just enough to keep the
+  // visual-tools toolbar clear of the "More below" gradient on a short dock
+  // (e.g. 1366×768) and grows on a tall one — the old `60vh - 4em` clamp
+  // ignored the panel height and let the toolbar fall under the gradient.
+  // The `- 12em` reserve covers the chrome stacked around the image in this
+  // view: the Reference Image header above it, plus the Optional Visual
+  // Notes heading + helper + tool row + the gradient band below it (the
+  // in-flow Processing Example row / annotations sit below the fold and
+  // scroll). 340px floor lets it shrink on a short pane; 660px cap keeps it
+  // sensible on a tall one. Crop and visual-focus are excluded so their own
+  // caps apply.
   &:not(.npn-critique-reply-modal--visual-focus):not(
       .npn-critique-reply-modal--crop-mode
     )
@@ -3605,10 +3607,7 @@
       .npn-critique-reply-modal--crop-mode
     )
     .npn-critique-reply-modal__processing-example-large {
-    max-height: max(
-      clamp(380px, calc(60vh - 4em), 660px),
-      calc(var(--npn-docked-height) - 28em)
-    );
+    max-height: clamp(340px, calc(var(--npn-pane-px, 60vh) - 12em), 660px);
   }
 
   // Top-edge resize grippie (rendered in DModal's `<:aboveHeader>`).
