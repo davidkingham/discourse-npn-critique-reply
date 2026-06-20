@@ -1164,6 +1164,17 @@ export default class NpnCritiqueReplyModal extends Component {
     this.critiqueToolbarOpen = !this.critiqueToolbarOpen;
   }
 
+  // Tooltip + aria-label for the icon-only formatting toggle. Flips to a
+  // "hide" phrasing while the toolbar is open so the control reads
+  // correctly to pointer and screen-reader users alike.
+  get formatToggleLabel() {
+    return i18n(
+      this.critiqueToolbarOpen
+        ? "npn_critique_reply.modal.toolbar.formatting_hide"
+        : "npn_critique_reply.modal.toolbar.formatting_show"
+    );
+  }
+
   // Move focus to whichever writing surface is mounted. The rich editor
   // exposes focus() on its TextManipulation; the legacy textarea is
   // reachable by id. Used by post-insert/post-quote/validation flows.
@@ -10761,10 +10772,6 @@ export default class NpnCritiqueReplyModal extends Component {
                 </p>
               {{/if}}
 
-              <p class="npn-critique-reply-modal__writing-helper">
-                {{this.writingPanelHelper}}
-              </p>
-
               {{#if this.validationMessage}}
                 <p
                   class="npn-critique-reply-modal__inline-message --validation"
@@ -10902,37 +10909,49 @@ export default class NpnCritiqueReplyModal extends Component {
                   }}
                 >
                   {{#if this.richEditorEnabled}}
-                    {{! "Aa" reveals DEditor's formatting toolbar (and the
-                        Markdown/WYSIWYG toggle that lives in it), which is
-                        otherwise hidden so the writing surface stays calm.
-                        No "markdown supported" hint here — in WYSIWYG that
-                        copy would be misleading. }}
-                    <DButton
-                      @icon="font"
-                      @label="npn_critique_reply.modal.toolbar.formatting"
-                      @title="npn_critique_reply.modal.toolbar.formatting_title"
-                      @action={{this.toggleCritiqueToolbar}}
-                      @disabled={{this.isPosting}}
-                      aria-pressed={{if
-                        this.critiqueToolbarOpen
-                        "true"
-                        "false"
-                      }}
-                      class="btn-flat btn-small npn-critique-reply-modal__toolbar-button npn-critique-reply-modal__format-toggle
-                        {{if this.critiqueToolbarOpen '--active'}}"
-                    />
+                    {{! Two compact icon-only controls, grouped to the
+                        right above the editor: the "font" toggle reveals
+                        DEditor's formatting toolbar (which also carries the
+                        Markdown/WYSIWYG switch) and stays hidden by
+                        default; the "link" icon opens the inline insert-
+                        link form. No "markdown supported" hint here — in
+                        WYSIWYG that copy would be misleading. }}
+                    <div class="npn-critique-reply-modal__toolbar-actions">
+                      <DButton
+                        @icon="font"
+                        @translatedTitle={{this.formatToggleLabel}}
+                        @translatedAriaLabel={{this.formatToggleLabel}}
+                        @action={{this.toggleCritiqueToolbar}}
+                        @disabled={{this.isPosting}}
+                        aria-pressed={{if
+                          this.critiqueToolbarOpen
+                          "true"
+                          "false"
+                        }}
+                        class="btn-flat btn-small npn-critique-reply-modal__toolbar-button npn-critique-reply-modal__toolbar-icon npn-critique-reply-modal__format-toggle
+                          {{if this.critiqueToolbarOpen '--active'}}"
+                      />
+                      <DButton
+                        @icon="link"
+                        @title="npn_critique_reply.modal.toolbar.insert_link"
+                        @ariaLabel="npn_critique_reply.modal.toolbar.insert_link"
+                        @action={{this.openLinkForm}}
+                        @disabled={{this.isPosting}}
+                        class="btn-flat btn-small npn-critique-reply-modal__toolbar-button npn-critique-reply-modal__toolbar-icon"
+                      />
+                    </div>
                   {{else}}
                     <span class="npn-critique-reply-modal__toolbar-hint">
                       {{i18n "npn_critique_reply.modal.markdown_supported"}}
                     </span>
+                    <DButton
+                      @icon="link"
+                      @label="npn_critique_reply.modal.toolbar.insert_link"
+                      @action={{this.openLinkForm}}
+                      @disabled={{this.isPosting}}
+                      class="btn-flat btn-small npn-critique-reply-modal__toolbar-button"
+                    />
                   {{/if}}
-                  <DButton
-                    @icon="link"
-                    @label="npn_critique_reply.modal.toolbar.insert_link"
-                    @action={{this.openLinkForm}}
-                    @disabled={{this.isPosting}}
-                    class="btn-flat btn-small npn-critique-reply-modal__toolbar-button"
-                  />
                 </div>
               {{/if}}
 

@@ -129,8 +129,8 @@ en:
         toolbar:
           label: "Critique field formatting tools"
           insert_link: "Insert link"
-          formatting: "Formatting"
-          formatting_title: "Show formatting options (bold, lists, quotes, and switch to Markdown)"
+          formatting_show: "Show formatting tools"
+          formatting_hide: "Hide formatting tools"
           link_modal:
             title: "Insert link"
             url_label: "URL"

@@ -1759,6 +1759,37 @@
     min-width: 0;
   }
 
+  // Rich-editor path: the formatting + link icon controls, clustered at
+  // the right edge of the row, directly above the editor.
+  &__toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25em;
+    margin-left: auto;
+  }
+
+  // Icon-only toolbar control. Square, comfortable hit target with clear
+  // hover state; the shared `__toolbar-button` rule supplies the
+  // keyboard focus ring, and `__format-toggle.--active` the pressed look.
+  &__toolbar-icon.npn-critique-reply-modal__toolbar-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.1em;
+    min-height: 2.1em;
+    padding: 0.35em;
+
+    .d-icon {
+      // Override the icon-with-label spacing from __toolbar-button.
+      margin-right: 0;
+    }
+
+    &:hover {
+      background: var(--primary-very-low);
+      color: var(--primary);
+    }
+  }
+
   // -- Inline Insert-link form -------------------------------------------
   //
   // Replaces the toolbar row when the user clicks Insert link. Lives
