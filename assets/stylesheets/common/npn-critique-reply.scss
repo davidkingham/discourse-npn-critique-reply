@@ -3619,6 +3619,48 @@
   }
 }
 
+// Fullscreen (maximize) — fills the viewport like the standard composer's
+// fullscreen toggle. Works in BOTH the centered modal and the docked panel
+// by overriding the container's size/position; placed AFTER the docked
+// block so it wins on source order when both classes are present.
+.d-modal.npn-critique-reply-modal--fullscreen {
+  // Pin the docked height var to the full viewport so the docked
+  // layout/image caps that key off it size against the maximized panel.
+  --npn-docked-height: 100dvh;
+
+  .d-modal__container {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  // Nothing to resize while maximized.
+  .npn-critique-reply-modal__resizer {
+    display: none;
+  }
+
+  // Fill the screen minus the chrome (same reserve as the docked panel,
+  // so the footer stays flush at the bottom). Overrides both the centered
+  // (`85vh - 4em`) and docked layout heights.
+  .npn-critique-reply-modal__layout {
+    height: calc(100dvh - 8.7em);
+  }
+}
+
+// The fullscreen toggle is desktop-only: on mobile the modal is already
+// full-screen, so the control would be a no-op (mirrors the composer
+// hiding its fullscreen button in mobile view).
+.npn-critique-reply-modal__fullscreen-toggle {
+  @media (max-width: 720px) {
+    display: none;
+  }
+}
+
 // While a grippie drag is in flight, suppress text selection across the
 // panel so dragging doesn't select content, and hint the resize cursor.
 .d-modal.npn-critique-reply-modal--docked-resizing {

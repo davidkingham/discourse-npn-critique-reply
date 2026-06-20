@@ -216,6 +216,9 @@ en:
           label: "Minimize"
           title: "Minimize — your draft stays saved; resume it from the dock."
           save_failed: "Couldn’t save your draft, so the workspace stayed open. Check your connection and try again."
+        fullscreen:
+          enter: "Enter fullscreen"
+          exit: "Exit fullscreen"
         # Experimental docked workspace (npn_critique_reply_docked_experiment).
         docked:
           resize: "Drag to resize the critique workspace (Up/Down arrows to adjust)"

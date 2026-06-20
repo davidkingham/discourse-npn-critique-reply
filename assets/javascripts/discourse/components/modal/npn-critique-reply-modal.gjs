@@ -347,6 +347,10 @@ export default class NpnCritiqueReplyModal extends Component {
   // the "Aa" toggle shows it — which also surfaces the built-in
   // Markdown/WYSIWYG switch that lives in that toolbar.
   @tracked critiqueToolbarOpen = false;
+  // Whether the workspace is maximized to fill the viewport, like the
+  // standard composer's fullscreen. Purely a layout state (a modifier
+  // class); toggling it changes nothing about drafts, panes, or tools.
+  @tracked _fullscreen = false;
   _linkPreservedSelection = null;
 
   // Docked-experiment resize state (gated by the
@@ -1167,6 +1171,30 @@ export default class NpnCritiqueReplyModal extends Component {
     this.critiqueToolbarOpen = !this.critiqueToolbarOpen;
   }
 
+  // Maximize / restore the workspace, like the standard composer's
+  // fullscreen toggle. Layout-only: a `--fullscreen` modifier class drives
+  // the CSS; no draft/pane/tool state is touched, so toggling is free and
+  // reversible. Exiting restores the prior docked height (we never mutate
+  // `_dockedHeightPx`).
+  @action
+  toggleFullscreen() {
+    this._fullscreen = !this._fullscreen;
+  }
+
+  // Icon + tooltip/aria for the fullscreen toggle, matching the composer's
+  // expand/compress affordance.
+  get fullscreenIcon() {
+    return this._fullscreen ? "discourse-compress" : "discourse-expand";
+  }
+
+  get fullscreenLabel() {
+    return i18n(
+      this._fullscreen
+        ? "npn_critique_reply.modal.fullscreen.exit"
+        : "npn_critique_reply.modal.fullscreen.enter"
+    );
+  }
+
   // Tooltip + aria-label for the icon-only formatting toggle. Flips to a
   // "hide" phrasing while the toolbar is open so the control reads
   // correctly to pointer and screen-reader users alike.
@@ -1564,6 +1592,9 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     if (this.previewMode) {
       parts.push("npn-critique-reply-modal--preview");
+    }
+    if (this._fullscreen) {
+      parts.push("npn-critique-reply-modal--fullscreen");
     }
     if (this.dockedExperimentEnabled) {
       parts.push("npn-critique-reply-modal--docked-experiment");
@@ -8997,6 +9028,18 @@ export default class NpnCritiqueReplyModal extends Component {
       </:aboveHeader>
 
       <:headerBelowTitle>
+        {{! Maximize / restore the workspace, mirroring the standard
+            composer's fullscreen toggle (expand / compress). Desktop only
+            — on mobile the modal is already full-screen, so the control is
+            hidden via CSS. Layout-only; never touches the draft. }}
+        <DButton
+          class="btn-transparent toggle-fullscreen npn-critique-reply-modal__fullscreen-toggle"
+          @icon={{this.fullscreenIcon}}
+          @action={{this.toggleFullscreen}}
+          @translatedAriaLabel={{this.fullscreenLabel}}
+          @translatedTitle={{this.fullscreenLabel}}
+          aria-pressed={{if this._fullscreen "true" "false"}}
+        />
         {{! Minimize sits in the header next to the X, styled like the
             composer's collapse control (transparent, angles-down). It
             force-saves the draft and drops a "Critique in progress" dock
