@@ -9354,6 +9354,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       "npn_critique_reply.visual_notes.numbered_notes"
                     }}
                     @title="npn_critique_reply.visual_notes.numbered_notes_title"
+                    @ariaPressed={{this.noteMode}}
                     @disabled={{this.isPosting}}
                   />
                   <DButton
@@ -9366,6 +9367,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       "npn_critique_reply.visual_notes.crop_suggestion"
                     }}
                     @title="npn_critique_reply.visual_notes.crop_suggestion_title"
+                    @ariaPressed={{this.cropMode}}
                     @disabled={{this.isPosting}}
                   />
                   {{! Eye Path stays "selected" (the tool's own label +
@@ -9405,6 +9407,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       "npn_critique_reply.visual_notes.area_note"
                     }}
                     @title="npn_critique_reply.visual_notes.area_note_title"
+                    @ariaPressed={{this.attentionPullMode}}
                     @disabled={{this.isPosting}}
                   />
                   <DButton
@@ -9425,6 +9428,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       "npn_critique_reply.visual_notes.direction_arrow"
                     }}
                     @title="npn_critique_reply.visual_notes.direction_arrow_title"
+                    @ariaPressed={{this.directionArrowMode}}
                     @disabled={{this.isPosting}}
                   />
                   <DButton
@@ -9445,6 +9449,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       "npn_critique_reply.visual_notes.relationship_arrow"
                     }}
                     @title="npn_critique_reply.visual_notes.relationship_arrow_title"
+                    @ariaPressed={{this.relationshipArrowMode}}
                     @disabled={{this.isPosting}}
                   />
 
