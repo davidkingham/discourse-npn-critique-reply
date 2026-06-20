@@ -2688,6 +2688,43 @@
   align-items: center;
   gap: 0.5em;
   margin: 0 0 0.4em;
+  // Query container so the tools switch to icon-only based on the toolbar's
+  // OWN width — which depends on the image column and Larger-Image mode —
+  // rather than the viewport. (A viewport media query can't tell a wide
+  // single-column focus view from a narrow two-column one.)
+  container: npn-vn-toolbar / inline-size;
+}
+
+// Narrower toolbar: collapse the tool buttons to icon-only so the row
+// stays on one line. The label is only VISUALLY hidden (kept in the
+// accessibility tree), and every tool button already carries a @title
+// tooltip, so hover + screen-reader affordances are unchanged; tool order,
+// size, padding (tap targets), and the active/hover/focus states are all
+// untouched. Excludes the Rotate/Flip popover menu items (`__transform-
+// menu-item`), which are dropdown rows that keep their text. At very narrow
+// widths the toolbar still wraps (flex-wrap) instead of shrinking further.
+@container npn-vn-toolbar (max-width: 720px) {
+  .npn-critique-reply-modal__visual-notes-toolbar
+    .btn:not(.npn-critique-reply-modal__transform-menu-item)
+    .d-button-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  // Center the icon now that the label is out of flow (DButton keeps its
+  // icon-with-label right margin while @label is still set).
+  .npn-critique-reply-modal__visual-notes-toolbar
+    .btn:not(.npn-critique-reply-modal__transform-menu-item)
+    .d-icon {
+    margin-right: 0;
+  }
 }
 
 // Rotate / Flip tools. Two labeled DButtons sit at the end of the
