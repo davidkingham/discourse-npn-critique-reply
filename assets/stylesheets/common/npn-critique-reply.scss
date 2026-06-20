@@ -1185,35 +1185,22 @@
     flex: 0 0 auto;
   }
 
-  &__intro {
-    margin: 0;
-    color: var(--primary-high);
-    line-height: 1.45;
-  }
-
   // -- Request summary ---------------------------------------------------
   //
-  // Compact card summarising what the photographer asked for. Subtle
-  // tinted background + hairline border + thin left accent so it
-  // reads as a connected piece of the workspace rather than free-
-  // floating metadata. Values render as small muted pills, which
-  // makes the two scannable lines (Style / Focus) easy to pick out
-  // without competing with the writing area beside it.
+  // Now a compact inline row INSIDE the writing panel (directly under the
+  // context switcher), not a standalone bordered card — the panel's own
+  // tinted background + border already frame it, so a nested card would
+  // read as redundant chrome. Just the "Photographer's Request" heading
+  // followed by the value pills, sharing one line and wrapping to extra
+  // rows only when the values are long.
 
   &__request {
     margin: 0;
-    padding: 0.5em 0.85em;
-    background: var(--primary-very-low);
-    border: 1px solid var(--primary-low);
-    border-left: 3px solid var(--primary-low-mid);
-    border-radius: var(--d-border-radius, 4px);
-    // Compact: the heading and the value pills share one line and wrap
-    // to extra rows only when the values are long. Saves the vertical
-    // space the old stacked label/value rows used for a little content.
+    padding: 0;
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    column-gap: 0.75em;
+    column-gap: 0.6em;
     row-gap: 0.4em;
   }
 
@@ -2167,9 +2154,6 @@
 
   @media (forced-colors: active) {
     &__image-col {
-      border-color: ButtonText;
-    }
-    &__request {
       border-color: ButtonText;
     }
     &__request-value,

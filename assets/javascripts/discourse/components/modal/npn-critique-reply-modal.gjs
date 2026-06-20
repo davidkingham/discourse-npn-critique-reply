@@ -10400,72 +10400,12 @@ export default class NpnCritiqueReplyModal extends Component {
             class="npn-critique-reply-modal__write-col"
             {{didInsert this.setupRightPane}}
           >
-            <p class="npn-critique-reply-modal__intro">
-              {{i18n "npn_critique_reply.modal.intro"}}
-            </p>
-
-            {{#if this.hasRequestSummary}}
-              <section
-                class="npn-critique-reply-modal__request"
-                aria-labelledby="npn-critique-reply-request-heading"
-              >
-                <h3
-                  id="npn-critique-reply-request-heading"
-                  class="npn-critique-reply-modal__request-heading"
-                >
-                  {{i18n "npn_critique_reply.modal.request_heading"}}
-                </h3>
-
-                <dl class="npn-critique-reply-modal__request-list">
-                  {{#if this.critiqueStyleLabel}}
-                    <div class="npn-critique-reply-modal__request-row">
-                      <dt>{{i18n "npn_critique_reply.modal.critique_style"}}</dt>
-                      <dd><span
-                          class="npn-critique-reply-modal__request-value"
-                        >{{this.critiqueStyleLabel}}</span></dd>
-                    </div>
-                  {{/if}}
-                  {{#if this.feedbackFocusLabel}}
-                    <div class="npn-critique-reply-modal__request-row">
-                      <dt>{{i18n "npn_critique_reply.modal.feedback_focus"}}</dt>
-                      <dd><span
-                          class="npn-critique-reply-modal__request-value"
-                        >{{this.feedbackFocusLabel}}</span></dd>
-                    </div>
-                  {{/if}}
-                  {{#if this.weeklyChallengeTitle}}
-                    <div class="npn-critique-reply-modal__request-row">
-                      <dt>{{i18n
-                          "npn_critique_reply.modal.weekly_challenge"
-                        }}</dt>
-                      <dd><span
-                          class="npn-critique-reply-modal__request-value"
-                        >{{this.weeklyChallengeTitle}}</span></dd>
-                    </div>
-                  {{/if}}
-                  {{#if this.weeklyChallengeDates}}
-                    <div class="npn-critique-reply-modal__request-row">
-                      <dt>{{i18n
-                          "npn_critique_reply.modal.weekly_challenge_dates"
-                        }}</dt>
-                      <dd><span
-                          class="npn-critique-reply-modal__request-value"
-                        >{{this.weeklyChallengeDates}}</span></dd>
-                    </div>
-                  {{/if}}
-                </dl>
-              </section>
-            {{else}}
-              <p class="npn-critique-reply-modal__no-request">
-                {{i18n "npn_critique_reply.modal.no_request_found"}}
-              </p>
-            {{/if}}
-
-            {{! Your Critique — moved above Photographer's Notes /
-                Questions to Consider so the writing surface is the
-                first thing the critic reaches under the request.
-                Keeps the workspace focused on the response rather
-                than on the supporting material. }}
+            {{! Your Critique is the first thing in the right pane (the
+                intro line and the standalone Photographer's Request card
+                were removed). The writing panel now leads, with the
+                Photographer's Request folded in just under the context
+                switcher; Photographer's Notes / Questions to Consider
+                remain below as separate reference sections. }}
             <section class="npn-critique-reply-modal__textarea-section">
               {{! Writing-context switcher. One textarea serves both the
                   overall critique and the selected image's notes; this
@@ -10524,6 +10464,74 @@ export default class NpnCritiqueReplyModal extends Component {
                     {{/if}}</button>
                 {{/if}}
               </div>
+
+              {{! Photographer's Request — a compact row INSIDE the writing
+                  panel (directly under the context switcher), not a
+                  standalone bordered card. Stays visible in both the
+                  Overall Critique and Image Notes contexts since the
+                  request is relevant to either. All values preserved;
+                  per-field labels are kept for screen readers (visually
+                  hidden) and the pills wrap gracefully on narrow widths. }}
+              {{#if this.hasRequestSummary}}
+                <section
+                  class="npn-critique-reply-modal__request"
+                  aria-labelledby="npn-critique-reply-request-heading"
+                >
+                  <h3
+                    id="npn-critique-reply-request-heading"
+                    class="npn-critique-reply-modal__request-heading"
+                  >
+                    {{i18n "npn_critique_reply.modal.request_heading"}}
+                  </h3>
+
+                  <dl class="npn-critique-reply-modal__request-list">
+                    {{#if this.critiqueStyleLabel}}
+                      <div class="npn-critique-reply-modal__request-row">
+                        <dt>{{i18n
+                            "npn_critique_reply.modal.critique_style"
+                          }}</dt>
+                        <dd><span
+                            class="npn-critique-reply-modal__request-value"
+                          >{{this.critiqueStyleLabel}}</span></dd>
+                      </div>
+                    {{/if}}
+                    {{#if this.feedbackFocusLabel}}
+                      <div class="npn-critique-reply-modal__request-row">
+                        <dt>{{i18n
+                            "npn_critique_reply.modal.feedback_focus"
+                          }}</dt>
+                        <dd><span
+                            class="npn-critique-reply-modal__request-value"
+                          >{{this.feedbackFocusLabel}}</span></dd>
+                      </div>
+                    {{/if}}
+                    {{#if this.weeklyChallengeTitle}}
+                      <div class="npn-critique-reply-modal__request-row">
+                        <dt>{{i18n
+                            "npn_critique_reply.modal.weekly_challenge"
+                          }}</dt>
+                        <dd><span
+                            class="npn-critique-reply-modal__request-value"
+                          >{{this.weeklyChallengeTitle}}</span></dd>
+                      </div>
+                    {{/if}}
+                    {{#if this.weeklyChallengeDates}}
+                      <div class="npn-critique-reply-modal__request-row">
+                        <dt>{{i18n
+                            "npn_critique_reply.modal.weekly_challenge_dates"
+                          }}</dt>
+                        <dd><span
+                            class="npn-critique-reply-modal__request-value"
+                          >{{this.weeklyChallengeDates}}</span></dd>
+                      </div>
+                    {{/if}}
+                  </dl>
+                </section>
+              {{else}}
+                <p class="npn-critique-reply-modal__no-request">
+                  {{i18n "npn_critique_reply.modal.no_request_found"}}
+                </p>
+              {{/if}}
 
               <label
                 for="npn-critique-reply-textarea"
