@@ -10302,7 +10302,10 @@ export default class NpnCritiqueReplyModal extends Component {
                       <li>
                         <span
                           class="npn-critique-reply-modal__a11y-list-label"
-                        >{{i18n
+                        ><span
+                            class="npn-annotation-badge npn-annotation-badge--note"
+                            aria-hidden="true"
+                          >{{pin.number}}</span>{{i18n
                             "npn_critique_reply.visual_notes.pin_label"
                             number=pin.number
                           }}{{#if pin.noteText}}
@@ -10340,7 +10343,10 @@ export default class NpnCritiqueReplyModal extends Component {
                       <li>
                         <span
                           class="npn-critique-reply-modal__a11y-list-label"
-                        >{{i18n
+                        ><span
+                            class="npn-annotation-badge npn-annotation-badge--crop"
+                            aria-hidden="true"
+                          >{{or this.crop.label "Crop"}}</span>{{i18n
                             "npn_critique_reply.visual_notes.crop_a11y_label"
                           }}</span>
                         <button
@@ -10366,7 +10372,10 @@ export default class NpnCritiqueReplyModal extends Component {
                       <li>
                         <span
                           class="npn-critique-reply-modal__a11y-list-label"
-                        >{{i18n
+                        ><span
+                            class="npn-annotation-badge npn-annotation-badge--eye-path"
+                            aria-hidden="true"
+                          >{{eyePath.label}}</span>{{i18n
                             "npn_critique_reply.visual_notes.eye_path_a11y_label_n"
                             label=eyePath.label
                             count=eyePath.points.length
@@ -10398,7 +10407,10 @@ export default class NpnCritiqueReplyModal extends Component {
                       <li>
                         <span
                           class="npn-critique-reply-modal__a11y-list-label"
-                        >{{i18n
+                        ><span
+                            class="npn-annotation-badge npn-annotation-badge--attention"
+                            aria-hidden="true"
+                          >{{pull.label}}</span>{{i18n
                             "npn_critique_reply.visual_notes.area_note_a11y_label"
                             label=pull.label
                           }}</span>
@@ -10432,7 +10444,10 @@ export default class NpnCritiqueReplyModal extends Component {
                       <li>
                         <span
                           class="npn-critique-reply-modal__a11y-list-label"
-                        >{{i18n
+                        ><span
+                            class="npn-annotation-badge npn-annotation-badge--strong-area"
+                            aria-hidden="true"
+                          >{{area.label}}</span>{{i18n
                             "npn_critique_reply.visual_notes.strong_area_a11y_label"
                             label=area.label
                           }}</span>
@@ -10466,7 +10481,10 @@ export default class NpnCritiqueReplyModal extends Component {
                       <li>
                         <span
                           class="npn-critique-reply-modal__a11y-list-label"
-                        >{{i18n
+                        ><span
+                            class="npn-annotation-badge npn-annotation-badge--direction"
+                            aria-hidden="true"
+                          >{{arrow.label}}</span>{{i18n
                             "npn_critique_reply.visual_notes.direction_arrow_a11y_label"
                             label=arrow.label
                           }}</span>
@@ -10503,7 +10521,10 @@ export default class NpnCritiqueReplyModal extends Component {
                       <li>
                         <span
                           class="npn-critique-reply-modal__a11y-list-label"
-                        >{{i18n
+                        ><span
+                            class="npn-annotation-badge npn-annotation-badge--relationship"
+                            aria-hidden="true"
+                          >{{arrow.label}}</span>{{i18n
                             "npn_critique_reply.visual_notes.relationship_arrow_a11y_label"
                             label=arrow.label
                           }}</span>

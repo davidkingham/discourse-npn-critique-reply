@@ -3022,6 +3022,17 @@
     flex: 1 1 auto;
     min-width: 6em;
     color: var(--primary-high);
+    // Sit to the RIGHT of the Select / Remove buttons (which keep the
+    // default order: 0), so the controls cluster on the left next to the
+    // text instead of being pushed to the far edge of the row.
+    order: 1;
+
+    // Colored marker pill (reuses the cooked-post / on-image badge styles),
+    // shown before the descriptive text.
+    .npn-annotation-badge {
+      margin-right: 0.45em;
+      vertical-align: baseline;
+    }
   }
 }
 
