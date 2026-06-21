@@ -15,6 +15,7 @@ import DButton from "discourse/ui-kit/d-button";
 import DEditor from "discourse/ui-kit/d-editor";
 import DModal from "discourse/ui-kit/d-modal";
 import { ajax } from "discourse/lib/ajax";
+import { USER_OPTION_COMPOSITION_MODES } from "discourse/lib/constants";
 import dAutocomplete from "discourse/ui-kit/modifiers/d-autocomplete";
 import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { getURLWithCDN } from "discourse/lib/get-url";
@@ -1599,6 +1600,16 @@ export default class NpnCritiqueReplyModal extends Component {
   // unaffected. Off by default — see the matching site setting.
   get richEditorEnabled() {
     return this.siteSettings.npn_critique_reply_rich_editor_experiment;
+  }
+
+  // Force the critique field into rich (WYSIWYG) mode regardless of the
+  // site's `rich_editor` setting or the user's composition-mode preference,
+  // so the WYSIWYG editor + annotation pills are guaranteed on every
+  // environment (production was defaulting to Markdown mode). `@forceEditorMode`
+  // also drops DEditor's built-in Markdown/WYSIWYG toggle — an accepted
+  // tradeoff. On a DEditor too old to support the arg it's simply ignored.
+  get richEditorForceMode() {
+    return USER_OPTION_COMPOSITION_MODES.rich;
   }
 
   // Inline `style` for the modal root. Sets the height custom property
@@ -11029,6 +11040,7 @@ export default class NpnCritiqueReplyModal extends Component {
                     }}
                     @disabled={{this.isPosting}}
                     @showLink={{false}}
+                    @forceEditorMode={{this.richEditorForceMode}}
                     @textAreaId="npn-critique-reply-textarea"
                     class="npn-critique-reply-modal__editor"
                   />
