@@ -11,6 +11,7 @@ import {
   EYE_PATH_PALE_CYAN,
   NOTE_BLUE,
   RELATIONSHIP_TAUPE,
+  STRONG_AREA_SAGE,
 } from "./npn-critique-reply-colors";
 
 // Soft dark drop-shadow applied to every halo stroke + badge box so
@@ -117,6 +118,7 @@ export function buildVisualNotesCanvas({
   crop,
   eyePaths,
   attentionPulls,
+  strongAreas,
   directionArrows,
   relationshipArrows,
   maxDimension = MAX_DIMENSION,
@@ -157,6 +159,7 @@ export function buildVisualNotesCanvas({
     targetWidth,
     targetHeight
   );
+  drawStrongAreasOnCanvas(ctx, strongAreas, targetWidth, targetHeight);
   // Multi-path: each path is rendered with the same single-path
   // drawing function (line + start dot + arrows + label badge),
   // looped over the array. Paths render in array order so later
@@ -520,6 +523,112 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
   }
   // Reset dash so subsequent shapes (eye path, pins) aren't dashed.
   ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// Twin of drawAttentionPullsOnCanvas — same shape, swapped color
+// (`--success` green) and SOLID stroke (no dashes). Same badge style
+// so attention-pull and strong-area markers read as a paired family.
+function drawStrongAreasOnCanvas(ctx, areas, width, height) {
+  if (!Array.isArray(areas) || areas.length === 0) {
+    return;
+  }
+  // Muted sage matches the editor's strong-area ellipse — see
+  // npn-critique-reply-colors.js.
+  const green = STRONG_AREA_SAGE;
+  const secondary = ANNOTATION_HALO;
+  const shortEdge = Math.min(width, height);
+  // Halo widened to match the editor — sage can blend into greenery
+  // in the photograph; the wider halo gives the stroke more contrast.
+  const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
+  const strokeWidth = Math.max(2, Math.round(shortEdge * 0.0035));
+  const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+  const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+  const badgeOffset = Math.max(3, Math.round(shortEdge * 0.004));
+  const badgeCornerRadius = 3;
+
+  ctx.save();
+  for (const area of areas) {
+    if (area.shape === "path") {
+      drawAreaPathOnCanvas(ctx, area, width, height, {
+        tertiary: green,
+        halo: secondary,
+        haloWidth,
+        strokeWidth,
+        // Strong Area uses a SOLID stroke (no dashes) in the editor
+        // — same here. drawAreaPathOnCanvas accepts `dashOn = 0`
+        // to mean "no dash".
+        dashOn: 0,
+        dashOff: 0,
+        badgeFontSize,
+        badgePadding,
+        badgeOffset,
+        badgeCornerRadius,
+      });
+      continue;
+    }
+    const cx = ((area.xPct + area.widthPct / 2) / 100) * width;
+    const cy = ((area.yPct + area.heightPct / 2) / 100) * height;
+    const rx = (area.widthPct / 200) * width;
+    const ry = (area.heightPct / 200) * height;
+    if (rx <= 0 || ry <= 0) {
+      continue;
+    }
+
+    // White halo stroke. Outer dark drop-shadow matches the editor's
+    // shadow on the halo Ellipse so editor and export look the same.
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.setLineDash([]);
+    ctx.strokeStyle = secondary;
+    ctx.lineWidth = haloWidth;
+    ctx.globalAlpha = 0.85;
+    withHaloShadow(ctx, () => ctx.stroke());
+
+    // Translucent green fill.
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fillStyle = green;
+    // Matches AREA_FILL_OPACITY_UNSELECTED in the editor so the
+    // exported translucent fill reads the same as the modal preview.
+    ctx.globalAlpha = AREA_FILL_OPACITY_UNSELECTED;
+    ctx.fill();
+
+    // Solid green stroke (no dash) on top.
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = green;
+    ctx.lineWidth = strokeWidth;
+    ctx.globalAlpha = 1;
+    ctx.stroke();
+
+    if (area.label) {
+      ctx.font = `bold ${badgeFontSize}px sans-serif`;
+      ctx.textBaseline = "top";
+      const metrics = ctx.measureText(area.label);
+      const badgeWidth = Math.ceil(metrics.width) + badgePadding * 2;
+      const badgeHeight = badgeFontSize + badgePadding * 2;
+      const bx = cx - rx + badgeOffset;
+      const by = cy - ry + badgeOffset;
+      tracePillRect(
+        ctx,
+        bx,
+        by,
+        badgeWidth,
+        badgeHeight,
+        badgeCornerRadius
+      );
+      ctx.fillStyle = green;
+      ctx.globalAlpha = 1;
+      withBadgeShadow(ctx, () => ctx.fill());
+      ctx.strokeStyle = secondary;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = secondary;
+      ctx.fillText(area.label, bx + badgePadding, by + badgePadding);
+    }
+  }
   ctx.globalAlpha = 1;
   ctx.restore();
 }

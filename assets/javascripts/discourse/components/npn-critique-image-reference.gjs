@@ -101,6 +101,7 @@ export default class NpnCritiqueImageReference extends Component {
       this.args.crop ||
       (this.args.eyePaths?.length ?? 0) > 0 ||
       (this.args.attentionPulls?.length ?? 0) > 0 ||
+      (this.args.strongAreas?.length ?? 0) > 0 ||
       (this.args.directionArrows?.length ?? 0) > 0 ||
       (this.args.relationshipArrows?.length ?? 0) > 0
     ) {
@@ -229,6 +230,25 @@ export default class NpnCritiqueImageReference extends Component {
             widthPct,
             heightPct
           ),
+        strongAreas: this.args.strongAreas,
+        selectedStrongAreaId: this.args.selectedStrongAreaId,
+        strongAreaEditEnabled: this.args.strongAreaEditEnabled,
+        retracingStrongAreaId: this.args.retracingStrongAreaId,
+        onAddStrongArea: (xPct, yPct, widthPct, heightPct) =>
+          this.args.onAddStrongArea?.(xPct, yPct, widthPct, heightPct),
+        onAddStrongAreaPath: (points) =>
+          this.args.onAddStrongAreaPath?.(points),
+        onRetraceStrongAreaPath: (id, points) =>
+          this.args.onRetraceStrongAreaPath?.(id, points),
+        onSelectStrongArea: (id) => this.args.onSelectStrongArea?.(id),
+        onUpdateStrongArea: (id, xPct, yPct, widthPct, heightPct) =>
+          this.args.onUpdateStrongArea?.(
+            id,
+            xPct,
+            yPct,
+            widthPct,
+            heightPct
+          ),
         directionArrows: this.args.directionArrows,
         selectedDirectionArrowId: this.args.selectedDirectionArrowId,
         onAddDirectionArrow: (x1Pct, y1Pct, x2Pct, y2Pct) =>
@@ -304,12 +324,14 @@ export default class NpnCritiqueImageReference extends Component {
       crop: this.args.crop,
       eyePaths: this.args.eyePaths,
       attentionPulls: this.args.attentionPulls,
+      strongAreas: this.args.strongAreas,
       directionArrows: this.args.directionArrows,
       relationshipArrows: this.args.relationshipArrows,
       selectedPinNumber: this.args.selectedNumber,
       cropSelected: this.args.cropSelected,
       selectedEyePathId: this.args.selectedEyePathId,
       selectedAttentionPullId: this.args.selectedAttentionPullId,
+      selectedStrongAreaId: this.args.selectedStrongAreaId,
       selectedDirectionArrowId: this.args.selectedDirectionArrowId,
       selectedRelationshipArrowId: this.args.selectedRelationshipArrowId,
       visualMode: this.args.visualMode,
@@ -318,7 +340,9 @@ export default class NpnCritiqueImageReference extends Component {
       aspectRatio: this.args.cropAspectRatio,
       pinMoveEnabled: this.args.pinMoveEnabled,
       attentionPullEditEnabled: this.args.attentionPullEditEnabled,
+      strongAreaEditEnabled: this.args.strongAreaEditEnabled,
       retracingAttentionPullId: this.args.retracingAttentionPullId,
+      retracingStrongAreaId: this.args.retracingStrongAreaId,
     });
   }
 
@@ -432,6 +456,9 @@ export default class NpnCritiqueImageReference extends Component {
   get attentionPullSaveDisabled() {
     return !this.args.pendingAttentionPullPopoverCanConfirm;
   }
+  get strongAreaSaveDisabled() {
+    return !this.args.pendingStrongAreaPopoverCanConfirm;
+  }
   get eyePathSaveDisabled() {
     return !this.args.pendingEyePathPopoverCanConfirm;
   }
@@ -468,6 +495,19 @@ export default class NpnCritiqueImageReference extends Component {
     } else if (event.key === "Escape") {
       event.preventDefault();
       this.args.onCancelPendingAttentionPullPopover?.();
+    }
+  }
+
+  @action
+  handleStrongAreaPopoverKeydown(event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (this.args.pendingStrongAreaPopoverCanConfirm) {
+        this.args.onConfirmPendingStrongAreaPopover?.();
+      }
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      this.args.onCancelPendingStrongAreaPopover?.();
     }
   }
 
@@ -563,6 +603,7 @@ export default class NpnCritiqueImageReference extends Component {
           {{if (eq @visualMode 'crop_suggestion') 'is-crop-mode'}}
           {{if (eq @visualMode 'eye_path') 'is-eye-path-mode'}}
           {{if (eq @visualMode 'attention_pull') 'is-attention-pull-mode'}}
+          {{if (eq @visualMode 'strong_area') 'is-strong-area-mode'}}
           {{if (eq @visualMode 'direction_arrow') 'is-direction-arrow-mode'}}
           {{if (eq @visualMode 'relationship_arrow') 'is-relationship-arrow-mode'}}
           {{if this._konvaStage 'is-konva-active'}}"
@@ -574,6 +615,7 @@ export default class NpnCritiqueImageReference extends Component {
           @crop
           @eyePaths
           @attentionPulls
+          @strongAreas
           @directionArrows
           @relationshipArrows
         }}
@@ -612,6 +654,10 @@ export default class NpnCritiqueImageReference extends Component {
                 @selectedAttentionPullId
                 @attentionPullEditEnabled
                 @retracingAttentionPullId
+                @strongAreas
+                @selectedStrongAreaId
+                @strongAreaEditEnabled
+                @retracingStrongAreaId
                 @directionArrows
                 @selectedDirectionArrowId
                 @relationshipArrows
@@ -767,6 +813,71 @@ export default class NpnCritiqueImageReference extends Component {
                   class="btn btn-flat btn-small
                     npn-critique-image-reference__note-popover-cancel"
                   {{on "click" @onCancelPendingAttentionPullPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_cancel"
+                  }}</button>
+              </div>
+            </div>
+          {{/if}}
+
+          {{#if @pendingStrongAreaPopover}}
+            <div
+              class="npn-critique-image-reference__note-popover"
+              role="dialog"
+              aria-label={{i18n
+                "npn_critique_reply.visual_notes.strong_area_popover_dialog_label"
+              }}
+              {{didInsert
+                this.positionNotePopover
+                @pendingStrongAreaPopover
+              }}
+              {{didUpdate
+                this.positionNotePopover
+                @pendingStrongAreaPopover
+              }}
+            >
+              <div
+                class="npn-critique-image-reference__note-popover-title"
+              >{{i18n
+                  "npn_critique_reply.visual_notes.strong_area_popover_title"
+                }}</div>
+              <input
+                type="text"
+                class="npn-critique-image-reference__note-popover-input"
+                placeholder={{i18n
+                  "npn_critique_reply.visual_notes.strong_area_popover_placeholder"
+                }}
+                value={{@pendingStrongAreaPopoverText}}
+                autocomplete="off"
+                {{on "input" @onPendingStrongAreaPopoverInput}}
+                {{on "keydown" this.handleStrongAreaPopoverKeydown}}
+                {{didInsert this.focusNoteInput}}
+              />
+              <div
+                class="npn-critique-image-reference__note-popover-actions"
+              >
+                <button
+                  type="button"
+                  class="btn btn-primary btn-small
+                    npn-critique-image-reference__note-popover-add"
+                  disabled={{this.strongAreaSaveDisabled}}
+                  {{on "click" @onConfirmPendingStrongAreaPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_save"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-default btn-small
+                    npn-critique-image-reference__note-popover-redraw"
+                  {{on "click" @onRedrawPendingStrongAreaPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_redraw"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-flat btn-small
+                    npn-critique-image-reference__note-popover-cancel"
+                  {{on "click" @onCancelPendingStrongAreaPopover}}
                 >{{i18n
                     "npn_critique_reply.visual_notes.popover_cancel"
                   }}</button>

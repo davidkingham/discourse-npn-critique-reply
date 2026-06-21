@@ -2489,6 +2489,14 @@
     outline-offset: 2px;
   }
 
+  // Strong-area mode uses Discourse's `--success` green — the supportive
+  // counterpart to Attention Pull's amber. Falls back to a muted teal
+  // when the theme doesn't define `--success`.
+  &.is-strong-area-mode &__frame {
+    outline: 2px solid var(--success, #2a8c4a);
+    outline-offset: 2px;
+  }
+
   &__hint {
     margin: 0.5em 0 0;
     color: var(--tertiary);
@@ -2852,7 +2860,7 @@
   min-height: 2.4em;
 }
 
-// Oval / Draw Area sub-toggle for Attention. Pill
+// Oval / Draw Area sub-toggle for Attention + Strong Area. Pill
 // buttons matching the existing version-selector / view-toggle
 // visual language so the workspace reads consistently.
 .npn-critique-reply-modal__area-shape-toggle {
@@ -3254,6 +3262,12 @@
 // alert-bright; matches ATTENTION_PULL_OCHRE.
 .npn-annotation-badge--attention {
   background: #c2a15a;
+}
+
+// Strong Area ([S1], [S2], …) — muted sage-teal. Supportive tone,
+// matches STRONG_AREA_SAGE.
+.npn-annotation-badge--strong-area {
+  background: #8fb9a7;
 }
 
 // Direction Arrow ([D1], [D2], …) — muted blue-violet / periwinkle.

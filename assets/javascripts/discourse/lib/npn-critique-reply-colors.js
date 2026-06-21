@@ -60,6 +60,12 @@ export const CROP_EXPORT_LIGHT_GRAY = "#d4d4d4";
 // area marker stays subtle alongside the photograph.
 export const ATTENTION_PULL_OCHRE = "#c2a15a";
 
+// Strong Area — muted sage-teal. Reads as supportive without
+// competing with the photograph's own greens. Lightened so it
+// remains visible over green foliage where the previous deeper
+// sage tended to blend in.
+export const STRONG_AREA_SAGE = "#8fb9a7";
+
 // Direction Arrow — muted blue-violet / periwinkle. Distinct from
 // the eye-path pale cyan so the two flow-related kinds read as
 // siblings rather than duplicates. "Clear but not loud" per the
@@ -106,15 +112,15 @@ export const ANNOTATION_HALO_SHADOW = "rgba(0, 0, 0, 0.4)";
 export const CROP_DIM_FILL = "rgba(0, 0, 0, 0.42)";
 
 // Translucent fill opacity for the area-style annotations
-// (attention pull). The shape has the same fill colour
+// (attention pull, strong area). The shape has the same fill colour
 // in both states; only the opacity changes so selection reads as
 // "more present" without changing colour.
 export const AREA_FILL_OPACITY_UNSELECTED = 0.12;
 export const AREA_FILL_OPACITY_SELECTED = 0.2;
 
-// Badge fill alpha — applied to the same hue so the A1 / pin
+// Badge fill alpha — applied to the same hue so the A1 / S1 / pin
 // number reads as part of the marker family. Solid for pins (the
-// number is the marker), slightly translucent for AP badges
+// number is the marker), slightly translucent for AP / SA badges
 // where the badge sits beside a larger shape.
 export const PIN_BADGE_OPACITY = 1.0;
 export const AREA_BADGE_OPACITY = 0.92;

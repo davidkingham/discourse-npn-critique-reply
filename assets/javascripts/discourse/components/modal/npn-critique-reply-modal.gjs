@@ -66,10 +66,12 @@ import {
   MAX_EYE_PATH_COUNT,
   MAX_EYE_PATH_POINTS,
   MAX_RELATIONSHIP_ARROW_COUNT,
+  MAX_STRONG_AREA_COUNT,
   annotationsToAttentionPulls,
   annotationsToDirectionArrows,
   annotationsToPins,
   annotationsToRelationshipArrows,
+  annotationsToStrongAreas,
   annotationToCrop,
   annotationToEyePath,
   attentionPullsToAnnotations,
@@ -83,8 +85,10 @@ import {
   nextAttentionPullLabel,
   nextDirectionArrowLabel,
   nextRelationshipArrowLabel,
+  nextStrongAreaLabel,
   pinsToAnnotations,
   relationshipArrowsToAnnotations,
+  strongAreasToAnnotations,
 } from "../../lib/npn-critique-reply-annotation-schema";
 import didUpdate from "@ember/render-modifiers/modifiers/did-update";
 import {
@@ -258,6 +262,7 @@ function countSnapshotAnnotations(snapshot) {
     (snapshot.crop ? 1 : 0) +
     (snapshot.eyePaths?.length ?? 0) +
     (snapshot.attentionPulls?.length ?? 0) +
+    (snapshot.strongAreas?.length ?? 0) +
     (snapshot.directionArrows?.length ?? 0) +
     (snapshot.relationshipArrows?.length ?? 0)
   );
@@ -486,7 +491,7 @@ export default class NpnCritiqueReplyModal extends Component {
   // Eye-path / Visual Flow tool state. `eyePaths` is an array of
   // `{ id, label, points: [{ number, xPct, yPct }], noteText? }`.
   // `selectedEyePathId` is null or the id of the currently-selected
-  // path (mirrors the attention-pull selection pattern
+  // path (mirrors the attention-pull / strong-area selection pattern
   // since there are multiple paths now). `_activeEyePathId` tracks
   // the path being constructed in the current eye_path mode session
   // — set on the first click that starts a new path, cleared when
@@ -510,6 +515,14 @@ export default class NpnCritiqueReplyModal extends Component {
   // markers get fresh ids. Labels are independent (max-suffix+1 of
   // current pulls); see `nextAttentionPullLabel` in the schema.
   _attentionPullIdCounter = 0;
+
+  // Strong Area state. Twin of attention pull: same shape, same
+  // popover pattern, different kind/label/styling. Markers are
+  // observational/supportive — the positive counterpart to attention
+  // pull.
+  @tracked strongAreas = [];
+  @tracked selectedStrongAreaId = null;
+  _strongAreaIdCounter = 0;
 
   // Direction Arrow state. Drag-to-create like attention pull, but
   // the stored shape is two endpoints (x1/y1 → x2/y2) instead of a
@@ -538,6 +551,8 @@ export default class NpnCritiqueReplyModal extends Component {
   // drive the popover's on-image positioning.
   @tracked pendingAttentionPullPopover = null;
   @tracked pendingAttentionPullPopoverText = "";
+  @tracked pendingStrongAreaPopover = null;
+  @tracked pendingStrongAreaPopoverText = "";
   @tracked pendingEyePathPopover = null;
   @tracked pendingEyePathPopoverText = "";
   // Arrow popovers anchor at the arrowhead (x2/y2 for both kinds —
@@ -655,7 +670,9 @@ export default class NpnCritiqueReplyModal extends Component {
   // Draw Area is the primary mode — the user loosely outlines the
   // region and the system smooths/closes the shape. Oval is the
   // secondary mode (drag-rectangle → ellipse) for callers who want a
-  // clean geometric shape.
+  // clean geometric shape. Shared sub-mode applies to BOTH tools —
+  // picking one in Attention keeps it selected when the user toggles
+  // to Strong Area and vice versa.
   @tracked areaShapeMode = "path";
 
   // -- Eye Path interaction mode (Stroke vs Points) --------------------
@@ -677,12 +694,14 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // -- Retrace (path-shape only) ----------------------------------------
   //
-  // When the user has a path-shape Attention marker selected, they
-  // can click Retrace and draw a fresh outline. The next path drag
-  // REPLACES the selected marker's `points` while preserving its id /
-  // label / note text. Only one retrace can be in flight at a time.
+  // When the user has a path-shape Attention / Strong Area marker
+  // selected, they can click Retrace and draw a fresh outline. The
+  // next path drag REPLACES the selected marker's `points` while
+  // preserving its id / label / note text. Only one retrace can be
+  // in flight at a time, so the two trackeds are mutually exclusive.
   // Tool switches, selection changes, and modal close all cancel.
   @tracked retracingAttentionPullId = null;
+  @tracked retracingStrongAreaId = null;
 
   // -- Photographer's Notes panel state --------------------------------
   //
@@ -2216,6 +2235,7 @@ export default class NpnCritiqueReplyModal extends Component {
       !!this.crop ||
       this.hasEyePath ||
       this.attentionPulls.length > 0 ||
+      this.strongAreas.length > 0 ||
       this.directionArrows.length > 0 ||
       this.relationshipArrows.length > 0
     );
@@ -2238,7 +2258,7 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   // Walk every image's stored annotation array of the given key
-  // (notes / attentionPulls / etc.) and yield each
+  // (notes / attentionPulls / strongAreas / etc.) and yield each
   // annotation in submission order. Used to compute label uniqueness
   // across the WHOLE critique — A1, D1, E1, [N] should not repeat
   // between images, otherwise the cooked post can't distinguish
@@ -2354,6 +2374,7 @@ export default class NpnCritiqueReplyModal extends Component {
       (this.crop ? 1 : 0) +
       this.eyePathCount +
       this.attentionPulls.length +
+      this.strongAreas.length +
       this.directionArrows.length +
       this.relationshipArrows.length
     );
@@ -2372,6 +2393,19 @@ export default class NpnCritiqueReplyModal extends Component {
 
   get attentionPullsAtMax() {
     return this.attentionPulls.length >= MAX_ATTENTION_PULL_COUNT;
+  }
+
+  get selectedStrongArea() {
+    if (!this.selectedStrongAreaId) {
+      return null;
+    }
+    return (
+      this.strongAreas.find((p) => p.id === this.selectedStrongAreaId) ?? null
+    );
+  }
+
+  get strongAreasAtMax() {
+    return this.strongAreas.length >= MAX_STRONG_AREA_COUNT;
   }
 
   get selectedDirectionArrow() {
@@ -2469,6 +2503,12 @@ export default class NpnCritiqueReplyModal extends Component {
   // is open — same rationale as pinMoveEnabled.
   get attentionPullEditEnabled() {
     return !this.pendingAttentionPullPopover;
+  }
+
+  // Strong-area move/resize is suppressed while its note popover is
+  // open — twin of attentionPullEditEnabled.
+  get strongAreaEditEnabled() {
+    return !this.pendingStrongAreaPopover;
   }
 
   // First ~60 chars of a pin's note for the accessible list. The
@@ -2712,6 +2752,7 @@ export default class NpnCritiqueReplyModal extends Component {
         crop: entry.snapshot.crop,
         eyePaths: entry.snapshot.eyePaths,
         attentionPulls: entry.snapshot.attentionPulls,
+        strongAreas: entry.snapshot.strongAreas,
         directionArrows: entry.snapshot.directionArrows,
         relationshipArrows: entry.snapshot.relationshipArrows,
       });
@@ -2904,6 +2945,7 @@ export default class NpnCritiqueReplyModal extends Component {
         crop: b.snapshot?.crop ?? null,
         eyePaths: b.snapshot?.eyePaths ?? [],
         attentionPulls: b.snapshot?.attentionPulls ?? [],
+        strongAreas: b.snapshot?.strongAreas ?? [],
         directionArrows: b.snapshot?.directionArrows ?? [],
         relationshipArrows: b.snapshot?.relationshipArrows ?? [],
         imageTransform: this._imageTransformForIndex(b.index),
@@ -2937,6 +2979,7 @@ export default class NpnCritiqueReplyModal extends Component {
         crop: null,
         eyePaths: [],
         attentionPulls: [],
+        strongAreas: [],
         directionArrows: [],
         relationshipArrows: [],
         imageTransform: this._imageTransformForIndex(i),
@@ -2969,6 +3012,7 @@ export default class NpnCritiqueReplyModal extends Component {
       eyePaths: head.snapshot?.eyePaths ?? head.eyePaths ?? [],
       attentionPulls:
         head.snapshot?.attentionPulls ?? head.attentionPulls ?? [],
+      strongAreas: head.snapshot?.strongAreas ?? head.strongAreas ?? [],
       directionArrows:
         head.snapshot?.directionArrows ?? head.directionArrows ?? [],
       relationshipArrows:
@@ -4216,6 +4260,7 @@ export default class NpnCritiqueReplyModal extends Component {
       crop: this.crop ? { ...this.crop } : null,
       eyePaths: cloneEyePathsForSnapshot(this.eyePaths),
       attentionPulls: cloneAnnotationArray(this.attentionPulls),
+      strongAreas: cloneAnnotationArray(this.strongAreas),
       directionArrows: cloneAnnotationArray(this.directionArrows),
       relationshipArrows: cloneAnnotationArray(this.relationshipArrows),
     };
@@ -4234,6 +4279,9 @@ export default class NpnCritiqueReplyModal extends Component {
     this.attentionPulls = snapshot?.attentionPulls
       ? cloneAnnotationArray(snapshot.attentionPulls)
       : [];
+    this.strongAreas = snapshot?.strongAreas
+      ? cloneAnnotationArray(snapshot.strongAreas)
+      : [];
     this.directionArrows = snapshot?.directionArrows
       ? cloneAnnotationArray(snapshot.directionArrows)
       : [];
@@ -4247,6 +4295,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
     this.visualMode = null;
@@ -4254,6 +4303,8 @@ export default class NpnCritiqueReplyModal extends Component {
     this.pendingPinNoteText = "";
     this.pendingAttentionPullPopover = null;
     this.pendingAttentionPullPopoverText = "";
+    this.pendingStrongAreaPopover = null;
+    this.pendingStrongAreaPopoverText = "";
     this.pendingEyePathPopover = null;
     this.pendingEyePathPopoverText = "";
     this.pendingDirectionArrowPopover = null;
@@ -4701,6 +4752,9 @@ export default class NpnCritiqueReplyModal extends Component {
   get attentionPullMode() {
     return this.visualMode === "attention_pull";
   }
+  get strongAreaMode() {
+    return this.visualMode === "strong_area";
+  }
   get directionArrowMode() {
     return this.visualMode === "direction_arrow";
   }
@@ -4716,9 +4770,9 @@ export default class NpnCritiqueReplyModal extends Component {
   // states are checked before the parent tool so Eye Path / Area /
   // Crop sub-mode copy takes precedence over the generic tool copy.
   get activeToolHelpText() {
-    // Retrace is a transient sub-action; the hint applies to an
-    // attention pull being retraced.
-    if (this.retracingAttentionPullId) {
+    // Retrace is a transient sub-action; same hint applies whether
+    // it's an attention pull or a strong area being retraced.
+    if (this.retracingAttentionPullId || this.retracingStrongAreaId) {
       return i18n("npn_critique_reply.visual_notes.tools_help.retrace");
     }
     if (this.eyePathMode) {
@@ -4734,7 +4788,7 @@ export default class NpnCritiqueReplyModal extends Component {
       }
       return i18n("npn_critique_reply.visual_notes.tools_help.eye_path");
     }
-    if (this.attentionPullMode) {
+    if (this.attentionPullMode || this.strongAreaMode) {
       if (this.areaShapeMode === "oval") {
         return i18n("npn_critique_reply.visual_notes.tools_help.area_oval");
       }
@@ -4789,6 +4843,11 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   @action
+  toggleStrongAreaMode() {
+    this._setVisualMode(this.strongAreaMode ? null : "strong_area");
+  }
+
+  @action
   toggleDirectionArrowMode() {
     this._setVisualMode(
       this.directionArrowMode ? null : "direction_arrow"
@@ -4815,6 +4874,8 @@ export default class NpnCritiqueReplyModal extends Component {
       key = "crop_finish";
     } else if (this.attentionPullMode) {
       key = "area_note_finish";
+    } else if (this.strongAreaMode) {
+      key = "strong_area_finish";
     } else if (this.directionArrowMode) {
       key = "direction_arrow_finish";
     } else if (this.relationshipArrowMode) {
@@ -4843,10 +4904,14 @@ export default class NpnCritiqueReplyModal extends Component {
       this.pendingPinNoteText = "";
     }
     // Leaving attention_pull mode dismisses its popover (Skip-equivalent
-    // — no text appended). Same for eye_path mode.
+    // — no text appended). Same for strong_area and eye_path modes.
     if (this.pendingAttentionPullPopover && mode !== "attention_pull") {
       this.pendingAttentionPullPopover = null;
       this.pendingAttentionPullPopoverText = "";
+    }
+    if (this.pendingStrongAreaPopover && mode !== "strong_area") {
+      this.pendingStrongAreaPopover = null;
+      this.pendingStrongAreaPopoverText = "";
     }
     if (this.pendingEyePathPopover && mode !== "eye_path") {
       this.pendingEyePathPopover = null;
@@ -4879,11 +4944,13 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
     // Cancel any in-flight retrace — the marker it targeted is now
     // unselected (and the new tool may not even support retrace).
     this.retracingAttentionPullId = null;
+    this.retracingStrongAreaId = null;
     // Eye-path session tracking. A path session ends when its
     // description popover is dismissed (Confirm or Skip) or when the
     // user leaves eye_path mode — at that point the next click /
@@ -4950,10 +5017,11 @@ export default class NpnCritiqueReplyModal extends Component {
     // Selecting a pin deselects all other annotation kinds. The
     // toolbar only ever surfaces one Remove button at a time, so we
     // keep the model in sync across pin / crop / eye path / attention
-    // pull.
+    // pull / strong area.
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
     if (this.selectedPinNumber === pin.number) {
@@ -5017,7 +5085,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedPinNumber = null;
 
     // Open the description popover anchored at the centre of the new
-    // crop. Mirrors the attention-pull / arrow flow:
+    // crop. Mirrors the attention-pull / strong-area / arrow flow:
     // user types optional text → confirm → `[CROP] {text}` appended.
     // Skip closes without writing anything (the styled [CROP] pill
     // in the cooked post acts as the marker by itself if the user
@@ -5056,6 +5124,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedPinNumber = null;
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
     this.cropSelected = !this.cropSelected;
@@ -5466,6 +5535,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedPinNumber = null;
     this.cropSelected = false;
     this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
     // Selecting an EXISTING path takes over from the active session
@@ -5714,10 +5784,11 @@ export default class NpnCritiqueReplyModal extends Component {
     // Clicking a shape activates the corresponding tool mode (see
     // selectPin for rationale).
     this._setVisualMode("attention_pull");
-    // Mirror the pin/crop/eye-path mutex.
+    // Mirror the pin/crop/eye-path/strong-area mutex.
     this.selectedPinNumber = null;
     this.cropSelected = false;
     this.selectedEyePathId = null;
+    this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
     if (this.selectedAttentionPullId === id) {
@@ -5731,6 +5802,7 @@ export default class NpnCritiqueReplyModal extends Component {
     // with a different marker (or none), so the pending retrace is
     // no longer the intent.
     this.retracingAttentionPullId = null;
+    this.retracingStrongAreaId = null;
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] select-attention-pull", {
@@ -5877,6 +5949,66 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cancelPendingAttentionPullPopover();
   }
 
+  // ---- Strong Area ----------------------------------------------------
+
+  // Twin of addAttentionPullPath — same shape, different kind/label.
+  @action
+  addStrongAreaPath(points) {
+    if (this.visualMode !== "strong_area") {
+      return;
+    }
+    if (this.strongAreasAtMax) {
+      return;
+    }
+    if (!Array.isArray(points) || points.length < 4) {
+      return;
+    }
+    if (this.pendingStrongAreaPopover) {
+      this.pendingStrongAreaPopover = null;
+      this.pendingStrongAreaPopoverText = "";
+    }
+    this._strongAreaIdCounter += 1;
+    const id = `strong_area_${this._strongAreaIdCounter}`;
+    const label = nextStrongAreaLabel(
+      this._allLabelsAcrossImages("strongAreas")
+    );
+    const xs = points.map((p) => p.xPct);
+    const ys = points.map((p) => p.yPct);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    const newArea = {
+      id,
+      label,
+      shape: "path",
+      points: points.map((p) => ({ xPct: p.xPct, yPct: p.yPct })),
+    };
+    this.strongAreas = [...this.strongAreas, newArea];
+    this.selectedStrongAreaId = id;
+    this.selectedPinNumber = null;
+    this.cropSelected = false;
+    this.selectedEyePathId = null;
+    this.selectedAttentionPullId = null;
+
+    this.pendingStrongAreaPopover = {
+      id,
+      anchorXPct: (minX + maxX) / 2,
+      anchorYPct: (minY + maxY) / 2,
+    };
+    this.pendingStrongAreaPopoverText = "";
+
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] add-strong-area-path", {
+        topicId: this.topic?.id,
+        id,
+        pointCount: newArea.points.length,
+      });
+    }
+  }
+
   // ---- Retrace (path-shape only) -------------------------------------
 
   // Toggle retrace for the currently-selected Attention Pull. If the
@@ -5895,11 +6027,26 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     this.retracingAttentionPullId = pull.id;
+    this.retracingStrongAreaId = null;
+  }
+
+  @action
+  toggleRetraceStrongArea() {
+    const area = this.selectedStrongArea;
+    if (!area || area.shape !== "path") {
+      return;
+    }
+    if (this.retracingStrongAreaId === area.id) {
+      this.retracingStrongAreaId = null;
+      return;
+    }
+    this.retracingStrongAreaId = area.id;
+    this.retracingAttentionPullId = null;
   }
 
   // Commit a retrace by replacing `points` on the existing marker.
   // The id, label, shape ("path"), and any noteText are preserved so
-  // the textarea snippet that references [Aₙ] keeps pointing
+  // the textarea snippet that references [Aₙ] / [Sₙ] keeps pointing
   // at the same marker. Clears retracing state on success or no-op
   // (too-few points means the drag is treated as cancel).
   @action
@@ -5931,6 +6078,240 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
+  @action
+  retraceStrongAreaPath(id, points) {
+    if (!id || this.retracingStrongAreaId !== id) {
+      return;
+    }
+    if (!Array.isArray(points) || points.length < 4) {
+      this.retracingStrongAreaId = null;
+      return;
+    }
+    const target = this.strongAreas.find((p) => p.id === id);
+    if (!target || target.shape !== "path") {
+      this.retracingStrongAreaId = null;
+      return;
+    }
+    const nextPoints = points.map((p) => ({ xPct: p.xPct, yPct: p.yPct }));
+    this.strongAreas = this.strongAreas.map((p) =>
+      p.id === id ? { ...p, points: nextPoints } : p
+    );
+    this.retracingStrongAreaId = null;
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] retrace-strong-area", {
+        topicId: this.topic?.id,
+        id,
+        pointCount: nextPoints.length,
+      });
+    }
+  }
+
+  // Twin of addAttentionPull — same shape, different kind/label
+  // prefix/starter copy.
+  @action
+  addStrongArea(xPct, yPct, widthPct, heightPct) {
+    if (this.visualMode !== "strong_area") {
+      return;
+    }
+    if (this.strongAreasAtMax) {
+      return;
+    }
+    if (this.pendingStrongAreaPopover) {
+      this.pendingStrongAreaPopover = null;
+      this.pendingStrongAreaPopoverText = "";
+    }
+    this._strongAreaIdCounter += 1;
+    const id = `strong_area_${this._strongAreaIdCounter}`;
+    const label = nextStrongAreaLabel(
+      this._allLabelsAcrossImages("strongAreas")
+    );
+    const newArea = { id, label, xPct, yPct, widthPct, heightPct };
+    this.strongAreas = [...this.strongAreas, newArea];
+    this.selectedStrongAreaId = id;
+    this.selectedPinNumber = null;
+    this.cropSelected = false;
+    this.selectedEyePathId = null;
+    this.selectedAttentionPullId = null;
+
+    // No textarea write on marker creation — twin of attention pull.
+    // The popover writes "[S_N] <user text>" on Add note; Skip leaves
+    // the textarea alone.
+    this.pendingStrongAreaPopover = {
+      id,
+      anchorXPct: xPct + widthPct / 2,
+      anchorYPct: yPct + heightPct / 2,
+    };
+    this.pendingStrongAreaPopoverText = "";
+  }
+
+  @action
+  selectStrongArea(id) {
+    if (!id) {
+      return;
+    }
+    const exists = this.strongAreas.some((p) => p.id === id);
+    if (!exists) {
+      return;
+    }
+    // Clicking a shape activates the corresponding tool mode (see
+    // selectPin for rationale).
+    this._setVisualMode("strong_area");
+    this.selectedPinNumber = null;
+    this.cropSelected = false;
+    this.selectedEyePathId = null;
+    this.selectedAttentionPullId = null;
+    if (this.selectedStrongAreaId === id) {
+      this.selectedStrongAreaId = null;
+      this.selectedDirectionArrowId = null;
+      this.selectedRelationshipArrowId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
+    } else {
+      this.selectedStrongAreaId = id;
+    }
+    this.retracingAttentionPullId = null;
+    this.retracingStrongAreaId = null;
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] select-strong-area", {
+        topicId: this.topic?.id,
+        id,
+        selected: this.selectedStrongAreaId,
+      });
+    }
+  }
+
+  @action
+  removeSelectedStrongArea() {
+    if (!this.selectedStrongAreaId) {
+      return;
+    }
+    this.removeStrongAreaById(this.selectedStrongAreaId);
+  }
+
+  @action
+  removeStrongAreaById(id) {
+    if (!id) {
+      return;
+    }
+    this.strongAreas = this.strongAreas.filter((p) => p.id !== id);
+    if (this.selectedStrongAreaId === id) {
+      this.selectedStrongAreaId = null;
+      this.selectedDirectionArrowId = null;
+      this.selectedRelationshipArrowId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
+    }
+    if (this.retracingStrongAreaId === id) {
+      this.retracingStrongAreaId = null;
+    }
+    if (this.pendingStrongAreaPopover?.id === id) {
+      this.pendingStrongAreaPopover = null;
+      this.pendingStrongAreaPopoverText = "";
+    }
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] remove-strong-area", {
+        topicId: this.topic?.id,
+        id,
+        remaining: this.strongAreas.length,
+      });
+    }
+  }
+
+  @action
+  clearStrongAreas() {
+    if (this.strongAreas.length === 0) {
+      return;
+    }
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] clear-strong-areas", {
+        topicId: this.topic?.id,
+        clearedCount: this.strongAreas.length,
+      });
+    }
+    this.strongAreas = [];
+    this.selectedStrongAreaId = null;
+    this.retracingStrongAreaId = null;
+    this.selectedDirectionArrowId = null;
+    this.selectedRelationshipArrowId = null;
+    this.pendingStrongAreaPopover = null;
+    this.pendingStrongAreaPopoverText = "";
+  }
+
+  @action
+  updateStrongArea(id, xPct, yPct, widthPct, heightPct) {
+    if (!id) {
+      return;
+    }
+    this.strongAreas = this.strongAreas.map((p) =>
+      p.id === id ? { ...p, xPct, yPct, widthPct, heightPct } : p
+    );
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] update-strong-area", {
+        topicId: this.topic?.id,
+        id,
+        xPct,
+        yPct,
+        widthPct,
+        heightPct,
+      });
+    }
+  }
+
+  // ---- Strong-area popover ------------------------------------------
+
+  @action
+  updatePendingStrongAreaPopoverText(event) {
+    this.pendingStrongAreaPopoverText = event?.target?.value ?? "";
+  }
+
+  @action
+  confirmPendingStrongAreaPopover() {
+    if (!this.pendingStrongAreaPopover) {
+      return;
+    }
+    const text = this.pendingStrongAreaPopoverText.trim();
+    const { id } = this.pendingStrongAreaPopover;
+    const area = this.strongAreas.find((p) => p.id === id);
+    if (text && area) {
+      // Append only the user's text, prefixed with the [label]
+      // reference. No filler scaffolding.
+      const line = i18n(
+        "npn_critique_reply.visual_notes.strong_area_line_template",
+        { label: area.label, text }
+      );
+      this._appendToImageNotes(line);
+      this.strongAreas = this.strongAreas.map((p) =>
+        p.id === id ? { ...p, noteText: text } : p
+      );
+    }
+    this.pendingStrongAreaPopover = null;
+    this.pendingStrongAreaPopoverText = "";
+  }
+
+  @action
+  cancelPendingStrongAreaPopover() {
+    if (!this.pendingStrongAreaPopover) {
+      return;
+    }
+    const { id } = this.pendingStrongAreaPopover;
+    this.strongAreas = this.strongAreas.filter((p) => p.id !== id);
+    if (this.selectedStrongAreaId === id) {
+      this.selectedStrongAreaId = null;
+    }
+    this.pendingStrongAreaPopover = null;
+    this.pendingStrongAreaPopoverText = "";
+  }
+
+  @action
+  redrawPendingStrongAreaPopover() {
+    this.cancelPendingStrongAreaPopover();
+  }
+
   // ---- Direction Arrow ----------------------------------------------
   //
   // Drag-to-create like attention pull, but the stored shape is two
@@ -5948,7 +6329,8 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     if (this.pendingDirectionArrowPopover) {
       // A previous arrow's popover is still open — treat the new
-      // drag as implicit Skip on it (same pattern as attention pull).
+      // drag as implicit Skip on it (same pattern as attention pull
+      // / strong area).
       this.pendingDirectionArrowPopover = null;
       this.pendingDirectionArrowPopoverText = "";
     }
@@ -5965,6 +6347,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
     this.selectedRelationshipArrowId = null;
     this.selectedDirectionArrowId = id;
     // Popover anchors at the arrowhead (x2/y2) — that's where the
@@ -6000,6 +6383,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
     this.selectedRelationshipArrowId = null;
     // Toggle: clicking the already-selected arrow deselects.
     this.selectedDirectionArrowId =
@@ -6130,6 +6514,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = id;
     this.pendingRelationshipArrowPopover = {
@@ -6164,6 +6549,7 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId =
       this.selectedRelationshipArrowId === id ? null : id;
@@ -6391,7 +6777,7 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // ---- Popover-confirm gates -----------------------------------------
   //
-  // The description popovers (notes, area, eye path,
+  // The description popovers (notes, area, strong area, eye path,
   // direction arrow, relationship arrow, crop) require the critic to
   // type a description before the Save button activates. Empty
   // (whitespace-only) text holds the button disabled; the only paths
@@ -6405,6 +6791,10 @@ export default class NpnCritiqueReplyModal extends Component {
 
   get pendingAttentionPullPopoverCanConfirm() {
     return !!this.pendingAttentionPullPopoverText?.trim();
+  }
+
+  get pendingStrongAreaPopoverCanConfirm() {
+    return !!this.pendingStrongAreaPopoverText?.trim();
   }
 
   get pendingDirectionArrowPopoverCanConfirm() {
@@ -6740,6 +7130,7 @@ export default class NpnCritiqueReplyModal extends Component {
           crop: entry.snapshot.crop,
           eyePaths: entry.snapshot.eyePaths,
           attentionPulls: entry.snapshot.attentionPulls,
+          strongAreas: entry.snapshot.strongAreas,
           directionArrows: entry.snapshot.directionArrows,
           relationshipArrows: entry.snapshot.relationshipArrows,
         });
@@ -7210,6 +7601,7 @@ export default class NpnCritiqueReplyModal extends Component {
             cropPresent: !!this.crop,
             eyePathCount: this.eyePaths?.length ?? 0,
             attentionPullCount: this.attentionPulls?.length ?? 0,
+            strongAreaCount: this.strongAreas?.length ?? 0,
             directionArrowCount: this.directionArrows?.length ?? 0,
             relationshipArrowCount: this.relationshipArrows?.length ?? 0,
           }
@@ -7594,6 +7986,10 @@ export default class NpnCritiqueReplyModal extends Component {
       this.attentionPulls
         .map((a) => `${a.id}:${a.xPct}:${a.yPct}:${a.widthPct}:${a.heightPct}`)
         .join(","),
+      this.strongAreas.length,
+      this.strongAreas
+        .map((s) => `${s.id}:${s.xPct}:${s.yPct}:${s.widthPct}:${s.heightPct}`)
+        .join(","),
       this.directionArrows.length,
       this.directionArrows
         .map((a) => `${a.id}:${a.x1Pct}:${a.y1Pct}:${a.x2Pct}:${a.y2Pct}`)
@@ -7762,6 +8158,9 @@ export default class NpnCritiqueReplyModal extends Component {
         per.push(e);
       }
       for (const a of attentionPullsToAnnotations(snap.attentionPulls ?? [])) {
+        per.push(a);
+      }
+      for (const a of strongAreasToAnnotations(snap.strongAreas ?? [])) {
         per.push(a);
       }
       for (const a of directionArrowsToAnnotations(
@@ -8486,6 +8885,7 @@ export default class NpnCritiqueReplyModal extends Component {
       crop,
       eyePaths,
       attentionPulls: annotationsToAttentionPulls(synthPayload),
+      strongAreas: annotationsToStrongAreas(synthPayload),
       directionArrows: annotationsToDirectionArrows(synthPayload),
       relationshipArrows: annotationsToRelationshipArrows(synthPayload),
     };
@@ -8502,6 +8902,10 @@ export default class NpnCritiqueReplyModal extends Component {
     this._attentionPullIdCounter = (snapshot.attentionPulls ?? []).reduce(
       (max, p) => Math.max(max, extractIdSuffix(p.id) ?? 0),
       this._attentionPullIdCounter ?? 0
+    );
+    this._strongAreaIdCounter = (snapshot.strongAreas ?? []).reduce(
+      (max, s) => Math.max(max, extractIdSuffix(s.id) ?? 0),
+      this._strongAreaIdCounter ?? 0
     );
     this._directionArrowIdCounter = (snapshot.directionArrows ?? []).reduce(
       (max, a) => Math.max(max, extractIdSuffix(a.id) ?? 0),
@@ -8567,12 +8971,14 @@ export default class NpnCritiqueReplyModal extends Component {
     this._activeEyePathId = null;
     this._eyePathStarterInserted = false;
     this.attentionPulls = [];
+    this.strongAreas = [];
     this.directionArrows = [];
     this.relationshipArrows = [];
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedPinNumber = null;
     this.selectedAttentionPullId = null;
+    this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
     // Processing example is part of the workspace state too — wipe it
@@ -8941,6 +9347,22 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onCancelPendingAttentionPullPopover={{this.cancelPendingAttentionPullPopover}}
                 @onRedrawPendingAttentionPullPopover={{this.redrawPendingAttentionPullPopover}}
                 @pendingAttentionPullPopoverCanConfirm={{this.pendingAttentionPullPopoverCanConfirm}}
+                @strongAreas={{this.strongAreas}}
+                @selectedStrongAreaId={{this.selectedStrongAreaId}}
+                @strongAreaEditEnabled={{this.strongAreaEditEnabled}}
+                @retracingStrongAreaId={{this.retracingStrongAreaId}}
+                @onAddStrongArea={{this.addStrongArea}}
+                @onAddStrongAreaPath={{this.addStrongAreaPath}}
+                @onRetraceStrongAreaPath={{this.retraceStrongAreaPath}}
+                @onSelectStrongArea={{this.selectStrongArea}}
+                @onUpdateStrongArea={{this.updateStrongArea}}
+                @pendingStrongAreaPopover={{this.pendingStrongAreaPopover}}
+                @pendingStrongAreaPopoverText={{this.pendingStrongAreaPopoverText}}
+                @onPendingStrongAreaPopoverInput={{this.updatePendingStrongAreaPopoverText}}
+                @onConfirmPendingStrongAreaPopover={{this.confirmPendingStrongAreaPopover}}
+                @onCancelPendingStrongAreaPopover={{this.cancelPendingStrongAreaPopover}}
+                @onRedrawPendingStrongAreaPopover={{this.redrawPendingStrongAreaPopover}}
+                @pendingStrongAreaPopoverCanConfirm={{this.pendingStrongAreaPopoverCanConfirm}}
                 @pendingEyePathPopover={{this.pendingEyePathPopover}}
                 @pendingEyePathPopoverText={{this.pendingEyePathPopoverText}}
                 @onPendingEyePathPopoverInput={{this.updatePendingEyePathPopoverText}}
@@ -9669,10 +10091,11 @@ export default class NpnCritiqueReplyModal extends Component {
                     {{/if}}
 
                     {{! Oval / Draw Area shape sub-toggle. Visible
-                        whenever Attention is the active tool.
-                        Default "oval" matches the long-standing
-                        behaviour. }}
-                    {{#if this.attentionPullMode}}
+                        whenever Attention or Strong Area is the
+                        active tool. State is shared across both
+                        tools (areaShapeMode). Default "oval"
+                        matches the long-standing behaviour. }}
+                    {{#if (or this.attentionPullMode this.strongAreaMode)}}
                       <div
                         class="npn-critique-reply-modal__area-shape-toggle"
                         role="group"
@@ -9751,6 +10174,41 @@ export default class NpnCritiqueReplyModal extends Component {
                           class="btn-flat npn-critique-reply-modal__clear-notes"
                           @action={{this.clearAttentionPulls}}
                           @label="npn_critique_reply.visual_notes.area_note_clear"
+                          @disabled={{this.isPosting}}
+                        />
+                      {{/if}}
+                    {{/if}}
+
+                    {{! Strong-area mode. }}
+                    {{#if this.strongAreaMode}}
+                      {{#if this.strongAreas.length}}
+                        {{#if this.selectedStrongArea}}
+                          {{#if (eq this.selectedStrongArea.shape "path")}}
+                            <DButton
+                              class="btn-default npn-critique-reply-modal__retrace
+                                {{if this.retracingStrongAreaId 'is-active'}}"
+                              @icon="pencil"
+                              @action={{this.toggleRetraceStrongArea}}
+                              @label={{if
+                                this.retracingStrongAreaId
+                                "npn_critique_reply.visual_notes.retrace.cancel"
+                                "npn_critique_reply.visual_notes.retrace.button"
+                              }}
+                              @disabled={{this.isPosting}}
+                            />
+                          {{/if}}
+                          <DButton
+                            class="btn-default npn-critique-reply-modal__remove-pin"
+                            @icon="trash-can"
+                            @action={{this.removeSelectedStrongArea}}
+                            @label="npn_critique_reply.visual_notes.strong_area_remove"
+                            @disabled={{this.isPosting}}
+                          />
+                        {{/if}}
+                        <DButton
+                          class="btn-flat npn-critique-reply-modal__clear-notes"
+                          @action={{this.clearStrongAreas}}
+                          @label="npn_critique_reply.visual_notes.strong_area_clear"
                           @disabled={{this.isPosting}}
                         />
                       {{/if}}
@@ -9964,6 +10422,40 @@ export default class NpnCritiqueReplyModal extends Component {
                           {{on
                             "click"
                             (fn this.removeAttentionPullById pull.id)
+                          }}
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.a11y_remove"
+                          }}</button>
+                      </li>
+                    {{/each}}
+                    {{#each this.strongAreas as |area|}}
+                      <li>
+                        <span
+                          class="npn-critique-reply-modal__a11y-list-label"
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.strong_area_a11y_label"
+                            label=area.label
+                          }}</span>
+                        <button
+                          type="button"
+                          class="btn-small btn-default"
+                          aria-pressed={{if
+                            (eq area.id this.selectedStrongAreaId)
+                            "true"
+                            "false"
+                          }}
+                          disabled={{this.isPosting}}
+                          {{on "click" (fn this.selectStrongArea area.id)}}
+                        >{{i18n
+                            "npn_critique_reply.visual_notes.a11y_select"
+                          }}</button>
+                        <button
+                          type="button"
+                          class="btn-small btn-flat"
+                          disabled={{this.isPosting}}
+                          {{on
+                            "click"
+                            (fn this.removeStrongAreaById area.id)
                           }}
                         >{{i18n
                             "npn_critique_reply.visual_notes.a11y_remove"
