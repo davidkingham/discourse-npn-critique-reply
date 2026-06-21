@@ -28,7 +28,10 @@ import Draft from "discourse/models/draft";
 import { and, eq, or } from "discourse/truth-helpers";
 import { i18n } from "discourse-i18n";
 import NpnCritiqueImageReference from "../npn-critique-image-reference";
-import { decorateAnnotationTokens } from "../../lib/npn-critique-reply-annotation-badges";
+import {
+  annotationLabelToBadgeSuffix,
+  decorateAnnotationTokens,
+} from "../../lib/npn-critique-reply-annotation-badges";
 import {
   critiqueStyleLabel,
   feedbackFocusLabel,
@@ -269,35 +272,6 @@ function snapshotHasAnnotations(snapshot) {
   return countSnapshotAnnotations(snapshot) > 0;
 }
 
-// Maps an annotation-reference label to its badge CSS-suffix variant
-// (.npn-annotation-badge--{variant} in npn-critique-reply.scss), by the
-// same label family the cooked-post decorator recognises. Numeric → pins;
-// `Crop` / `CROP` / `Crop N` → crop; A/S/D/R/E prefixes → the other kinds.
-// Used to re-badge the cooked Preview HTML so previewed references match
-// the badges on the final post.
-function badgeVariantForLabel(label) {
-  if (/^\d/.test(label)) {
-    return "note";
-  }
-  if (label === "Crop" || label === "CROP" || /^Crop \d/.test(label)) {
-    return "crop";
-  }
-  const prefix = label[0];
-  switch (prefix) {
-    case "A":
-      return "attention";
-    case "S":
-      return "strong-area";
-    case "D":
-      return "direction";
-    case "R":
-      return "relationship";
-    case "E":
-      return "eye-path";
-    default:
-      return null;
-  }
-}
 
 export default class NpnCritiqueReplyModal extends Component {
   @service siteSettings;
@@ -7262,7 +7236,7 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     const div = document.createElement("div");
     div.innerHTML = cooked?.toString?.() ?? String(cooked ?? "");
-    decorateAnnotationTokens(div, badgeVariantForLabel);
+    decorateAnnotationTokens(div, annotationLabelToBadgeSuffix);
     return htmlSafe(div.innerHTML);
   }
 

@@ -81,6 +81,40 @@ export function buildAnnotationLabelMap(annotations) {
   return map;
 }
 
+// Maps an annotation-reference label to its badge CSS-suffix variant
+// (`.npn-annotation-badge--{suffix}`) purely from the label family —
+// numeric → pins; `Crop` / `CROP` / `Crop N` → crop; A/S/D/R/E prefixes →
+// the other kinds. Mirrors `KIND_CSS_SUFFIX` (kind → suffix) but works
+// from the marker text alone, with no annotation payload. Shared by the
+// modal's cooked-Preview re-badging and the rich-editor pill decoration so
+// all three surfaces (post, preview, editor) stay in lock-step. Returns
+// `null` for anything that isn't a recognized label family.
+export function annotationLabelToBadgeSuffix(label) {
+  if (typeof label !== "string" || label.length === 0) {
+    return null;
+  }
+  if (/^\d/.test(label)) {
+    return "note";
+  }
+  if (label === "Crop" || label === "CROP" || /^Crop \d/.test(label)) {
+    return "crop";
+  }
+  switch (label[0]) {
+    case "A":
+      return "attention";
+    case "S":
+      return "strong-area";
+    case "D":
+      return "direction";
+    case "R":
+      return "relationship";
+    case "E":
+      return "eye-path";
+    default:
+      return null;
+  }
+}
+
 // Tags whose descendants should NEVER be badged. Code blocks and
 // links carry their own visual meaning, and rewriting their text
 // would corrupt the surrounding markup (e.g. an `<a href>` text
@@ -105,7 +139,7 @@ const SKIP_ANCESTOR_TAGS = new Set([
 // and the textarea token shifts accordingly. Single-crop critiques
 // stay as the legacy "[Crop]" / "[CROP]" forms. The pattern below
 // accepts all three so old posts and new posts both render badges.
-const TOKEN_PATTERN =
+export const TOKEN_PATTERN =
   /\[([1-9]\d{0,2}|Crop \d{1,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
 
 // Walk every text node under `root` whose ancestors don't include a

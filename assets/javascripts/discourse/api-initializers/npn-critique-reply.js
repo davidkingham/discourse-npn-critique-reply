@@ -9,6 +9,7 @@ import NpnCritiqueReplyStartButton from "../components/npn-critique-reply-start-
 import NpnEditVisualCritiqueButton from "../components/npn-edit-visual-critique-button";
 import NpnCritiqueReplyModal from "../components/modal/npn-critique-reply-modal";
 import { decorateCriticueReplyAnnotations } from "../lib/npn-critique-reply-annotation-badges";
+import annotationPillExtension from "../lib/npn-critique-reply-annotation-pill-extension";
 import { isCritiqueEligible } from "../lib/npn-critique-reply-eligibility";
 
 // Wires up three things:
@@ -208,6 +209,14 @@ export default apiInitializer((api) => {
     id: "npn-critique-reply-annotation-badges",
     onlyStream: true,
   });
+
+  // Rich-editor (WYSIWYG) counterpart to the cooked-post badge decorator:
+  // style the same [1]/[A1]/[Crop 2] marker tokens as colored pills inside
+  // the critique writing surface. The extension registers globally but gates
+  // itself to the Critique Workspace modal, so other composers are unaffected.
+  // EXPERIMENTAL core API — isolated and degrades gracefully (if it changes,
+  // pills stop rendering; the markdown text is untouched).
+  api.registerRichEditorExtension?.(annotationPillExtension);
 
   // Edit Visual Critique post-menu button.
   //
