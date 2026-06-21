@@ -11201,39 +11201,13 @@ export default class NpnCritiqueReplyModal extends Component {
                 >
                   {{i18n "npn_critique_reply.modal.photographers_notes.title"}}
                 </h3>
-                <div class="npn-critique-reply-modal__notes-panel-actions">
-                  {{! Always-visible Quote button: select text in the notes
-                      below, then click to drop a quote into your critique.
-                      A plain <button> on `mousedown` so the click doesn't
-                      collapse the selection before we read it (the floating
-                      on-selection button can be unreliable with the rich
-                      editor mounted). }}
-                  <button
-                    type="button"
-                    class="btn btn-default btn-small btn-icon-text npn-critique-reply-modal__notes-panel-quote"
-                    title={{i18n
-                      "npn_critique_reply.modal.photographers_notes.quote_title"
-                    }}
-                    aria-label={{i18n
-                      "npn_critique_reply.modal.photographers_notes.quote_aria"
-                    }}
-                    {{on "mousedown" this.insertQuoteFromPhotographersNotes}}
-                  >
-                    {{dIcon "quote-left"}}
-                    <span class="d-button-label">
-                      {{i18n
-                        "npn_critique_reply.modal.photographers_notes.quote"
-                      }}
-                    </span>
-                  </button>
-                  <DButton
-                    class="btn-flat npn-critique-reply-modal__notes-panel-close"
-                    @icon="xmark"
-                    @action={{this.closePhotographersNotes}}
-                    @title="npn_critique_reply.modal.photographers_notes.close"
-                    @ariaLabel="npn_critique_reply.modal.photographers_notes.close"
-                  />
-                </div>
+                <DButton
+                  class="btn-flat npn-critique-reply-modal__notes-panel-close"
+                  @icon="xmark"
+                  @action={{this.closePhotographersNotes}}
+                  @title="npn_critique_reply.modal.photographers_notes.close"
+                  @ariaLabel="npn_critique_reply.modal.photographers_notes.close"
+                />
               </div>
               <div class="npn-critique-reply-modal__notes-panel-body">
                 {{#if this._opCookedLoading}}

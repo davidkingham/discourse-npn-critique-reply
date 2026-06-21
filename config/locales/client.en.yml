@@ -73,7 +73,6 @@ en:
           failed: "Couldn’t load the photographer’s post. You can close and reopen the original topic in a new tab if needed."
           quote: "Quote"
           quote_aria: "Quote selected text"
-          quote_title: "Select text in the notes, then click to quote it into your critique"
         critique_style: "Style"
         feedback_focus: "Focus"
         weekly_challenge: "Weekly Challenge"
