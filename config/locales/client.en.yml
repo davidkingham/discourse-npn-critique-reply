@@ -560,6 +560,15 @@ en:
         # the current path is preserved.
         eye_path_finish: "Finish Eye Path"
         eye_path_finish_title: "Finish and exit Eye Path; your path is kept"
+        # Completion actions for the other tools, shown in the sub-tool row
+        # (the tool's own toolbar button stays selected, like Eye Path).
+        # Exit the tool; the work just placed is preserved.
+        note_finish: "Finish Notes"
+        crop_finish: "Finish Crop"
+        area_note_finish: "Finish Area"
+        strong_area_finish: "Finish Strong Area"
+        direction_arrow_finish: "Finish Arrow"
+        relationship_arrow_finish: "Finish Relationship"
         # Generic hint kept for backward compat with any cached
         # client copies; the active surface uses the mode-specific
         # variants below.

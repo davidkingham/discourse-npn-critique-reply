@@ -4861,6 +4861,36 @@ export default class NpnCritiqueReplyModal extends Component {
     );
   }
 
+  // Label for the "Finish <tool>" completion button shown in the sub-tool
+  // row, or null when no completable tool is active. The toolbar toggle
+  // keeps the tool's own label while active, so this is the explicit exit.
+  // Eye Path has its own Finish button (inside its block), so it's omitted
+  // here. Exactly one tool is active at a time.
+  get activeVisualToolFinishLabel() {
+    let key = null;
+    if (this.noteMode) {
+      key = "note_finish";
+    } else if (this.cropMode) {
+      key = "crop_finish";
+    } else if (this.attentionPullMode) {
+      key = "area_note_finish";
+    } else if (this.strongAreaMode) {
+      key = "strong_area_finish";
+    } else if (this.directionArrowMode) {
+      key = "direction_arrow_finish";
+    } else if (this.relationshipArrowMode) {
+      key = "relationship_arrow_finish";
+    }
+    return key ? i18n(`npn_critique_reply.visual_notes.${key}`) : null;
+  }
+
+  @action
+  finishActiveVisualTool() {
+    // Exit whatever tool is active (its annotations are preserved) — the
+    // same thing toggling the active tool off does, mirroring Eye Path.
+    this._setVisualMode(null);
+  }
+
   _setVisualMode(mode) {
     if (mode === this.visualMode) {
       return;
@@ -9629,16 +9659,16 @@ export default class NpnCritiqueReplyModal extends Component {
                   role="toolbar"
                   aria-label={{i18n "npn_critique_reply.visual_notes.toolbar_label"}}
                 >
-                  {{! Mode toggles — exactly one active at a time. }}
+                  {{! Mode toggles — exactly one active at a time. Each
+                      stays on its own label + icon while active (btn-primary
+                      + aria-pressed announce the selected state); the
+                      explicit "Finish <tool>" completion lives in the
+                      sub-tool row below, matching Eye Path. }}
                   <DButton
                     class={{if this.noteMode "btn-primary" "btn-default"}}
                     @action={{this.toggleNoteMode}}
-                    @icon={{if this.noteMode "check" "plus"}}
-                    @label={{if
-                      this.noteMode
-                      "npn_critique_reply.visual_notes.done"
-                      "npn_critique_reply.visual_notes.numbered_notes"
-                    }}
+                    @icon="plus"
+                    @label="npn_critique_reply.visual_notes.numbered_notes"
                     @title="npn_critique_reply.visual_notes.numbered_notes_title"
                     @ariaPressed={{this.noteMode}}
                     @disabled={{this.isPosting}}
@@ -9646,12 +9676,8 @@ export default class NpnCritiqueReplyModal extends Component {
                   <DButton
                     class={{if this.cropMode "btn-primary" "btn-default"}}
                     @action={{this.toggleCropMode}}
-                    @icon={{if this.cropMode "check" "crop-simple"}}
-                    @label={{if
-                      this.cropMode
-                      "npn_critique_reply.visual_notes.crop_done"
-                      "npn_critique_reply.visual_notes.crop_suggestion"
-                    }}
+                    @icon="crop-simple"
+                    @label="npn_critique_reply.visual_notes.crop_suggestion"
                     @title="npn_critique_reply.visual_notes.crop_suggestion_title"
                     @ariaPressed={{this.cropMode}}
                     @disabled={{this.isPosting}}
@@ -9682,16 +9708,8 @@ export default class NpnCritiqueReplyModal extends Component {
                       "btn-default"
                     }}
                     @action={{this.toggleAttentionPullMode}}
-                    @icon={{if
-                      this.attentionPullMode
-                      "check"
-                      "draw-polygon"
-                    }}
-                    @label={{if
-                      this.attentionPullMode
-                      "npn_critique_reply.visual_notes.area_note_done"
-                      "npn_critique_reply.visual_notes.area_note"
-                    }}
+                    @icon="draw-polygon"
+                    @label="npn_critique_reply.visual_notes.area_note"
                     @title="npn_critique_reply.visual_notes.area_note_title"
                     @ariaPressed={{this.attentionPullMode}}
                     @disabled={{this.isPosting}}
@@ -9703,16 +9721,8 @@ export default class NpnCritiqueReplyModal extends Component {
                       "btn-default"
                     }}
                     @action={{this.toggleDirectionArrowMode}}
-                    @icon={{if
-                      this.directionArrowMode
-                      "check"
-                      "arrow-right"
-                    }}
-                    @label={{if
-                      this.directionArrowMode
-                      "npn_critique_reply.visual_notes.direction_arrow_done"
-                      "npn_critique_reply.visual_notes.direction_arrow"
-                    }}
+                    @icon="arrow-right"
+                    @label="npn_critique_reply.visual_notes.direction_arrow"
                     @title="npn_critique_reply.visual_notes.direction_arrow_title"
                     @ariaPressed={{this.directionArrowMode}}
                     @disabled={{this.isPosting}}
@@ -9724,16 +9734,8 @@ export default class NpnCritiqueReplyModal extends Component {
                       "btn-default"
                     }}
                     @action={{this.toggleRelationshipArrowMode}}
-                    @icon={{if
-                      this.relationshipArrowMode
-                      "check"
-                      "arrows-left-right"
-                    }}
-                    @label={{if
-                      this.relationshipArrowMode
-                      "npn_critique_reply.visual_notes.relationship_arrow_done"
-                      "npn_critique_reply.visual_notes.relationship_arrow"
-                    }}
+                    @icon="arrows-left-right"
+                    @label="npn_critique_reply.visual_notes.relationship_arrow"
                     @title="npn_critique_reply.visual_notes.relationship_arrow_title"
                     @ariaPressed={{this.relationshipArrowMode}}
                     @disabled={{this.isPosting}}
@@ -10252,6 +10254,24 @@ export default class NpnCritiqueReplyModal extends Component {
                           @disabled={{this.isPosting}}
                         />
                       {{/if}}
+                    {{/if}}
+
+                    {{! Completion action for the active tool — mirrors Eye
+                        Path's "Finish" treatment (Eye Path keeps its own
+                        Finish inside its block above). The toolbar toggle
+                        stays on the tool's own label/icon; this small primary
+                        button is the explicit "I'm done" that exits the mode
+                        and preserves the work, instead of folding "Done" into
+                        the toggle. Exactly one tool is active at a time, so a
+                        single dynamic button covers them all. }}
+                    {{#if this.activeVisualToolFinishLabel}}
+                      <DButton
+                        class="btn-primary btn-small npn-critique-reply-modal__finish-tool"
+                        @icon="check"
+                        @action={{this.finishActiveVisualTool}}
+                        @translatedLabel={{this.activeVisualToolFinishLabel}}
+                        @disabled={{this.isPosting}}
+                      />
                     {{/if}}
                 </div>
                   </div>
