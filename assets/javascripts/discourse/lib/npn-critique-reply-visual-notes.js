@@ -369,7 +369,13 @@ function drawCropOnCanvas(ctx, crop, width, height) {
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.fillStyle = ANNOTATION_HALO;
-    ctx.fillText(crop.label, bx + badgePadding, by + badgePadding);
+    // Same dark drop-shadow as the pill so the white label stays readable
+    // on the lighter pill colours after the post downscales.
+    withBadgeShadow(
+      ctx,
+      () => ctx.fillText(crop.label, bx + badgePadding, by + badgePadding),
+      badgeShadowBlurFor(inkEdge)
+    );
   }
 
   // Corner brackets + midpoint edge bars are EDITOR-ONLY now.
@@ -466,7 +472,16 @@ function drawAreaPathOnCanvas(ctx, marker, width, height, style) {
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.fillStyle = style.halo;
-    ctx.fillText(marker.label, bx + style.badgePadding, by + style.badgePadding);
+    withBadgeShadow(
+      ctx,
+      () =>
+        ctx.fillText(
+          marker.label,
+          bx + style.badgePadding,
+          by + style.badgePadding
+        ),
+      style.badgeShadowBlur
+    );
   }
 }
 
@@ -578,7 +593,11 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
       ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.fillStyle = secondary;
-      ctx.fillText(pull.label, bx + badgePadding, by + badgePadding);
+      withBadgeShadow(
+        ctx,
+        () => ctx.fillText(pull.label, bx + badgePadding, by + badgePadding),
+        badgeShadowBlur
+      );
     }
   }
   // Reset dash so subsequent shapes (eye path, pins) aren't dashed.
@@ -692,7 +711,11 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
       ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.fillStyle = secondary;
-      ctx.fillText(area.label, bx + badgePadding, by + badgePadding);
+      withBadgeShadow(
+        ctx,
+        () => ctx.fillText(area.label, bx + badgePadding, by + badgePadding),
+        badgeShadowBlur
+      );
     }
   }
   ctx.globalAlpha = 1;
@@ -1046,7 +1069,11 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
       ctx.stroke();
       ctx.globalAlpha = 1;
       ctx.fillStyle = secondary;
-      ctx.fillText(label, bx + badgePadding, by + badgePadding);
+      withBadgeShadow(
+        ctx,
+        () => ctx.fillText(label, bx + badgePadding, by + badgePadding),
+        eyeBadgeShadowBlur
+      );
     }
   }
 
@@ -1290,10 +1317,15 @@ function drawArrowOnCanvas(
     ctx.fillStyle = ANNOTATION_HALO;
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.fillText(
-      arrow.label,
-      labelX + badgePadding,
-      labelY + badgeHeight / 2
+    withBadgeShadow(
+      ctx,
+      () =>
+        ctx.fillText(
+          arrow.label,
+          labelX + badgePadding,
+          labelY + badgeHeight / 2
+        ),
+      badgeShadowBlurFor(inkEdge)
     );
   }
 
