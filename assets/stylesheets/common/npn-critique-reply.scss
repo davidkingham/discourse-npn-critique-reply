@@ -1940,6 +1940,16 @@
     &.--toolbar-open .d-editor-button-bar__wrap {
       display: flex;
     }
+
+    // The critique workspace has its own dedicated "Preview Critique" flow,
+    // so we never want DEditor's inline preview pane. Core hides it in rich
+    // mode, but on a real mobile device the editor can fall back to markdown
+    // mode where the preview shows side-by-side and steals half the editor
+    // width (the `.d-editor-container` is a flex row). Hide it unconditionally
+    // here so the writing surface always fills the row.
+    .d-editor-preview-wrapper {
+      display: none;
+    }
   }
 
   &__editor.d-editor {
