@@ -174,7 +174,6 @@ const GROUP_VISUAL_NOTES = Object.freeze({
     "Use Crop if a different frame might clarify the image.",
     "Use Eye Path to show how your attention moves through the image.",
     "Use Attention to mark an area that pulls your eye away.",
-    "Use Strong Area to point out what is working especially well.",
     "Use Arrow to show direction or visual pull.",
     "Use Relationship to show a connection, echo, balance, or tension between areas.",
   ]),

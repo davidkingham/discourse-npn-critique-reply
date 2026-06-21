@@ -1,5 +1,5 @@
 // Cooked-post decorator that turns plain-text annotation references
-// like [1], [A1], [S1], [D1], [R1], [E1] into small styled inline
+// like [1], [A1], [D1], [R1], [E1] into small styled inline
 // badges that visually match the annotations on the post's visual-
 // notes image.
 //
@@ -30,14 +30,13 @@ const KIND_CSS_SUFFIX = Object.freeze({
   // visually identical to legacy attention_pull markers.
   area_note: "attention",
   attention_pull: "attention",
-  strong_area: "strong-area",
   direction_arrow: "direction",
   relationship_arrow: "relationship",
 });
 
 // Build the label-to-CSS-suffix map for a single post's annotations.
 // Pins use their numeric `number` field ("1", "2", …); every other
-// kind uses the alpha-prefixed `label` field ("A1", "S2", "E1", …).
+// kind uses the alpha-prefixed `label` field ("A1", "E1", …).
 // Returns a Map so callers get O(1) lookups during text-node walks.
 export function buildAnnotationLabelMap(annotations) {
   const map = new Map();
@@ -83,7 +82,7 @@ export function buildAnnotationLabelMap(annotations) {
 
 // Maps an annotation-reference label to its badge CSS-suffix variant
 // (`.npn-annotation-badge--{suffix}`) purely from the label family —
-// numeric → pins; `Crop` / `CROP` / `Crop N` → crop; A/S/D/R/E prefixes →
+// numeric → pins; `Crop` / `CROP` / `Crop N` → crop; A/D/R/E prefixes →
 // the other kinds. Mirrors `KIND_CSS_SUFFIX` (kind → suffix) but works
 // from the marker text alone, with no annotation payload. Shared by the
 // modal's cooked-Preview re-badging and the rich-editor pill decoration so
@@ -102,8 +101,6 @@ export function annotationLabelToBadgeSuffix(label) {
   switch (label[0]) {
     case "A":
       return "attention";
-    case "S":
-      return "strong-area";
     case "D":
       return "direction";
     case "R":
@@ -140,7 +137,7 @@ const SKIP_ANCESTOR_TAGS = new Set([
 // stay as the legacy "[Crop]" / "[CROP]" forms. The pattern below
 // accepts all three so old posts and new posts both render badges.
 export const TOKEN_PATTERN =
-  /\[([1-9]\d{0,2}|Crop \d{1,2}|Crop|CROP|[ASDRE]\d{1,3})\]/g;
+  /\[([1-9]\d{0,2}|Crop \d{1,2}|Crop|CROP|[ADRE]\d{1,3})\]/g;
 
 // Walk every text node under `root` whose ancestors don't include a
 // skip-tag, and hand each one to `replaceTokensInTextNode`. We

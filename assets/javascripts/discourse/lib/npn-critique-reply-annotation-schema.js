@@ -104,10 +104,6 @@ export const ANNOTATION_KINDS = Object.freeze({
   // contain attention_pull entries still deserialize correctly; on
   // next save they're re-emitted as area_note.
   ATTENTION_PULL: "attention_pull",
-  // Legacy — Strong Area was removed from the toolbar. Existing
-  // strong_area entries continue to render/restore/export; no new
-  // ones are produced.
-  STRONG_AREA: "strong_area",
   // Direction arrow — one-way (single arrowhead), labeled "D<N>".
   // For "this leads my eye toward..." / "this gesture points toward
   // the subject..." use cases. Distinct from eye_path: eye_path is
@@ -136,7 +132,6 @@ const ACTIVE_KINDS_V1 = Object.freeze(
     ANNOTATION_KINDS.EYE_PATH,
     ANNOTATION_KINDS.AREA_NOTE,
     ANNOTATION_KINDS.ATTENTION_PULL,
-    ANNOTATION_KINDS.STRONG_AREA,
     ANNOTATION_KINDS.DIRECTION_ARROW,
     ANNOTATION_KINDS.RELATIONSHIP_ARROW,
   ])
@@ -160,8 +155,8 @@ export const MIN_CROP_DIMENSION_PCT = 3;
 
 // Eye-path caps. Up to 4 paths per critique — the eye path is the
 // most visually heavy annotation kind (curves crossing the image),
-// so the cap is tighter than the 8 used for attention pulls and
-// strong areas. 10 points per path is a generous ceiling — past ~6
+// so the cap is tighter than the 8 used for attention pulls.
+// 10 points per path is a generous ceiling — past ~6
 // it becomes hard to read on the export at standard sizes, but a
 // hard floor keeps the UX simple. The "minimum useful" path is 2
 // points (so there's a direction); the schema accepts 1-point paths
@@ -175,7 +170,7 @@ export const MIN_CROP_DIMENSION_PCT = 3;
 export const MAX_EYE_PATH_POINTS = 40;
 export const MAX_EYE_PATH_COUNT = 4;
 
-// Closed-area "Draw Area" path variant for Attention / Strong Area.
+// Closed-area "Draw Area" path variant for Attention Pull.
 // Client samples the drag, runs Douglas-Peucker simplification on
 // release, and submits a trimmed polyline (typically 6-12 control
 // points). MAX caps a defensive hard ceiling; MIN enforces enough
@@ -189,7 +184,7 @@ export const MIN_EYE_PATH_POINTS_FOR_EXPORT = 2;
 // label that the popover writes into the textarea (e.g. "[E1]
 // description"). Labels are generated max-suffix+1 so deleting one
 // path doesn't shift the numbers of the others — same convention
-// as attention pulls and strong areas.
+// as attention pulls.
 export const EYE_PATH_LABEL_PATTERN = /^E\d+$/;
 export const DEFAULT_EYE_PATH_LABEL = "E1";
 
@@ -253,17 +248,11 @@ export const MIN_AREA_NOTE_DIMENSION_PCT = 3;
 export const MAX_ATTENTION_PULL_COUNT = 8;
 export const MIN_ATTENTION_PULL_DIMENSION_PCT = 3;
 
-// Strong-area caps. Same shape + cap as attention pull — Strong Area
-// is its positive counterpart and the UI workload (8 markers max) is
-// the same.
-export const MAX_STRONG_AREA_COUNT = 8;
-export const MIN_STRONG_AREA_DIMENSION_PCT = 3;
-
 // Arrow caps. Two distinct labeled tools sharing the same coordinate
 // shape (two endpoints):
 //   • direction_arrow — one-way arrowhead. "D<N>" labels.
 //   • relationship_arrow — both ends arrowed. "R<N>" labels.
-// 8 per kind matches attention pulls / strong areas. 3% minimum total
+// 8 per kind matches attention pulls. 3% minimum total
 // distance between endpoints (Pythagorean across the image) drops
 // drags that look like misclicks.
 export const MAX_DIRECTION_ARROW_COUNT = 8;
@@ -280,11 +269,6 @@ export const AREA_NOTE_LABEL_PATTERN = /^A\d+$/;
 // pattern is strict so any garbage in a hand-edited payload gets
 // regenerated rather than rendered.
 export const ATTENTION_PULL_LABEL_PATTERN = /^A\d+$/;
-
-// Strong-area labels follow the same shape but with the "S" prefix
-// so the two kinds are unambiguous in both the image badge and the
-// textarea references.
-export const STRONG_AREA_LABEL_PATTERN = /^S\d+$/;
 
 // Direction arrows use "D<N>" — deliberately not "A" (taken by
 // Attention Pull) to keep the in-text references unambiguous.
@@ -678,9 +662,8 @@ export function annotationToEyePath(annotation) {
 //   • Width and height must each be ≥ MIN_ATTENTION_PULL_DIMENSION_PCT
 //     after clamping.
 //   • `shape` defaults to "ellipse" — the only shape we render for v1.
-// Closed-area "Draw Area" path normalizer. Shared by both
-// attention_pull and strong_area — only the kind + label pattern
-// differ between the two callers.
+// Closed-area "Draw Area" path normalizer. Parameterized by kind +
+// label pattern so callers can reuse it across area-marker kinds.
 function normalizeAreaPathAnnotation(raw, kind, labelPattern) {
   const rawPoints = Array.isArray(raw.points) ? raw.points : null;
   if (!rawPoints) {
@@ -932,151 +915,6 @@ export function annotationsToAttentionPulls(payload) {
   return out;
 }
 
-// ----- Strong-area normalizer + conversions ------------------------
-
-// Strong area is the positive counterpart to Attention Pull — same
-// geometry shape and same validation rules; the kind, label prefix,
-// and renderer styling are what differ.
-export function nextStrongAreaLabel(existingLabels) {
-  let max = 0;
-  if (Array.isArray(existingLabels)) {
-    for (const lbl of existingLabels) {
-      if (typeof lbl !== "string") {
-        continue;
-      }
-      const m = STRONG_AREA_LABEL_PATTERN.exec(lbl);
-      if (m) {
-        const n = parseInt(lbl.slice(1), 10);
-        if (Number.isFinite(n) && n > max) {
-          max = n;
-        }
-      }
-    }
-  }
-  return `S${max + 1}`;
-}
-
-export function normalizeStrongAreaAnnotation(raw) {
-  if (!raw || typeof raw !== "object") {
-    return null;
-  }
-  if (raw.shape === "path") {
-    return normalizeAreaPathAnnotation(
-      raw,
-      ANNOTATION_KINDS.STRONG_AREA,
-      STRONG_AREA_LABEL_PATTERN
-    );
-  }
-  const xPct = clampPct(raw.x_pct ?? raw.xPct);
-  const yPct = clampPct(raw.y_pct ?? raw.yPct);
-  const rawWidth = clampPct(raw.width_pct ?? raw.widthPct);
-  const rawHeight = clampPct(raw.height_pct ?? raw.heightPct);
-  if (xPct == null || yPct == null || rawWidth == null || rawHeight == null) {
-    return null;
-  }
-  const widthPct = Math.min(rawWidth, 100 - xPct);
-  const heightPct = Math.min(rawHeight, 100 - yPct);
-  if (
-    widthPct < MIN_STRONG_AREA_DIMENSION_PCT ||
-    heightPct < MIN_STRONG_AREA_DIMENSION_PCT
-  ) {
-    return null;
-  }
-  const id = isNonEmptyString(raw.id) ? raw.id : null;
-  const rawLabel = raw.label;
-  const label =
-    typeof rawLabel === "string" && STRONG_AREA_LABEL_PATTERN.test(rawLabel)
-      ? rawLabel
-      : null;
-  return {
-    id,
-    kind: ANNOTATION_KINDS.STRONG_AREA,
-    shape: "ellipse",
-    label,
-    x_pct: xPct,
-    y_pct: yPct,
-    width_pct: widthPct,
-    height_pct: heightPct,
-  };
-}
-
-export function strongAreasToAnnotations(areas) {
-  if (!Array.isArray(areas)) {
-    return [];
-  }
-  const out = [];
-  let idCounter = 1;
-  const usedLabels = new Set();
-  for (const area of areas) {
-    if (out.length >= MAX_STRONG_AREA_COUNT) {
-      break;
-    }
-    const raw =
-      area.shape === "path"
-        ? {
-            id: area.id ?? `strong_area_${idCounter}`,
-            label: area.label,
-            shape: "path",
-            points: Array.isArray(area.points)
-              ? area.points.map((p) => ({ x_pct: p.xPct, y_pct: p.yPct }))
-              : [],
-          }
-        : {
-            id: area.id ?? `strong_area_${idCounter}`,
-            label: area.label,
-            x_pct: area.xPct,
-            y_pct: area.yPct,
-            width_pct: area.widthPct,
-            height_pct: area.heightPct,
-          };
-    const normalized = normalizeStrongAreaAnnotation(raw);
-    if (normalized) {
-      if (!normalized.id) {
-        normalized.id = `strong_area_${idCounter}`;
-      }
-      if (!normalized.label || usedLabels.has(normalized.label)) {
-        normalized.label = nextStrongAreaLabel(Array.from(usedLabels));
-      }
-      usedLabels.add(normalized.label);
-      out.push(normalized);
-      idCounter += 1;
-    }
-  }
-  return out;
-}
-
-export function annotationsToStrongAreas(payload) {
-  if (!payload || !Array.isArray(payload.annotations)) {
-    return [];
-  }
-  const out = [];
-  for (const a of payload.annotations) {
-    if (a?.kind !== ANNOTATION_KINDS.STRONG_AREA) {
-      continue;
-    }
-    if (a.shape === "path") {
-      out.push({
-        id: a.id,
-        label: a.label,
-        shape: "path",
-        points: Array.isArray(a.points)
-          ? a.points.map((p) => ({ xPct: p.x_pct, yPct: p.y_pct }))
-          : [],
-      });
-    } else {
-      out.push({
-        id: a.id,
-        label: a.label,
-        xPct: a.x_pct,
-        yPct: a.y_pct,
-        widthPct: a.width_pct,
-        heightPct: a.height_pct,
-      });
-    }
-  }
-  return out;
-}
-
 // ----- Direction-arrow + Relationship-arrow normalizers ----------
 //
 // Both kinds share the same coordinate shape — two endpoints, in
@@ -1103,7 +941,7 @@ function normalizeArrowCoords(raw) {
   }
   // Pythagorean distance in percent-of-image. Anything below the
   // floor reads as a misclick and is dropped — same idea as the
-  // tiny-rectangle filter on attention pulls / strong areas.
+  // tiny-rectangle filter on attention pulls.
   const dx = x2 - x1;
   const dy = y2 - y1;
   if (Math.hypot(dx, dy) < MIN_ARROW_DISTANCE_PCT) {
@@ -1152,7 +990,7 @@ export function normalizeRelationshipArrowAnnotation(raw) {
 }
 
 // Modal-shape array → schema annotations array. Mirrors
-// `attentionPullsToAnnotations` and `strongAreasToAnnotations`.
+// `attentionPullsToAnnotations`.
 export function directionArrowsToAnnotations(arrows) {
   if (!Array.isArray(arrows)) {
     return [];
@@ -1451,7 +1289,6 @@ export function buildVisualAnnotationPayload({
   crop,
   eyePaths,
   attentionPulls,
-  strongAreas,
   directionArrows,
   relationshipArrows,
   // Optional rotate/flip applied to the primary image during
@@ -1495,7 +1332,6 @@ export function buildVisualAnnotationPayload({
     crop,
     eyePaths,
     attentionPulls,
-    strongAreas,
     directionArrows,
     relationshipArrows,
   });
@@ -1604,7 +1440,6 @@ function collectAnnotationsForImage({
   crop,
   eyePaths,
   attentionPulls,
-  strongAreas,
   directionArrows,
   relationshipArrows,
 }) {
@@ -1623,11 +1458,6 @@ function collectAnnotationsForImage({
   if (Array.isArray(attentionPulls) && attentionPulls.length > 0) {
     for (const pullAnnotation of attentionPullsToAnnotations(attentionPulls)) {
       annotations.push(pullAnnotation);
-    }
-  }
-  if (Array.isArray(strongAreas) && strongAreas.length > 0) {
-    for (const areaAnnotation of strongAreasToAnnotations(strongAreas)) {
-      annotations.push(areaAnnotation);
     }
   }
   if (Array.isArray(directionArrows) && directionArrows.length > 0) {
@@ -1664,9 +1494,6 @@ function normalizeAnnotationsArray(raw) {
   let attentionPullCount = 0;
   let attentionPullIdCounter = 1;
   const usedAttentionPullLabels = new Set();
-  let strongAreaCount = 0;
-  let strongAreaIdCounter = 1;
-  const usedStrongAreaLabels = new Set();
   let directionArrowCount = 0;
   let directionArrowIdCounter = 1;
   const usedDirectionArrowLabels = new Set();
@@ -1705,7 +1532,7 @@ function normalizeAnnotationsArray(raw) {
         // Up to MAX_EYE_PATH_COUNT paths per payload. Each gets a
         // unique id + label; after-cap entries are silently dropped
         // (matches the cap-enforcing behavior on the modal side).
-        // Same pattern as attention_pull / strong_area below.
+        // Same pattern as attention_pull below.
         if (eyePathCount >= MAX_EYE_PATH_COUNT) {
           continue;
         }
@@ -1777,33 +1604,9 @@ function normalizeAnnotationsArray(raw) {
           attentionPullIdCounter += 1;
         }
         break;
-      case ANNOTATION_KINDS.STRONG_AREA:
-        // Same cap + label semantics as attention pull, with "S<N>"
-        // prefix instead of "A<N>".
-        if (strongAreaCount >= MAX_STRONG_AREA_COUNT) {
-          continue;
-        }
-        normalized = normalizeStrongAreaAnnotation(entry);
-        if (normalized) {
-          if (!normalized.id) {
-            normalized.id = `strong_area_${strongAreaIdCounter}`;
-          }
-          if (
-            !normalized.label ||
-            usedStrongAreaLabels.has(normalized.label)
-          ) {
-            normalized.label = nextStrongAreaLabel(
-              Array.from(usedStrongAreaLabels)
-            );
-          }
-          usedStrongAreaLabels.add(normalized.label);
-          strongAreaCount += 1;
-          strongAreaIdCounter += 1;
-        }
-        break;
       case ANNOTATION_KINDS.DIRECTION_ARROW:
         // One-way arrows. Same cap + label-fallback pattern as
-        // attention pull / strong area, with "D<N>" labels.
+        // attention pull, with "D<N>" labels.
         if (directionArrowCount >= MAX_DIRECTION_ARROW_COUNT) {
           continue;
         }
@@ -2563,54 +2366,8 @@ export function runSelfCheck() {
     );
   });
 
-  // 33. Strong-area sequential S-labels.
-  t("strongAreasToAnnotations: generates sequential S-labels", () => {
-    const payload = buildVisualAnnotationPayload({
-      topic: { id: 1 },
-      selectedVersion: { key: "original" },
-      pins: [],
-      strongAreas: [
-        { xPct: 10, yPct: 10, widthPct: 10, heightPct: 10 },
-        { xPct: 30, yPct: 30, widthPct: 10, heightPct: 10 },
-      ],
-    });
-    const labels = payload.annotations
-      .filter((a) => a.kind === "strong_area")
-      .map((a) => a.label);
-    return labels.join(",") === "S1,S2";
-  });
-
-  // 34. Garbage / duplicate strong-area labels regenerated.
-  t("strongAreasToAnnotations: regenerates garbage + duplicates", () => {
-    const payload = buildVisualAnnotationPayload({
-      topic: { id: 1 },
-      selectedVersion: { key: "original" },
-      pins: [],
-      strongAreas: [
-        { label: "S1", xPct: 10, yPct: 10, widthPct: 10, heightPct: 10 },
-        { label: "S1", xPct: 30, yPct: 30, widthPct: 10, heightPct: 10 },
-        { label: "garbage", xPct: 50, yPct: 50, widthPct: 10, heightPct: 10 },
-      ],
-    });
-    const labels = payload.annotations
-      .filter((a) => a.kind === "strong_area")
-      .map((a) => a.label);
-    return labels.join(",") === "S1,S2,S3";
-  });
-
-  // 35. nextStrongAreaLabel max-suffix+1 with gaps.
-  t("nextStrongAreaLabel: max-suffix+1 + handles gaps", () => {
-    return (
-      nextStrongAreaLabel([]) === "S1" &&
-      nextStrongAreaLabel(["S1"]) === "S2" &&
-      nextStrongAreaLabel(["S1", "S2", "S3"]) === "S4" &&
-      nextStrongAreaLabel(["S1", "S3"]) === "S4" &&
-      nextStrongAreaLabel(["S1", "garbage", "A2"]) === "S2"
-    );
-  });
-
-  // 36. All five active kinds coexist in a single payload.
-  t("buildVisualAnnotationPayload: five-kind payload", () => {
+  // 36. All four active kinds coexist in a single payload.
+  t("buildVisualAnnotationPayload: four-kind payload", () => {
     const payload = buildVisualAnnotationPayload({
       topic: { id: 1 },
       selectedVersion: { key: "original" },
@@ -2635,15 +2392,11 @@ export function runSelfCheck() {
       attentionPulls: [
         { xPct: 40, yPct: 50, widthPct: 15, heightPct: 12 },
       ],
-      strongAreas: [
-        { xPct: 70, yPct: 30, widthPct: 12, heightPct: 14 },
-      ],
     });
     const kinds = payload.annotations.map((a) => a.kind).sort();
     return (
-      payload.annotations.length === 5 &&
-      kinds.join(",") ===
-        "attention_pull,crop,eye_path,pin,strong_area"
+      payload.annotations.length === 4 &&
+      kinds.join(",") === "attention_pull,crop,eye_path,pin"
     );
   });
 
@@ -2804,7 +2557,6 @@ export function runSelfCheck() {
         },
       ],
       attentionPulls: [{ xPct: 40, yPct: 50, widthPct: 15, heightPct: 12 }],
-      strongAreas: [{ xPct: 70, yPct: 30, widthPct: 12, heightPct: 14 }],
       directionArrows: [
         { x1Pct: 5, y1Pct: 5, x2Pct: 45, y2Pct: 45 },
       ],
@@ -2814,9 +2566,9 @@ export function runSelfCheck() {
     });
     const kinds = payload.annotations.map((a) => a.kind).sort().join(",");
     return (
-      payload.annotations.length === 7 &&
+      payload.annotations.length === 6 &&
       kinds ===
-        "attention_pull,crop,direction_arrow,eye_path,pin,relationship_arrow,strong_area"
+        "attention_pull,crop,direction_arrow,eye_path,pin,relationship_arrow"
     );
   });
 

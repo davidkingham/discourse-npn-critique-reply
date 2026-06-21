@@ -19,7 +19,7 @@
 //   3. `transformAnnotationPercentages` — pure coordinate transform
 //      applied to the modal's in-memory annotation arrays. Mirrors the
 //      annotation kinds in npn-critique-reply-annotation-schema.js:
-//      pins, crop, eyePaths, attentionPulls, strongAreas,
+//      pins, crop, eyePaths, attentionPulls,
 //      directionArrows, relationshipArrows. Each action transforms
 //      the 0..100% coordinate space in one step; chained user actions
 //      chain through this helper one at a time.
@@ -259,7 +259,6 @@ function transformArrow(arrow, action) {
 //     crop: { xPct, yPct, widthPct, heightPct, aspectRatio, label? } | null,
 //     eyePaths: [{ id, label, mode, points: [{ number, xPct, yPct }] }],
 //     attentionPulls: [{ id, label, shape, xPct, yPct, widthPct, heightPct } | { id, label, shape: "path", points }],
-//     strongAreas: same shape as attentionPulls,
 //     directionArrows: [{ id, label, x1Pct, y1Pct, x2Pct, y2Pct, noteText? }],
 //     relationshipArrows: same shape as directionArrows,
 //   }
@@ -279,9 +278,6 @@ export function transformAnnotationPercentages(bundle, action) {
     attentionPulls: Array.isArray(bundle.attentionPulls)
       ? bundle.attentionPulls.map((m) => transformAreaMarker(m, action))
       : bundle.attentionPulls,
-    strongAreas: Array.isArray(bundle.strongAreas)
-      ? bundle.strongAreas.map((m) => transformAreaMarker(m, action))
-      : bundle.strongAreas,
     directionArrows: Array.isArray(bundle.directionArrows)
       ? bundle.directionArrows.map((a) => transformArrow(a, action))
       : bundle.directionArrows,

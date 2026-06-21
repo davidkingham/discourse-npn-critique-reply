@@ -545,7 +545,7 @@ en:
         # Parallel to attention_pull_line_template etc.
         crop_line_template: "[Crop] %{text}"
         # Popover that opens after the user drags a crop rectangle
-        # (mirrors the Attention Pull / Strong Area / Arrow flow).
+        # (mirrors the Attention Pull / Arrow flow).
         crop_popover_title: "Crop suggestion"
         crop_popover_dialog_label: "Add a note for this crop suggestion"
         crop_popover_placeholder: "Why this crop?"
@@ -566,7 +566,6 @@ en:
         note_finish: "Finish Notes"
         crop_finish: "Finish Crop"
         area_note_finish: "Finish Area"
-        strong_area_finish: "Finish Strong Area"
         direction_arrow_finish: "Finish Arrow"
         relationship_arrow_finish: "Finish Relationship"
         # Generic hint kept for backward compat with any cached
@@ -618,10 +617,10 @@ en:
         # it, but no longer inserted by the modal.
         eye_path_starter: "My eye moves through the image like this..."
         # Area tool — unified replacement for the previous separate
-        # Attention and Strong Area tools. One tool that marks any
-        # area worth discussing; the meaning ("pulls attention",
-        # "feels strong", "needs work") comes from the critic's
-        # written response, not from the tool choice.
+        # Attention tool. One tool that marks any area worth
+        # discussing; the meaning ("pulls attention", "feels strong",
+        # "needs work") comes from the critic's written response, not
+        # from the tool choice.
         #
         # Internal schema kind stays `attention_pull` so existing
         # annotations, drafts, exports, and posts keep working without
@@ -657,24 +656,6 @@ en:
         attention_pull_popover_title: "Attention pull"
         attention_pull_popover_dialog_label: "Add a note for this attention pull"
         attention_pull_popover_placeholder: "What's pulling your attention here?"
-        # Strong Area tool — REMOVED from the toolbar as of the Area
-        # unification. Existing strong_area annotations still render,
-        # restore from drafts, and export; these keys remain so the
-        # accessible annotation list and any legacy popovers continue
-        # to label them correctly.
-        strong_area: "Strong area"
-        strong_area_done: "Done with strong area"
-        strong_area_hint: "Drag on the image to mark an area that feels especially strong."
-        strong_area_remove: "Remove selected"
-        strong_area_clear: "Clear strong areas"
-        strong_area_a11y_label: "Strong area %{label}"
-        # Per-marker textarea line — appended only when the critic
-        # types in the popover and clicks Add note. No filler.
-        strong_area_line_template: "[%{label}] %{text}"
-        # Popover for each Strong Area marker.
-        strong_area_popover_title: "Strong area"
-        strong_area_popover_dialog_label: "Add a note for this strong area"
-        strong_area_popover_placeholder: "What's working well here?"
         # Direction Arrow — one-way arrow for "this leads my eye
         # toward..." / "this gesture points back toward the subject."
         # Distinct from Eye Path (curve through 2+ points) and from

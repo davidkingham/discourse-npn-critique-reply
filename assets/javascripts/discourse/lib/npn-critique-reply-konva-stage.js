@@ -13,7 +13,6 @@ import {
   EYE_PATH_PALE_CYAN,
   NOTE_BLUE,
   RELATIONSHIP_TAUPE,
-  STRONG_AREA_SAGE,
 } from "./npn-critique-reply-colors";
 
 // Outer-shadow geometry for halo lines. Tuned to add a soft 2-3px
@@ -279,53 +278,6 @@ function sameAttentionPulls(a, b) {
   return true;
 }
 
-// Strong areas use the same shape as attention pulls — twin clone /
-// equality helpers so dragmove + sync paths stay parallel.
-function cloneStrongAreas(areas) {
-  if (!Array.isArray(areas)) {
-    return [];
-  }
-  return areas.map((p) => ({
-    id: p.id,
-    label: p.label,
-    shape: p.shape,
-    points: cloneAreaPoints(p.points),
-    xPct: p.xPct,
-    yPct: p.yPct,
-    widthPct: p.widthPct,
-    heightPct: p.heightPct,
-  }));
-}
-
-function sameStrongAreas(a, b) {
-  if (a === b) {
-    return true;
-  }
-  if (!Array.isArray(a) || !Array.isArray(b)) {
-    return false;
-  }
-  if (a.length !== b.length) {
-    return false;
-  }
-  for (let i = 0; i < a.length; i++) {
-    const x = a[i];
-    const y = b[i];
-    if (
-      x.id !== y.id ||
-      x.xPct !== y.xPct ||
-      x.yPct !== y.yPct ||
-      x.widthPct !== y.widthPct ||
-      x.heightPct !== y.heightPct ||
-      (x.label ?? null) !== (y.label ?? null) ||
-      (x.shape ?? null) !== (y.shape ?? null) ||
-      !sameAreaPoints(x.points, y.points)
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
 // Arrow clone + equality — shared shape between direction_arrow and
 // relationship_arrow (both are two-endpoint annotations). The clone
 // keeps the kind-specific label so the renderer can distinguish them
@@ -401,8 +353,6 @@ const MIN_CROP_DRAG_PCT = 3;
 // Attention-pull minimum drag — same 3% floor as crop, mirrors
 // MIN_ATTENTION_PULL_DIMENSION_PCT in the schema.
 const MIN_ATTENTION_PULL_DRAG_PCT = 3;
-// Strong-area minimum drag — twin of attention pull.
-const MIN_STRONG_AREA_DRAG_PCT = 3;
 // Arrow minimum drag — distance (Pythagorean) between endpoints
 // rather than per-axis. Mirrors MIN_ARROW_DISTANCE_PCT in the schema.
 const MIN_ARROW_DRAG_PCT = 3;
@@ -525,23 +475,20 @@ export async function createAnnotationStage({
   crop = null,
   eyePaths = [],
   attentionPulls = [],
-  strongAreas = [],
   directionArrows = [],
   relationshipArrows = [],
   selectedPinNumber = null,
   cropSelected = false,
   selectedEyePathId = null,
   selectedAttentionPullId = null,
-  selectedStrongAreaId = null,
   selectedDirectionArrowId = null,
   selectedRelationshipArrowId = null,
   visualMode = null,
   aspectRatio = "free",
   pinMoveEnabled = true,
   attentionPullEditEnabled = true,
-  strongAreaEditEnabled = true,
   // "path" (default) or "oval". When "path" + visualMode is
-  // attention_pull or strong_area, drag-to-draw is active.
+  // attention_pull, drag-to-draw is active.
   areaShapeMode = "path",
   // Eye Path interaction mode — "stroke" (default, drag-to-trace)
   // or "points" (click-to-add ordered stops). In stroke mode a
@@ -552,7 +499,6 @@ export async function createAnnotationStage({
   // creating a new marker. Cleared on commit, cancel, or any of the
   // modal-side cancel triggers (selection change, tool switch).
   retracingAttentionPullId = null,
-  retracingStrongAreaId = null,
   onAddPin,
   onSelectPin,
   onMovePin,
@@ -568,11 +514,6 @@ export async function createAnnotationStage({
   onRetraceAttentionPullPath,
   onSelectAttentionPull,
   onUpdateAttentionPull,
-  onAddStrongArea,
-  onAddStrongAreaPath,
-  onRetraceStrongAreaPath,
-  onSelectStrongArea,
-  onUpdateStrongArea,
   onAddDirectionArrow,
   onSelectDirectionArrow,
   onUpdateDirectionArrow,
@@ -601,21 +542,18 @@ export async function createAnnotationStage({
     height: initialHeight,
   });
 
-  // Six layers, painted in add order. Strong areas sit next to
-  // attention pulls (above crop dim, below eye path and pins) so the
-  // two area markers share a visual band and read as paired tools.
-  // Pins remain on top because their numbered semantics require
-  // unobstructed readability.
+  // Layers painted in add order. Attention pulls sit above crop dim,
+  // below eye path and pins. Pins remain on top because their numbered
+  // semantics require unobstructed readability.
   // Annotation kinds live in Konva.Group children of a single layer.
   // Konva renders each Layer as its own <canvas>; one canvas with
   // grouped sub-trees is faster than five canvases (the engine's own
   // warning at >5 layers). Group add-order = z-order: crop → attention
-  // pull → strong area → eye path → pins (pins always on top for
+  // pull → eye path → pins (pins always on top for
   // numbered-badge readability).
   const annotationsLayer = new Konva.Layer();
   const cropLayer = new Konva.Group();
   const attentionPullLayer = new Konva.Group();
-  const strongAreaLayer = new Konva.Group();
   const eyePathLayer = new Konva.Group();
   // Arrows sit ABOVE eye path so a relationship/direction arrow
   // crossing a curve reads on top of the curve, BELOW pins so
@@ -625,7 +563,6 @@ export async function createAnnotationStage({
   const pinLayer = new Konva.Group();
   annotationsLayer.add(cropLayer);
   annotationsLayer.add(attentionPullLayer);
-  annotationsLayer.add(strongAreaLayer);
   annotationsLayer.add(eyePathLayer);
   annotationsLayer.add(directionArrowLayer);
   annotationsLayer.add(relationshipArrowLayer);
@@ -647,32 +584,26 @@ export async function createAnnotationStage({
     crop: crop ? { ...crop } : null,
     eyePaths: cloneEyePaths(eyePaths),
     attentionPulls: cloneAttentionPulls(attentionPulls),
-    strongAreas: cloneStrongAreas(strongAreas),
     directionArrows: cloneArrows(directionArrows),
     relationshipArrows: cloneArrows(relationshipArrows),
     selectedPinNumber,
     cropSelected,
     selectedEyePathId,
     selectedAttentionPullId,
-    selectedStrongAreaId,
     selectedDirectionArrowId,
     selectedRelationshipArrowId,
     visualMode,
     aspectRatio,
     pinMoveEnabled,
     attentionPullEditEnabled,
-    strongAreaEditEnabled,
     areaShapeMode,
     eyePathInteractionMode,
     retracingAttentionPullId,
-    retracingStrongAreaId,
   };
 
   // Drag-to-create attention-pull state — set on mousedown over empty
   // stage in attention_pull mode, cleared on mouseup.
   let attentionDrag = null;
-  // Drag-to-create strong-area state — same pattern.
-  let strongDrag = null;
   // Drag-to-create arrow state — tail at mousedown, head tracks
   // mousemove, released on mouseup as { x1, y1, x2, y2 }. One per
   // arrow kind so the two tools don't share their in-flight state.
@@ -684,14 +615,13 @@ export async function createAnnotationStage({
   let cropDrag = null;
 
   // Draw Area in-flight state for the path-shape variant of
-  // Attention / Strong Area. Mirrors `eyePathDrag` in structure:
+  // Attention Pull. Mirrors `eyePathDrag` in structure:
   // sampled pixel points + last-sample anchor for distance-based
   // sampling. Mousedown begins the drag; mousemove samples + redraws
   // an OPEN preview line; mouseup applies Douglas-Peucker simplifi-
   // cation, validates min size, and commits via the per-kind path
   // callback. Drag is only started when state.areaShapeMode === "path".
   let attentionPathDrag = null;
-  let strongPathDrag = null;
   // Sampling + threshold values tuned for closed-area shapes. Looser
   // than eye_path's 24px because area paths are typically smaller
   // and need a few samples to define a shape; finer than eye_path's
@@ -816,8 +746,6 @@ export async function createAnnotationStage({
     } else if (state.visualMode === "eye_path") {
       container.style.cursor = "crosshair";
     } else if (state.visualMode === "attention_pull") {
-      container.style.cursor = "crosshair";
-    } else if (state.visualMode === "strong_area") {
       container.style.cursor = "crosshair";
     } else if (state.visualMode === "direction_arrow") {
       container.style.cursor = "crosshair";
@@ -993,8 +921,8 @@ export async function createAnnotationStage({
     return group;
   }
 
-  // Shared path-shape area renderer used by both attention_pull and
-  // strong_area's Draw Area variant. Builds the same three-layer
+  // Path-shape area renderer used by attention_pull's Draw Area
+  // variant. Builds the same three-layer
   // stack the ellipse renderer uses (halo / fill / stroke) but with
   // Konva.Line(closed: true) instead of Konva.Ellipse. Label badge
   // anchors at the bounding box's top-left, matching the ellipse
@@ -1513,316 +1441,6 @@ export async function createAnnotationStage({
           },
         });
         attentionPullLayer.add(transformer);
-      }
-    }
-    annotationsLayer.batchDraw();
-  }
-
-  // Strong-area renderer. Twin of attention-pull renderer with two
-  // visual distinctions so A1 and S1 stay easy to tell apart on the
-  // same image:
-  //   • color: --success (green) with a teal-ish hex fallback
-  //   • stroke: SOLID (attention pulls are dashed)
-  // Badge style mirrors attention pull (small rounded pill with white
-  // halo) so the two area tools read as a paired family while the
-  // color/stroke difference keeps them legible side by side.
-  function renderStrongAreas() {
-    strongAreaLayer.destroyChildren();
-    const areas = state.strongAreas;
-    if (!Array.isArray(areas) || areas.length === 0) {
-      annotationsLayer.batchDraw();
-      return;
-    }
-    const sw = stage.width();
-    const sh = stage.height();
-    if (sw === 0 || sh === 0) {
-      annotationsLayer.batchDraw();
-      return;
-    }
-    // Muted sage — see npn-critique-reply-colors.js. Supportive
-    // counterpart to Attention Pull's ochre, soft enough not to
-    // compete with greens already present in the photograph.
-    const green = STRONG_AREA_SAGE;
-    const secondary = ANNOTATION_HALO;
-    const shortEdge = Math.min(sw, sh);
-    const minSizePx = Math.max(
-      10,
-      Math.round((MIN_STRONG_AREA_DRAG_PCT / 100) * shortEdge)
-    );
-
-    for (const area of areas) {
-      if (area.shape === "path") {
-        renderAreaPath(strongAreaLayer, area, {
-          isSelected: area.id === state.selectedStrongAreaId,
-          tertiary: STRONG_AREA_SAGE,
-          haloColor: secondary,
-          stageWidth: sw,
-          stageHeight: sh,
-          shortEdge,
-          onSelect: () => onSelectStrongArea?.(area.id),
-          modeMatches: state.visualMode === "strong_area",
-          isRetracing: area.id === state.retracingStrongAreaId,
-        });
-        continue;
-      }
-      const cx = ((area.xPct + area.widthPct / 2) / 100) * sw;
-      const cy = ((area.yPct + area.heightPct / 2) / 100) * sh;
-      const rx = (area.widthPct / 200) * sw;
-      const ry = (area.heightPct / 200) * sh;
-      if (rx <= 0 || ry <= 0) {
-        continue;
-      }
-      const isSelected = area.id === state.selectedStrongAreaId;
-      const canEdit =
-        isSelected &&
-        state.visualMode === "strong_area" &&
-        state.strongAreaEditEnabled;
-
-      // Widened from 0.55% → 0.75% of short edge so the white halo
-      // gives the muted ochre / sage stroke enough contrast on
-      // foliage / sky / similarly-toned backgrounds.
-      const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
-      const strokeWidth = isSelected
-        ? Math.max(3, Math.round(shortEdge * 0.005))
-        : Math.max(2, Math.round(shortEdge * 0.0035));
-      const id = area.id;
-
-      const haloRef = new Konva.Ellipse({
-        x: cx,
-        y: cy,
-        radiusX: rx,
-        radiusY: ry,
-        stroke: secondary,
-        strokeWidth: haloWidth,
-        fillEnabled: false,
-        opacity: 0.85,
-        listening: false,
-        shadowColor: ANNOTATION_HALO_SHADOW,
-        shadowBlur: ANNOTATION_HALO_SHADOW_BLUR,
-        shadowOpacity: ANNOTATION_HALO_SHADOW_OPACITY,
-        shadowForStrokeEnabled: true,
-      });
-      strongAreaLayer.add(haloRef);
-
-      // Fill body — listening + draggable only when the marker is
-      // selected and editable. Mirrors the attention-pull pattern:
-      // interior is pass-through for unselected markers, then becomes
-      // the drag-to-move target after selection.
-      const fillBody = new Konva.Ellipse({
-        x: cx,
-        y: cy,
-        radiusX: rx,
-        radiusY: ry,
-        fill: green,
-        opacity: isSelected
-          ? AREA_FILL_OPACITY_SELECTED
-          : AREA_FILL_OPACITY_UNSELECTED,
-        strokeEnabled: false,
-        name: `strong-area-${id}`,
-        listening: canEdit,
-        draggable: canEdit,
-        dragBoundFunc(pos) {
-          const w = fillBody.radiusX() * fillBody.scaleX();
-          const h = fillBody.radiusY() * fillBody.scaleY();
-          const stageW = stage.width();
-          const stageH = stage.height();
-          return {
-            x: Math.max(w, Math.min(stageW - w, pos.x)),
-            y: Math.max(h, Math.min(stageH - h, pos.y)),
-          };
-        },
-      });
-      fillBody.on("click tap", (e) => {
-        e.cancelBubble = true;
-        onSelectStrongArea?.(id);
-      });
-      // Cursor cue matching attention pulls — "move" when draggable,
-      // "pointer" when only clickable.
-      fillBody.on("mouseenter", () => {
-        container.style.cursor = canEdit ? "move" : "pointer";
-      });
-      fillBody.on("mouseleave", () => {
-        applyContainerCursor();
-      });
-      strongAreaLayer.add(fillBody);
-
-      // SOLID stroke (no dash) — visual contrast with attention pull's
-      // dashed outline. The border is the click target for selection;
-      // hitStrokeWidth widens the hit zone so the user doesn't need
-      // pixel-perfect aim.
-      const strokeHitWidth = Math.max(14, strokeWidth * 4);
-      const strokeRef = new Konva.Ellipse({
-        x: cx,
-        y: cy,
-        radiusX: rx,
-        radiusY: ry,
-        stroke: green,
-        strokeWidth,
-        fillEnabled: false,
-        listening: true,
-        hitStrokeWidth: strokeHitWidth,
-        name: `strong-area-stroke-${id}`,
-      });
-      strokeRef.on("click tap", (e) => {
-        e.cancelBubble = true;
-        onSelectStrongArea?.(id);
-      });
-      strokeRef.on("mouseenter", () => {
-        container.style.cursor = "pointer";
-      });
-      strokeRef.on("mouseleave", () => {
-        applyContainerCursor();
-      });
-      strongAreaLayer.add(strokeRef);
-
-      // Label badge (S1, S2, …) at the upper-left corner.
-      const badgeOffset = Math.max(3, Math.round(shortEdge * 0.004));
-      let labelRef = null;
-      if (area.label) {
-        const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
-        const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
-        labelRef = new Konva.Label({
-          x: cx - rx + badgeOffset,
-          y: cy - ry + badgeOffset,
-          listening: false,
-        });
-        labelRef.add(
-          new Konva.Tag({
-            fill: green,
-            cornerRadius: 3,
-            stroke: secondary,
-            strokeWidth: 1.5,
-            opacity: isSelected ? 1 : 0.95,
-            shadowColor: ANNOTATION_HALO_SHADOW,
-            shadowBlur: ANNOTATION_BADGE_SHADOW_BLUR,
-            shadowOpacity: ANNOTATION_BADGE_SHADOW_OPACITY,
-          })
-        );
-        labelRef.add(
-          new Konva.Text({
-            text: area.label,
-            fontSize: badgeFontSize,
-            fontFamily: "sans-serif",
-            fontStyle: "bold",
-            fill: secondary,
-            padding: badgePadding,
-          })
-        );
-        strongAreaLayer.add(labelRef);
-      }
-
-      if (canEdit) {
-        const syncDecorations = () => {
-          const ex = fillBody.x();
-          const ey = fillBody.y();
-          const erx = fillBody.radiusX() * fillBody.scaleX();
-          const ery = fillBody.radiusY() * fillBody.scaleY();
-          haloRef.position({ x: ex, y: ey });
-          haloRef.radiusX(erx);
-          haloRef.radiusY(ery);
-          strokeRef.position({ x: ex, y: ey });
-          strokeRef.radiusX(erx);
-          strokeRef.radiusY(ery);
-          if (labelRef) {
-            labelRef.position({
-              x: ex - erx + badgeOffset,
-              y: ey - ery + badgeOffset,
-            });
-          }
-          annotationsLayer.batchDraw();
-        };
-
-        const emitUpdate = () => {
-          const stageW = stage.width();
-          const stageH = stage.height();
-          if (stageW === 0 || stageH === 0) {
-            return;
-          }
-          const erx = fillBody.radiusX();
-          const ery = fillBody.radiusY();
-          const ex = fillBody.x();
-          const ey = fillBody.y();
-          const xPct = Math.max(
-            0,
-            Math.min(100, ((ex - erx) / stageW) * 100)
-          );
-          const yPct = Math.max(
-            0,
-            Math.min(100, ((ey - ery) / stageH) * 100)
-          );
-          const widthPct = Math.max(
-            0,
-            Math.min(100 - xPct, ((2 * erx) / stageW) * 100)
-          );
-          const heightPct = Math.max(
-            0,
-            Math.min(100 - yPct, ((2 * ery) / stageH) * 100)
-          );
-          state.strongAreas = state.strongAreas.map((p) =>
-            p.id === id
-              ? { ...p, xPct, yPct, widthPct, heightPct }
-              : p
-          );
-          onUpdateStrongArea?.(id, xPct, yPct, widthPct, heightPct);
-        };
-
-        fillBody.on("dragmove", syncDecorations);
-        fillBody.on("dragend", emitUpdate);
-        fillBody.on("transform", syncDecorations);
-        fillBody.on("transformend", () => {
-          const sx = fillBody.scaleX();
-          const sy = fillBody.scaleY();
-          fillBody.scaleX(1);
-          fillBody.scaleY(1);
-          fillBody.radiusX(Math.max(1, fillBody.radiusX() * sx));
-          fillBody.radiusY(Math.max(1, fillBody.radiusY() * sy));
-          haloRef.radiusX(fillBody.radiusX());
-          haloRef.radiusY(fillBody.radiusY());
-          strokeRef.radiusX(fillBody.radiusX());
-          strokeRef.radiusY(fillBody.radiusY());
-          emitUpdate();
-        });
-
-        const transformer = new Konva.Transformer({
-          nodes: [fillBody],
-          rotateEnabled: false,
-          keepRatio: false,
-          enabledAnchors: [
-            "top-left",
-            "top-center",
-            "top-right",
-            "middle-left",
-            "middle-right",
-            "bottom-left",
-            "bottom-center",
-            "bottom-right",
-          ],
-          borderEnabled: false,
-          anchorSize: 10,
-          anchorCornerRadius: 2,
-          anchorStroke: green,
-          anchorFill: secondary,
-          anchorStrokeWidth: 1.5,
-          boundBoxFunc(oldBox, newBox) {
-            if (
-              newBox.width < minSizePx ||
-              newBox.height < minSizePx
-            ) {
-              return oldBox;
-            }
-            if (newBox.x < 0 || newBox.y < 0) {
-              return oldBox;
-            }
-            if (
-              newBox.x + newBox.width > sw ||
-              newBox.y + newBox.height > sh
-            ) {
-              return oldBox;
-            }
-            return newBox;
-          },
-        });
-        strongAreaLayer.add(transformer);
       }
     }
     annotationsLayer.batchDraw();
@@ -3070,7 +2688,7 @@ export async function createAnnotationStage({
       // existing crop blocks placement of new annotations inside its
       // bounds. Modes that need pass-through: numbered_notes (click
       // to add pin), eye_path (click to add path point), attention_pull
-      // / strong_area (drag-to-create on empty stage), and
+      // (drag-to-create on empty stage), and
       // direction_arrow / relationship_arrow (drag-to-create across
       // the image, may legitimately start inside the crop). The crop
       // rect is selectable on click only in modes that don't add
@@ -3080,7 +2698,6 @@ export async function createAnnotationStage({
         state.visualMode !== "numbered_notes" &&
         state.visualMode !== "eye_path" &&
         state.visualMode !== "attention_pull" &&
-        state.visualMode !== "strong_area" &&
         state.visualMode !== "direction_arrow" &&
         state.visualMode !== "relationship_arrow",
       // Draggable only when the crop is the active edit target.
@@ -3191,8 +2808,8 @@ export async function createAnnotationStage({
     // `listening` block) so a click anywhere INSIDE the crop area
     // passes through to the stage and adds the active tool's
     // annotation. That made the crop the only marker that couldn't
-    // be picked up by clicking it from another tool's mode — pins,
-    // attention pulls, and strong areas can all be selected at any
+    // be picked up by clicking it from another tool's mode — pins
+    // and attention pulls can all be selected at any
     // time because they're small enough that you can click them
     // intentionally, but the crop's bounded interior had to stay
     // pass-through so users could place annotations inside it.
@@ -3209,7 +2826,6 @@ export async function createAnnotationStage({
       state.visualMode === "numbered_notes" ||
       state.visualMode === "eye_path" ||
       state.visualMode === "attention_pull" ||
-      state.visualMode === "strong_area" ||
       state.visualMode === "direction_arrow" ||
       state.visualMode === "relationship_arrow";
     if (inToolMode) {
@@ -3605,21 +3221,17 @@ export async function createAnnotationStage({
     let tertiary = ANNOTATION_BLUE;
     if (state.visualMode === "attention_pull") {
       tertiary = ATTENTION_PULL_OCHRE;
-    } else if (state.visualMode === "strong_area") {
-      tertiary = STRONG_AREA_SAGE;
     }
     const rx = Math.min(x1, x2);
     const ry = Math.min(y1, y2);
     const rw = Math.abs(x2 - x1);
     const rh = Math.abs(y2 - y1);
 
-    // Attention / Strong Area finalize as ellipses, so the preview
+    // Attention Pull finalizes as an ellipse, so the preview
     // also draws an ellipse — previously the rect preview gave
     // users a "drew a rectangle, got an oval" surprise on release.
     // Crop_suggestion stays as a rectangle (final crop IS a rect).
-    const isAreaTool =
-      state.visualMode === "attention_pull" ||
-      state.visualMode === "strong_area";
+    const isAreaTool = state.visualMode === "attention_pull";
 
     if (isAreaTool) {
       previewLayer.add(
@@ -3888,29 +3500,6 @@ export async function createAnnotationStage({
       }
       return;
     }
-    if (state.visualMode === "strong_area") {
-      if (state.retracingStrongAreaId) {
-        strongPathDrag = {
-          startX: pos.x,
-          startY: pos.y,
-          points: [{ x: pos.x, y: pos.y }],
-          lastSampleX: pos.x,
-          lastSampleY: pos.y,
-          retraceId: state.retracingStrongAreaId,
-        };
-      } else if (state.areaShapeMode === "path") {
-        strongPathDrag = {
-          startX: pos.x,
-          startY: pos.y,
-          points: [{ x: pos.x, y: pos.y }],
-          lastSampleX: pos.x,
-          lastSampleY: pos.y,
-        };
-      } else {
-        strongDrag = { startX: pos.x, startY: pos.y };
-      }
-      return;
-    }
     if (state.visualMode === "direction_arrow") {
       directionArrowDrag = { startX: pos.x, startY: pos.y };
       return;
@@ -3956,10 +3545,6 @@ export async function createAnnotationStage({
       renderPreview(attentionDrag.startX, attentionDrag.startY, pos.x, pos.y);
       return;
     }
-    if (strongDrag) {
-      renderPreview(strongDrag.startX, strongDrag.startY, pos.x, pos.y);
-      return;
-    }
     if (directionArrowDrag) {
       renderArrowPreview(
         directionArrowDrag.startX,
@@ -3987,16 +3572,6 @@ export async function createAnnotationStage({
         pos.x,
         pos.y,
         ATTENTION_PULL_OCHRE
-      );
-      return;
-    }
-    if (strongPathDrag) {
-      sampleAreaPathPoint(strongPathDrag, pos);
-      renderAreaPathPreview(
-        strongPathDrag.points,
-        pos.x,
-        pos.y,
-        STRONG_AREA_SAGE
       );
       return;
     }
@@ -4099,37 +3674,6 @@ export async function createAnnotationStage({
       return;
     }
 
-    if (strongDrag) {
-      const start = strongDrag;
-      strongDrag = null;
-      clearPreview();
-      if (!pos || sw === 0 || sh === 0) {
-        return;
-      }
-      const x1 = Math.min(start.startX, pos.x);
-      const y1 = Math.min(start.startY, pos.y);
-      const x2 = Math.max(start.startX, pos.x);
-      const y2 = Math.max(start.startY, pos.y);
-      const xPct = Math.max(0, Math.min(100, (x1 / sw) * 100));
-      const yPct = Math.max(0, Math.min(100, (y1 / sh) * 100));
-      const widthPct = Math.max(
-        0,
-        Math.min(100 - xPct, ((x2 - x1) / sw) * 100)
-      );
-      const heightPct = Math.max(
-        0,
-        Math.min(100 - yPct, ((y2 - y1) / sh) * 100)
-      );
-      if (
-        widthPct < MIN_STRONG_AREA_DRAG_PCT ||
-        heightPct < MIN_STRONG_AREA_DRAG_PCT
-      ) {
-        return;
-      }
-      onAddStrongArea?.(xPct, yPct, widthPct, heightPct);
-      return;
-    }
-
     if (directionArrowDrag) {
       const start = directionArrowDrag;
       directionArrowDrag = null;
@@ -4182,20 +3726,6 @@ export async function createAnnotationStage({
         );
       } else {
         finishAreaPathDrag(drag, pos, sw, sh, onAddAttentionPullPath);
-      }
-      return;
-    }
-    if (strongPathDrag) {
-      const drag = strongPathDrag;
-      strongPathDrag = null;
-      clearPreview();
-      if (drag.retraceId) {
-        const targetId = drag.retraceId;
-        finishAreaPathDrag(drag, pos, sw, sh, (points) =>
-          onRetraceStrongAreaPath?.(targetId, points)
-        );
-      } else {
-        finishAreaPathDrag(drag, pos, sw, sh, onAddStrongAreaPath);
       }
       return;
     }
@@ -4281,7 +3811,6 @@ export async function createAnnotationStage({
     if (sizeChanged) {
       renderCrop();
       renderAttentionPulls();
-      renderStrongAreas();
       renderEyePaths();
       renderDirectionArrows();
       renderRelationshipArrows();
@@ -4303,7 +3832,6 @@ export async function createAnnotationStage({
   applyContainerCursor();
   renderCrop();
   renderAttentionPulls();
-  renderStrongAreas();
   renderEyePaths();
   renderDirectionArrows();
   renderRelationshipArrows();
@@ -4320,31 +3848,26 @@ export async function createAnnotationStage({
       crop,
       eyePaths,
       attentionPulls,
-      strongAreas,
       directionArrows,
       relationshipArrows,
       selectedPinNumber,
       cropSelected,
       selectedEyePathId,
       selectedAttentionPullId,
-      selectedStrongAreaId,
       selectedDirectionArrowId,
       selectedRelationshipArrowId,
       visualMode,
       aspectRatio,
       pinMoveEnabled,
       attentionPullEditEnabled,
-      strongAreaEditEnabled,
       areaShapeMode,
       eyePathInteractionMode,
       retracingAttentionPullId,
-      retracingStrongAreaId,
     } = {}) {
       let pinsChanged = false;
       let cropChanged = false;
       let eyePathChanged = false;
       let attentionPullsChanged = false;
-      let strongAreasChanged = false;
       let directionArrowsChanged = false;
       let relationshipArrowsChanged = false;
 
@@ -4414,38 +3937,15 @@ export async function createAnnotationStage({
         attentionPullsChanged = true;
       }
       if (
-        strongAreas !== undefined &&
-        !sameStrongAreas(strongAreas, state.strongAreas)
-      ) {
-        state.strongAreas = cloneStrongAreas(strongAreas);
-        strongAreasChanged = true;
-      }
-      if (
-        selectedStrongAreaId !== undefined &&
-        selectedStrongAreaId !== state.selectedStrongAreaId
-      ) {
-        state.selectedStrongAreaId = selectedStrongAreaId;
-        strongAreasChanged = true;
-      }
-      if (
-        strongAreaEditEnabled !== undefined &&
-        strongAreaEditEnabled !== state.strongAreaEditEnabled
-      ) {
-        state.strongAreaEditEnabled = strongAreaEditEnabled;
-        strongAreasChanged = true;
-      }
-      if (
         areaShapeMode !== undefined &&
         areaShapeMode !== state.areaShapeMode
       ) {
         state.areaShapeMode = areaShapeMode;
         // A mid-drag sub-mode swap shouldn't leave a stale shape on
         // the preview layer.
-        if (attentionDrag || strongDrag || attentionPathDrag || strongPathDrag) {
+        if (attentionDrag || attentionPathDrag) {
           attentionDrag = null;
-          strongDrag = null;
           attentionPathDrag = null;
-          strongPathDrag = null;
           clearPreview();
         }
       }
@@ -4475,17 +3975,6 @@ export async function createAnnotationStage({
         // commit one operation when the toolbar context says another.
         if (attentionPathDrag) {
           attentionPathDrag = null;
-          clearPreview();
-        }
-      }
-      if (
-        retracingStrongAreaId !== undefined &&
-        retracingStrongAreaId !== state.retracingStrongAreaId
-      ) {
-        state.retracingStrongAreaId = retracingStrongAreaId;
-        strongAreasChanged = true;
-        if (strongPathDrag) {
-          strongPathDrag = null;
           clearPreview();
         }
       }
@@ -4529,10 +4018,6 @@ export async function createAnnotationStage({
           attentionDrag = null;
           clearPreview();
         }
-        if (strongDrag) {
-          strongDrag = null;
-          clearPreview();
-        }
         if (directionArrowDrag) {
           directionArrowDrag = null;
           clearPreview();
@@ -4546,9 +4031,6 @@ export async function createAnnotationStage({
         // requires a re-render to mount/unmount it.
         if (state.selectedAttentionPullId) {
           attentionPullsChanged = true;
-        }
-        if (state.selectedStrongAreaId) {
-          strongAreasChanged = true;
         }
         // The crop rect's `listening` attribute depends on the active
         // mode (see renderCrop). When a crop exists and we cross the
@@ -4678,9 +4160,6 @@ export async function createAnnotationStage({
       }
       if (attentionPullsChanged) {
         renderAttentionPulls();
-      }
-      if (strongAreasChanged) {
-        renderStrongAreas();
       }
       if (eyePathChanged) {
         renderEyePaths();
