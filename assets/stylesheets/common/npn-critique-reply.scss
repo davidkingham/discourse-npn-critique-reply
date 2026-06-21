@@ -3528,19 +3528,25 @@
   // above the dock.
   --npn-docked-height: 60vh;
 
-  // Effective (rendered) height: never exceed 92% of the CURRENT viewport.
+  // Effective (rendered) height: never grow past the site header, exactly
+  // like the core composer's `max-height: calc(100vh - var(--header-offset))`
+  // — so the panel reaches right up to the header (no gap) without
+  // overlapping it.
+  //
   // `--npn-docked-height` is a requested value — the default, or the px the
   // critic dragged on whatever display they were on, or a stale persisted
   // value. On a big display that px can be far taller than a smaller
   // display's viewport; moving the browser there (especially at a different
   // scale) doesn't reliably fire a `resize` event, so a JS re-clamp can miss
   // it and the top-edge grippie + close button end up off the top of the
-  // screen with no way to drag the panel down or close it. `dvh` recomputes
-  // on viewport reflow without any JS, so capping here keeps the grippie on
-  // screen no matter what. 92dvh mirrors DOCKED_MAX_VIEWPORT_FRACTION, so
-  // any in-range height renders unchanged — and the requested px is left
-  // intact, so the panel re-expands when moved back to the taller display.
-  --npn-docked-h: min(var(--npn-docked-height), 92dvh);
+  // screen with no way to drag the panel down or close it. Capping with
+  // `dvh` (which recomputes on viewport reflow with no JS) keeps the grippie
+  // on screen no matter what — and leaves the requested px intact, so the
+  // panel re-expands when moved back to the taller display.
+  --npn-docked-h: min(
+    var(--npn-docked-height),
+    calc(100dvh - var(--header-offset, 4em))
+  );
 
   // Push the visible card to the bottom edge instead of centering it.
   align-items: flex-end;

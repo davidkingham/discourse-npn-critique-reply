@@ -201,10 +201,14 @@ function writeNumber(key, value) {
 // when the `npn_critique_reply_docked_experiment` site setting is on —
 // the docked workspace can be dragged taller/shorter by its top-edge
 // grippie, and the chosen height is remembered. Min keeps the header +
-// footer usable; max leaves a sliver of topic visible above the dock.
+// footer usable; max stops at the site header (like the core composer's
+// `100vh - var(--header-offset)`), so the panel grows right up to the
+// header without overlapping it.
 const STORAGE_KEY_DOCKED_HEIGHT = "npn-critique-reply.docked-height";
 const DOCKED_MIN_HEIGHT = 220;
-const DOCKED_MAX_VIEWPORT_FRACTION = 0.92;
+// Fallback site-header height (~4em) when `--header-offset` can't be read,
+// matching the core composer's `var(--header-offset, 4em)`.
+const DOCKED_HEADER_FALLBACK_PX = 64;
 
 // Critique workspace modal. Two-column on desktop, stacked on mobile.
 //
@@ -1708,8 +1712,39 @@ export default class NpnCritiqueReplyModal extends Component {
     return htmlSafe(`--npn-docked-height: ${this._dockedHeightPx}px;`);
   }
 
+  // Site-header height to keep clear above the dock, mirroring the core
+  // composer's `100vh - var(--header-offset)`. Read the same CSS var so we
+  // track the theme's header height (and sticky banners); fall back to a
+  // measured header element, then to ~4em.
+  _dockedHeaderOffsetPx() {
+    let offset = NaN;
+    try {
+      offset = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--header-offset"
+        )
+      );
+    } catch {
+      offset = NaN;
+    }
+    if (!offset || Number.isNaN(offset)) {
+      const header =
+        document.querySelector(".d-header-wrap") ??
+        document.querySelector("header.d-header");
+      offset = header?.getBoundingClientRect?.().height ?? NaN;
+    }
+    if (!offset || Number.isNaN(offset)) {
+      offset = DOCKED_HEADER_FALLBACK_PX;
+    }
+    return offset;
+  }
+
   _clampDockedHeight(px) {
-    const max = Math.round(window.innerHeight * DOCKED_MAX_VIEWPORT_FRACTION);
+    // Grow up to the site header, exactly like the core composer — no gap.
+    const max = Math.max(
+      DOCKED_MIN_HEIGHT,
+      Math.round(window.innerHeight - this._dockedHeaderOffsetPx())
+    );
     return Math.min(Math.max(px, DOCKED_MIN_HEIGHT), max);
   }
 
