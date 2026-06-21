@@ -3548,8 +3548,24 @@
     calc(100dvh - var(--header-offset, 4em))
   );
 
+  // Sit just BELOW the site header (z("header") = 1000) like the core
+  // composer (z("composer","content") = 400), so the panel's top shadow
+  // tucks under the header instead of painting over it. 999 still clears
+  // all topic chrome (timeline = 100, dropdowns = 300, usercard = 500,
+  // footer-nav = 900), so the dock reads as a proper bottom drawer above
+  // the topic. Overrides core `.d-modal`'s z("modal","content") = 1300.
+  // Mobile (full-screen sheet) and desktop fullscreen restore a modal-level
+  // z below so they cover the header.
+  z-index: 999;
+
   // Push the visible card to the bottom edge instead of centering it.
   align-items: flex-end;
+
+  // Mobile takes over the whole screen (see the container media query
+  // below) — restore the modal layer so the sheet covers the header.
+  @media (max-width: 720px) {
+    z-index: 1300; // z("modal", "content")
+  }
 
   // The backdrop is a sibling rendered immediately after `.d-modal`.
   // Drop its dimming and pointer capture so clicks/drags fall through
@@ -3778,9 +3794,15 @@
   // Pin the docked height var to the full viewport so the docked
   // layout/image caps that key off it size against the maximized panel.
   // Override the capped `--npn-docked-h` too (this block follows the
-  // docked block, so it wins) so the maximized panel isn't held to 92dvh.
+  // docked block, so it wins) so the maximized panel fills the screen
+  // instead of stopping at the header.
   --npn-docked-height: 100dvh;
   --npn-docked-h: 100dvh;
+
+  // Maximized covers everything, header included — restore the modal layer
+  // (the docked block dropped it to 999 so its shadow tucks under the
+  // header). This block follows the docked one, so it wins.
+  z-index: 1300; // z("modal", "content")
 
   .d-modal__container {
     position: fixed;
