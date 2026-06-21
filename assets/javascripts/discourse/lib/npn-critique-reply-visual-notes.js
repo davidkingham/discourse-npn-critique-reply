@@ -2,8 +2,6 @@ import { ajax } from "discourse/lib/ajax";
 import {
   ANNOTATION_BLUE,
   ANNOTATION_HALO,
-  ANNOTATION_HALO_SHADOW,
-  AREA_FILL_OPACITY_UNSELECTED,
   ATTENTION_PULL_OCHRE,
   CROP_DIM_FILL,
   CROP_EXPORT_GRAY,
@@ -43,12 +41,24 @@ const EXPORT_BADGE_SHADOW_BLUR = 3;
 // 1600px export 2–5× (plus a second JPEG pass), thin strokes / halos / small
 // labels soften and read lighter than they did in the big workspace view.
 //
-// Fix: render the export's "ink" ~22% heavier so it survives the downscale,
-// while leaving the live editor untouched (it reads well large). Only mark
-// WEIGHT scales — coordinates and positions keep using the true width/height
-// — so geometry, placement, and the internal halo:line:arrowhead ratios are
+// Fix: render the export's "ink" heavier so it survives the downscale, while
+// leaving the live editor untouched (it reads well large). Only mark WEIGHT
+// scales — coordinates and positions keep using the true width/height — so
+// geometry, placement, and the internal halo:line:arrowhead ratios are
 // preserved. Preview uses this same path, so Preview matches the posted image.
-const EXPORT_LEGIBILITY_SCALE = 1.22;
+const EXPORT_LEGIBILITY_SCALE = 1.4;
+
+// Export-only CONTRAST lift (separate from weight). A pale stroke + white
+// halo washes out on high-key backgrounds (sunlit rock, bright water) once
+// downscaled — so the dark drop-shadow behind the halo and the translucent
+// area fill are pushed harder in the export than in the live editor:
+//   • EXPORT_HALO_SHADOW darker than the editor's ANNOTATION_HALO_SHADOW
+//     (0.4) so the white halo keeps a defined dark edge on bright photos.
+//   • EXPORT_AREA_FILL_OPACITY stronger than the editor's 0.12 so an Area /
+//     Strong-Area region stays visible even when its dashed outline softens.
+// Both are still restrained (translucent), and the editor is unchanged.
+const EXPORT_HALO_SHADOW = "rgba(0, 0, 0, 0.55)";
+const EXPORT_AREA_FILL_OPACITY = 0.18;
 
 // Halo / badge drop-shadow blur scaled to the image so the dark "lift"
 // behind marks holds at export resolution (a fixed 4px is invisible on a
@@ -70,7 +80,7 @@ function badgeShadowBlurFor(inkEdge) {
 function withHaloShadow(ctx, fn, blur = EXPORT_HALO_SHADOW_BLUR) {
   const prevShadowColor = ctx.shadowColor;
   const prevShadowBlur = ctx.shadowBlur;
-  ctx.shadowColor = ANNOTATION_HALO_SHADOW;
+  ctx.shadowColor = EXPORT_HALO_SHADOW;
   ctx.shadowBlur = blur;
   try {
     fn();
@@ -83,7 +93,7 @@ function withHaloShadow(ctx, fn, blur = EXPORT_HALO_SHADOW_BLUR) {
 function withBadgeShadow(ctx, fn, blur = EXPORT_BADGE_SHADOW_BLUR) {
   const prevShadowColor = ctx.shadowColor;
   const prevShadowBlur = ctx.shadowBlur;
-  ctx.shadowColor = ANNOTATION_HALO_SHADOW;
+  ctx.shadowColor = EXPORT_HALO_SHADOW;
   ctx.shadowBlur = blur;
   try {
     fn();
@@ -405,7 +415,7 @@ function drawAreaPathOnCanvas(ctx, marker, width, height, style) {
   traceEyePath(ctx, points);
   ctx.closePath();
   ctx.fillStyle = style.tertiary;
-  ctx.globalAlpha = AREA_FILL_OPACITY_UNSELECTED;
+  ctx.globalAlpha = EXPORT_AREA_FILL_OPACITY;
   ctx.fill();
 
   // Outline stroke (dashed or solid depending on caller).
@@ -518,9 +528,9 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
     ctx.fillStyle = amber;
-    // Matches AREA_FILL_OPACITY_UNSELECTED in the editor so the
-    // exported translucent fill reads the same as the modal preview.
-    ctx.globalAlpha = AREA_FILL_OPACITY_UNSELECTED;
+    // Export tints the region a touch stronger than the editor's 0.12 so
+    // the area stays visible on bright photos when the dashed outline softens.
+    ctx.globalAlpha = EXPORT_AREA_FILL_OPACITY;
     ctx.fill();
 
     // Dashed amber stroke on top.
@@ -635,9 +645,9 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
     ctx.fillStyle = green;
-    // Matches AREA_FILL_OPACITY_UNSELECTED in the editor so the
-    // exported translucent fill reads the same as the modal preview.
-    ctx.globalAlpha = AREA_FILL_OPACITY_UNSELECTED;
+    // Export tints the region a touch stronger than the editor's 0.12 so
+    // the area stays visible on bright photos when the solid outline softens.
+    ctx.globalAlpha = EXPORT_AREA_FILL_OPACITY;
     ctx.fill();
 
     // Solid green stroke (no dash) on top.
