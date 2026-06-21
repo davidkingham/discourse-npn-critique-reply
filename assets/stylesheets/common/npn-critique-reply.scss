@@ -388,6 +388,23 @@
     display: none;
   }
 
+  // Focus mode is "the image IS the workspace" — strip the image-col's
+  // panel padding/border/background so the photo reaches the top and side
+  // edges. This reclaims the empty frame above the image (where the now-
+  // hidden header sat) and the side gutters; the image keeps its own
+  // __frame border, and the toolbar below sits flush to the pane.
+  &.npn-critique-reply-modal--visual-focus &__image-col {
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  // Trim the body's top padding in focus mode so the image rides up close
+  // to the header divider now that the panel framing above it is gone.
+  &.npn-critique-reply-modal--visual-focus .d-modal__body {
+    padding-top: 0.4em;
+  }
+
   // Surface "Return to Critique" next to the DModal X when in
   // focus mode so the affordance reads as intentional rather than
   // a generic close. The X's beforeClose hook clears
@@ -3664,32 +3681,31 @@
     width: 100%;
   }
 
-  // Larger-Image (visual-focus) mode: grow the reference image to fill
-  // the docked panel's height instead of the measured-pane clamp
-  // (`clamp(380px, var(--npn-pane-px) - 8em, 790px)`), whose 790px cap
-  // would waste the vertical space below the toolbar on a tall dock.
-  // Tie the cap to `--npn-docked-height`, reserving ~20em for the modal
-  // header/footer, grippie, tool row + helper, the "More below" gradient
-  // band, and the annotations summary so the toolbar stays on-screen
-  // (the left pane still scrolls as a safety net on a very short dock).
-  // The IMG stays in normal flow — sized by max-height, never
-  // flex-stretched — so the absolutely-positioned Konva overlay keeps
-  // aligning to the pixel image. Growing the height grows the (landscape)
-  // image's width in proportion too, up to the column width, so it reads
-  // larger in both dimensions.
+  // Larger-Image (visual-focus) mode: grow the reference image to fill the
+  // docked panel. Size it off the MEASURED left-pane height (`--npn-pane-px`,
+  // published by the ResizeObserver) minus the same 8em the non-docked focus
+  // mode reserves (gap + helper + tool row + the "More below" gradient band)
+  // — the only difference from the centered cap is dropping its 790px ceiling
+  // so a tall dock isn't wasted. The earlier `--npn-docked-h - 20em` reserved
+  // against the FULL dock height (double-counting the dock chrome), which left
+  // a big empty strip below the toolbar. The IMG stays in normal flow — sized
+  // by max-height, never flex-stretched — so the absolutely-positioned Konva
+  // overlay keeps aligning to the pixel image. Growing the height grows the
+  // (landscape) image's width in proportion too, up to the column width, so it
+  // reads larger in both dimensions.
   &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus
     .npn-critique-reply-modal__processing-example-large {
-    max-height: max(380px, calc(var(--npn-docked-h) - 20em));
+    max-height: max(380px, calc(var(--npn-pane-px, 75vh) - 8em));
   }
 
   // Crop mode adds the aspect-ratio chip row below the toolbar (~3em);
-  // reserve a little more so those chips stay visible.
+  // reserve a little more (11em) so those chips stay visible.
   &.npn-critique-reply-modal--visual-focus.npn-critique-reply-modal--crop-mode
     .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus.npn-critique-reply-modal--crop-mode
     .npn-critique-reply-modal__processing-example-large {
-    max-height: max(340px, calc(var(--npn-docked-h) - 23em));
+    max-height: max(340px, calc(var(--npn-pane-px, 70vh) - 11em));
   }
 
   // Normal (non-focus, non-crop) docked view: size the reference image to
