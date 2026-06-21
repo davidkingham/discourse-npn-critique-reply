@@ -31,6 +31,42 @@ const EXPORT_HALO_SHADOW_BLUR = 4;
 const EXPORT_HALO_SHADOW_BLUR_BOOSTED = 6;
 const EXPORT_BADGE_SHADOW_BLUR = 3;
 
+// Export-only legibility boost.
+//
+// The flattened image is shown much SMALLER in the cooked post than the
+// reference image is in the live workspace: the editor displays the photo
+// large (and crisp on retina), while Discourse caps inline post images at
+// `max_image_width` 690 / `max_image_height` 500 and serves a downscaled
+// thumbnail (full-res only in the lightbox). Marks are stored as percentages
+// and drawn with the SAME proportional formulas as the live Konva editor, so
+// they're proportionally identical — but once the post downsamples the
+// 1600px export 2–5× (plus a second JPEG pass), thin strokes / halos / small
+// labels soften and read lighter than they did in the big workspace view.
+//
+// Fix: render the export's "ink" ~22% heavier so it survives the downscale,
+// while leaving the live editor untouched (it reads well large). Only mark
+// WEIGHT scales — coordinates and positions keep using the true width/height
+// — so geometry, placement, and the internal halo:line:arrowhead ratios are
+// preserved. Preview uses this same path, so Preview matches the posted image.
+const EXPORT_LEGIBILITY_SCALE = 1.22;
+
+// Halo / badge drop-shadow blur scaled to the image so the dark "lift"
+// behind marks holds at export resolution (a fixed 4px is invisible on a
+// 1600px canvas, where it reads relatively weaker than the same 4px on the
+// ~600px editor stage). Floored at the prior fixed values so sub-~800px
+// exports render exactly as before.
+function haloShadowBlurFor(inkEdge, boosted = false) {
+  const ratio = boosted ? 0.0072 : 0.0052;
+  const floor = boosted
+    ? EXPORT_HALO_SHADOW_BLUR_BOOSTED
+    : EXPORT_HALO_SHADOW_BLUR;
+  return Math.max(floor, Math.round(inkEdge * ratio));
+}
+
+function badgeShadowBlurFor(inkEdge) {
+  return Math.max(EXPORT_BADGE_SHADOW_BLUR, Math.round(inkEdge * 0.0038));
+}
+
 function withHaloShadow(ctx, fn, blur = EXPORT_HALO_SHADOW_BLUR) {
   const prevShadowColor = ctx.shadowColor;
   const prevShadowBlur = ctx.shadowBlur;
@@ -44,11 +80,11 @@ function withHaloShadow(ctx, fn, blur = EXPORT_HALO_SHADOW_BLUR) {
   }
 }
 
-function withBadgeShadow(ctx, fn) {
+function withBadgeShadow(ctx, fn, blur = EXPORT_BADGE_SHADOW_BLUR) {
   const prevShadowColor = ctx.shadowColor;
   const prevShadowBlur = ctx.shadowBlur;
   ctx.shadowColor = ANNOTATION_HALO_SHADOW;
-  ctx.shadowBlur = EXPORT_BADGE_SHADOW_BLUR;
+  ctx.shadowBlur = blur;
   try {
     fn();
   } finally {
@@ -234,10 +270,8 @@ function drawCropOnCanvas(ctx, crop, width, height) {
   // sits beneath the louder pin / area / arrow annotations in the
   // visual hierarchy.
   const borderColor = CROP_EXPORT_GRAY;
-  const borderWidth = Math.max(
-    2,
-    Math.round(Math.min(width, height) * 0.003)
-  );
+  const inkEdge = Math.min(width, height) * EXPORT_LEGIBILITY_SCALE;
+  const borderWidth = Math.max(2, Math.round(inkEdge * 0.003));
 
   ctx.save();
 
@@ -295,10 +329,9 @@ function drawCropOnCanvas(ctx, crop, width, height) {
   // token in the prose. Sits just inside the crop's top-left corner
   // so it reads as attached without obscuring the framed content.
   if (crop.label) {
-    const shortEdge = Math.min(width, height);
-    const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+    const badgeFontSize = Math.max(11, Math.round(inkEdge * 0.018));
     const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
-    const badgeOffset = Math.max(3, Math.round(shortEdge * 0.004));
+    const badgeOffset = Math.max(3, Math.round(inkEdge * 0.004));
     const badgeCornerRadius = 3;
     ctx.font = `bold ${badgeFontSize}px sans-serif`;
     ctx.textBaseline = "top";
@@ -310,7 +343,7 @@ function drawCropOnCanvas(ctx, crop, width, height) {
     tracePillRect(ctx, bx, by, badgeWidth, badgeHeight, badgeCornerRadius);
     ctx.fillStyle = borderColor;
     ctx.globalAlpha = 1;
-    withBadgeShadow(ctx, () => ctx.fill());
+    withBadgeShadow(ctx, () => ctx.fill(), badgeShadowBlurFor(inkEdge));
     ctx.strokeStyle = ANNOTATION_HALO;
     ctx.lineWidth = 1.5;
     ctx.stroke();
@@ -366,7 +399,7 @@ function drawAreaPathOnCanvas(ctx, marker, width, height, style) {
   ctx.strokeStyle = style.halo;
   ctx.lineWidth = style.haloWidth;
   ctx.globalAlpha = 0.85;
-  withHaloShadow(ctx, () => ctx.stroke());
+  withHaloShadow(ctx, () => ctx.stroke(), style.haloShadowBlur);
 
   // Translucent fill.
   traceEyePath(ctx, points);
@@ -407,7 +440,7 @@ function drawAreaPathOnCanvas(ctx, marker, width, height, style) {
     tracePillRect(ctx, bx, by, badgeWidth, badgeHeight, style.badgeCornerRadius);
     ctx.fillStyle = style.tertiary;
     ctx.globalAlpha = 1;
-    withBadgeShadow(ctx, () => ctx.fill());
+    withBadgeShadow(ctx, () => ctx.fill(), style.badgeShadowBlur);
     ctx.strokeStyle = style.halo;
     ctx.lineWidth = 1.5;
     ctx.stroke();
@@ -424,21 +457,25 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
   // see npn-critique-reply-colors.js.
   const amber = ATTENTION_PULL_OCHRE;
   const secondary = ANNOTATION_HALO;
-  const shortEdge = Math.min(width, height);
+  // inkEdge applies the export legibility boost to mark WEIGHT only;
+  // coordinates below keep using the true width/height.
+  const inkEdge = Math.min(width, height) * EXPORT_LEGIBILITY_SCALE;
   // Halo widened (0.55% → 0.75%) to match the editor — gives the
   // muted ochre enough contrast on similarly-toned backgrounds.
-  const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
-  const strokeWidth = Math.max(2, Math.round(shortEdge * 0.0035));
+  const haloWidth = Math.max(5, Math.round(inkEdge * 0.0075));
+  const strokeWidth = Math.max(2, Math.round(inkEdge * 0.0035));
   // Slightly larger dash gap so the dashed stroke reads calmer on
   // small markers (previously the dashes packed tight and felt
   // "buzzy" against detailed photographs).
-  const dashOn = Math.max(8, Math.round(shortEdge * 0.013));
-  const dashOff = Math.max(7, Math.round(shortEdge * 0.011));
+  const dashOn = Math.max(8, Math.round(inkEdge * 0.013));
+  const dashOff = Math.max(7, Math.round(inkEdge * 0.011));
 
-  const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+  const badgeFontSize = Math.max(11, Math.round(inkEdge * 0.018));
   const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
-  const badgeOffset = Math.max(3, Math.round(shortEdge * 0.004));
+  const badgeOffset = Math.max(3, Math.round(inkEdge * 0.004));
   const badgeCornerRadius = 3;
+  const haloShadowBlur = haloShadowBlurFor(inkEdge);
+  const badgeShadowBlur = badgeShadowBlurFor(inkEdge);
 
   ctx.save();
   for (const pull of pulls) {
@@ -454,6 +491,8 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
         badgePadding,
         badgeOffset,
         badgeCornerRadius,
+        haloShadowBlur,
+        badgeShadowBlur,
       });
       continue;
     }
@@ -473,7 +512,7 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
     ctx.strokeStyle = secondary;
     ctx.lineWidth = haloWidth;
     ctx.globalAlpha = 0.85;
-    withHaloShadow(ctx, () => ctx.stroke());
+    withHaloShadow(ctx, () => ctx.stroke(), haloShadowBlur);
 
     // Translucent amber fill.
     ctx.beginPath();
@@ -513,7 +552,7 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
       );
       ctx.fillStyle = amber;
       ctx.globalAlpha = 1;
-      withBadgeShadow(ctx, () => ctx.fill());
+      withBadgeShadow(ctx, () => ctx.fill(), badgeShadowBlur);
       ctx.strokeStyle = secondary;
       ctx.lineWidth = 1.5;
       ctx.stroke();
@@ -538,15 +577,19 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
   // npn-critique-reply-colors.js.
   const green = STRONG_AREA_SAGE;
   const secondary = ANNOTATION_HALO;
-  const shortEdge = Math.min(width, height);
+  // inkEdge applies the export legibility boost to mark WEIGHT only;
+  // coordinates below keep using the true width/height.
+  const inkEdge = Math.min(width, height) * EXPORT_LEGIBILITY_SCALE;
   // Halo widened to match the editor — sage can blend into greenery
   // in the photograph; the wider halo gives the stroke more contrast.
-  const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075));
-  const strokeWidth = Math.max(2, Math.round(shortEdge * 0.0035));
-  const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+  const haloWidth = Math.max(5, Math.round(inkEdge * 0.0075));
+  const strokeWidth = Math.max(2, Math.round(inkEdge * 0.0035));
+  const badgeFontSize = Math.max(11, Math.round(inkEdge * 0.018));
   const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
-  const badgeOffset = Math.max(3, Math.round(shortEdge * 0.004));
+  const badgeOffset = Math.max(3, Math.round(inkEdge * 0.004));
   const badgeCornerRadius = 3;
+  const haloShadowBlur = haloShadowBlurFor(inkEdge);
+  const badgeShadowBlur = badgeShadowBlurFor(inkEdge);
 
   ctx.save();
   for (const area of areas) {
@@ -565,6 +608,8 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
         badgePadding,
         badgeOffset,
         badgeCornerRadius,
+        haloShadowBlur,
+        badgeShadowBlur,
       });
       continue;
     }
@@ -584,7 +629,7 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
     ctx.strokeStyle = secondary;
     ctx.lineWidth = haloWidth;
     ctx.globalAlpha = 0.85;
-    withHaloShadow(ctx, () => ctx.stroke());
+    withHaloShadow(ctx, () => ctx.stroke(), haloShadowBlur);
 
     // Translucent green fill.
     ctx.beginPath();
@@ -621,7 +666,7 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
       );
       ctx.fillStyle = green;
       ctx.globalAlpha = 1;
-      withBadgeShadow(ctx, () => ctx.fill());
+      withBadgeShadow(ctx, () => ctx.fill(), badgeShadowBlur);
       ctx.strokeStyle = secondary;
       ctx.lineWidth = 1.5;
       ctx.stroke();
@@ -839,12 +884,18 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
   const tertiary = EYE_PATH_PALE_CYAN;
   const secondary = ANNOTATION_HALO;
   const shortEdge = Math.min(width, height);
+  // inkEdge boosts mark WEIGHT for the export; `shortEdge` is kept for the
+  // chevron SPACING below (density should track the true image, not the
+  // ink boost) and coordinates use the true width/height.
+  const inkEdge = shortEdge * EXPORT_LEGIBILITY_SCALE;
+  const eyeHaloShadowBlur = haloShadowBlurFor(inkEdge, true);
+  const eyeBadgeShadowBlur = badgeShadowBlurFor(inkEdge);
 
   ctx.save();
 
   if (points.length >= 2) {
-    const haloWidth = Math.max(4, Math.round(shortEdge * 0.0075));
-    const lineWidth = Math.max(2, Math.round(shortEdge * 0.004));
+    const haloWidth = Math.max(4, Math.round(inkEdge * 0.0075));
+    const lineWidth = Math.max(2, Math.round(inkEdge * 0.004));
 
     // Trace the path — straight chord-by-chord when smoothing is off,
     // Catmull-Rom curve (via cubic bezier) through every point when
@@ -860,11 +911,7 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
     ctx.strokeStyle = secondary;
     ctx.lineWidth = haloWidth;
     traceEyePath(ctx, points);
-    withHaloShadow(
-      ctx,
-      () => ctx.stroke(),
-      EXPORT_HALO_SHADOW_BLUR_BOOSTED
-    );
+    withHaloShadow(ctx, () => ctx.stroke(), eyeHaloShadowBlur);
 
     // Main tertiary line. Slim weight + 0.9 opacity so the photo
     // reads through and the path doesn't dominate the composition.
@@ -878,7 +925,8 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
     // In-segment chevrons. Sampled along the same Konva-tension curve
     // as the editor — getKonvaSegment + samplePos / sampleTangent
     // shared with the line trace above.
-    const arrowSize = Math.max(10, Math.round(shortEdge * 0.015));
+    const arrowSize = Math.max(10, Math.round(inkEdge * 0.015));
+    // Spacing tracks the true image (density), not the ink boost.
     const targetSpacing = Math.max(160, Math.round(shortEdge * 0.25));
     // Pulled in from 2 → 1: one mid-line arrow per segment is enough
     // to convey direction in the static JPEG, and avoids the path
@@ -935,7 +983,7 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
   // already marks the start.
   const isPointsMode = eyePath.mode === "points";
   if (points.length >= 1) {
-    const startR = Math.max(4, Math.round(shortEdge * 0.0065));
+    const startR = Math.max(4, Math.round(inkEdge * 0.0065));
     const startHaloR = startR + Math.max(2, Math.round(startR * 0.4));
     const start = points[0];
 
@@ -959,9 +1007,9 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
     // second. Matches the editor (renderEyePath in the Konva stage).
     const label = eyePath.label;
     if (label) {
-      const badgeFontSize = Math.max(10, Math.round(shortEdge * 0.016));
+      const badgeFontSize = Math.max(10, Math.round(inkEdge * 0.016));
       const badgePadding = Math.max(2, Math.round(badgeFontSize * 0.25));
-      const badgeOffset = Math.max(6, Math.round(shortEdge * 0.006));
+      const badgeOffset = Math.max(6, Math.round(inkEdge * 0.006));
       ctx.font = `bold ${badgeFontSize}px sans-serif`;
       ctx.textBaseline = "top";
       const metrics = ctx.measureText(label);
@@ -972,7 +1020,7 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
       tracePillRect(ctx, bx, by, badgeWidth, badgeHeight, 3);
       ctx.fillStyle = tertiary;
       ctx.globalAlpha = 0.7;
-      withBadgeShadow(ctx, () => ctx.fill());
+      withBadgeShadow(ctx, () => ctx.fill(), eyeBadgeShadowBlur);
       ctx.strokeStyle = secondary;
       ctx.lineWidth = 1;
       ctx.stroke();
@@ -991,8 +1039,8 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
   // the path's end, so a numbered badge there would compete.
   // Single-point paths still get "1" since there's no arrowhead.
   if (isPointsMode && points.length >= 1) {
-    const stopFontSize = Math.max(10, Math.round(shortEdge * 0.014));
-    const stopR = Math.max(8, Math.round(shortEdge * 0.0085));
+    const stopFontSize = Math.max(10, Math.round(inkEdge * 0.014));
+    const stopR = Math.max(8, Math.round(inkEdge * 0.0085));
     const stopHaloR = stopR + Math.max(2, Math.round(stopR * 0.35));
     ctx.font = `600 ${stopFontSize}px sans-serif`;
     ctx.textBaseline = "middle";
@@ -1006,7 +1054,7 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
       ctx.fillStyle = secondary;
       ctx.beginPath();
       ctx.arc(wp.x, wp.y, stopHaloR, 0, Math.PI * 2);
-      withBadgeShadow(ctx, () => ctx.fill());
+      withBadgeShadow(ctx, () => ctx.fill(), eyeBadgeShadowBlur);
       ctx.globalAlpha = 1;
       // Filled stop
       ctx.fillStyle = tertiary;
@@ -1026,7 +1074,7 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
   // Terminal arrowhead at the last point — slightly larger than the
   // in-segment chevrons so the path's end reads as a landing point.
   if (points.length >= 2) {
-    const terminalSize = Math.max(10, Math.round(shortEdge * 0.0175));
+    const terminalSize = Math.max(10, Math.round(inkEdge * 0.0175));
     const a = points[points.length - 2];
     const b = points[points.length - 1];
     // Match the editor: sample the last Konva-tension segment near
@@ -1096,9 +1144,6 @@ function drawArrowOnCanvas(
     haloShadowBoost = false,
   }
 ) {
-  const haloBlur = haloShadowBoost
-    ? EXPORT_HALO_SHADOW_BLUR_BOOSTED
-    : EXPORT_HALO_SHADOW_BLUR;
   if (!arrow) {
     return;
   }
@@ -1115,10 +1160,13 @@ function drawArrowOnCanvas(
   const ux = dx / len;
   const uy = dy / len;
 
-  const shortEdge = Math.min(width, height);
-  const lineWidth = Math.max(2, Math.round(shortEdge * 0.004 * strokeWeight));
-  const haloWidth = Math.max(5, Math.round(shortEdge * 0.0075 * strokeWeight));
-  const arrowheadLen = Math.max(10, Math.round(shortEdge * 0.018));
+  // inkEdge applies the export legibility boost to mark WEIGHT only; the
+  // x/y above are mapped from the true width/height, so geometry is intact.
+  const inkEdge = Math.min(width, height) * EXPORT_LEGIBILITY_SCALE;
+  const haloBlur = haloShadowBlurFor(inkEdge, haloShadowBoost);
+  const lineWidth = Math.max(2, Math.round(inkEdge * 0.004 * strokeWeight));
+  const haloWidth = Math.max(5, Math.round(inkEdge * 0.0075 * strokeWeight));
+  const arrowheadLen = Math.max(10, Math.round(inkEdge * 0.018));
   const trim = arrowheadLen * 0.55;
   const lineStartX = bothEnds ? x1 + ux * trim : x1;
   const lineStartY = bothEnds ? y1 + uy * trim : y1;
@@ -1148,8 +1196,8 @@ function drawArrowOnCanvas(
   ctx.globalAlpha = baseOpacity;
   if (dashed) {
     ctx.setLineDash([
-      Math.max(6, Math.round(shortEdge * 0.012)),
-      Math.max(4, Math.round(shortEdge * 0.008)),
+      Math.max(6, Math.round(inkEdge * 0.012)),
+      Math.max(4, Math.round(inkEdge * 0.008)),
     ]);
   }
   ctx.beginPath();
@@ -1187,10 +1235,10 @@ function drawArrowOnCanvas(
   // editor (without the dynamic flip; the export is static so we
   // just centre the badge perpendicular to the line at its midpoint).
   if (arrow.label) {
-    const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+    const badgeFontSize = Math.max(11, Math.round(inkEdge * 0.018));
     const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
     const badgeHeight = badgeFontSize + 2 * badgePadding;
-    const badgeOffset = Math.max(6, Math.round(shortEdge * 0.006));
+    const badgeOffset = Math.max(6, Math.round(inkEdge * 0.006));
     ctx.font = `bold ${badgeFontSize}px sans-serif`;
     const textMetrics = ctx.measureText(arrow.label);
     const badgeWidth = textMetrics.width + 2 * badgePadding;
@@ -1217,7 +1265,7 @@ function drawArrowOnCanvas(
     ctx.lineWidth = 1.5;
     // Rounded-rect badge background.
     tracePillRect(ctx, labelX, labelY, badgeWidth, badgeHeight, 3);
-    withBadgeShadow(ctx, () => ctx.fill());
+    withBadgeShadow(ctx, () => ctx.fill(), badgeShadowBlurFor(inkEdge));
     ctx.stroke();
     ctx.fillStyle = ANNOTATION_HALO;
     ctx.textBaseline = "middle";
@@ -1237,10 +1285,13 @@ function drawPinsOnCanvas(ctx, pins, width, height) {
     return;
   }
 
-  const shortEdge = Math.min(width, height);
+  // inkEdge applies the export legibility boost; pin positions below use the
+  // true width/height. The pin's own drop-shadow keys off haloThickness, so
+  // it scales with the heavier pin automatically.
+  const inkEdge = Math.min(width, height) * EXPORT_LEGIBILITY_SCALE;
   const pinRadius = Math.max(
     MIN_PIN_RADIUS,
-    Math.round(shortEdge * PIN_RADIUS_RATIO)
+    Math.round(inkEdge * PIN_RADIUS_RATIO)
   );
   const haloThickness = Math.max(MIN_HALO, Math.round(pinRadius * HALO_RATIO));
   const fontSize = Math.round(pinRadius * 1.05);
