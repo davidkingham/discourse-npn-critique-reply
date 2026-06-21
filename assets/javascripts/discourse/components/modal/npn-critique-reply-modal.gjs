@@ -3847,6 +3847,9 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.#usingDEditor && this.#textManipulation) {
       try {
         this.#textManipulation.insertBlock(quoteText);
+        // insertBlock leaves the caret INSIDE the quote; move it onto a
+        // fresh line below so the critic keeps writing their own words.
+        this._moveCaretBelowInsertedQuote();
       } catch (e) {
         this._recordError("quote_insert", e, null, "warn");
         this._appendToActiveText(quoteText);
@@ -3884,6 +3887,58 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
     this.#textarea?.focus();
+  }
+
+  // After `insertBlock` drops the quote at the caret, ProseMirror leaves
+  // the caret INSIDE the quote block. Critics want to keep writing their
+  // own response, so nudge the caret onto a fresh empty line just below
+  // the quote — reusing an empty paragraph that already follows, or
+  // inserting one. Operates directly on the ProseMirror view; any failure
+  // is non-fatal (the caret simply stays where insertBlock left it). No-op
+  // on the textarea path, where insertText already lands the caret after
+  // the trailing blank line.
+  _moveCaretBelowInsertedQuote() {
+    const view = this.#textManipulation?.view;
+    if (!view) {
+      return;
+    }
+    try {
+      const { state } = view;
+      const sel = state.selection;
+      const $from = sel.$from;
+      if ($from.depth < 1) {
+        return;
+      }
+      // The top-level block the caret sits in is the quote we just
+      // inserted (a `quote` node for attributed [quote=…] blocks, a
+      // `blockquote` for the plain fallback). Bail if it's anything else
+      // so we never strand a stray empty paragraph mid-document.
+      const topNode = $from.node(1);
+      const { quote, blockquote, paragraph } = state.schema.nodes;
+      if (topNode.type !== quote && topNode.type !== blockquote) {
+        return;
+      }
+      const after = $from.after(1);
+      let tr = state.tr;
+      const following = state.doc.resolve(after).nodeAfter;
+      let caret;
+      if (
+        following &&
+        following.type === paragraph &&
+        following.content.size === 0
+      ) {
+        // An empty line already follows the quote — just drop the caret in.
+        caret = after + 1;
+      } else {
+        tr = tr.insert(after, paragraph.createAndFill());
+        caret = after + 1;
+      }
+      view.dispatch(
+        tr.setSelection(sel.constructor.create(tr.doc, caret)).scrollIntoView()
+      );
+    } catch {
+      // Non-fatal: leave the caret where insertBlock placed it.
+    }
   }
 
   _buildQuoteAttribution() {
