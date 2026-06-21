@@ -1375,12 +1375,33 @@
   // Photographer's Notes. Inline position: fixed + top/left are set
   // from `_quoteButtonPosition` (viewport coords). z-index sits above
   // the modal body so the button is reachable even when the selection
-  // straddles section boundaries. Uses btn-default for theme support.
-  &__quote-button {
+  // straddles section boundaries.
+  //
+  // Styled to match Discourse's core post-quote toolbar: a compact light
+  // popup card holding a flat quote action with the quote-left glyph (the
+  // core toolbar gets the card chrome from its float-kit menu wrapper; we
+  // restate it here since our button floats on its own).
+  &__quote-button.btn {
     z-index: 1000;
+    background: var(--secondary);
+    color: var(--primary);
+    border: 1px solid var(--primary-low);
+    border-radius: var(--d-border-radius, 4px);
+    box-shadow: var(--shadow-card, 0 2px 6px rgba(0, 0, 0, 0.15));
+    padding: 0.45em 0.7em;
     font-size: var(--font-down-1);
-    padding: 4px 10px;
-    box-shadow: 0 2px 6px var(--primary-low);
+    font-weight: normal;
+
+    .d-icon {
+      color: var(--primary-medium);
+      margin-right: 0.4em;
+    }
+
+    &:hover {
+      background: var(--primary-very-low);
+      color: var(--primary);
+      border-color: var(--primary-low-mid);
+    }
 
     &:focus-visible {
       outline: 2px solid var(--tertiary);
