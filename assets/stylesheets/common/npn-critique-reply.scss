@@ -3528,6 +3528,20 @@
   // above the dock.
   --npn-docked-height: 60vh;
 
+  // Effective (rendered) height: never exceed 92% of the CURRENT viewport.
+  // `--npn-docked-height` is a requested value — the default, or the px the
+  // critic dragged on whatever display they were on, or a stale persisted
+  // value. On a big display that px can be far taller than a smaller
+  // display's viewport; moving the browser there (especially at a different
+  // scale) doesn't reliably fire a `resize` event, so a JS re-clamp can miss
+  // it and the top-edge grippie + close button end up off the top of the
+  // screen with no way to drag the panel down or close it. `dvh` recomputes
+  // on viewport reflow without any JS, so capping here keeps the grippie on
+  // screen no matter what. 92dvh mirrors DOCKED_MAX_VIEWPORT_FRACTION, so
+  // any in-range height renders unchanged — and the requested px is left
+  // intact, so the panel re-expands when moved back to the taller display.
+  --npn-docked-h: min(var(--npn-docked-height), 92dvh);
+
   // Push the visible card to the bottom edge instead of centering it.
   align-items: flex-end;
 
@@ -3563,9 +3577,9 @@
     // fills the screen: ~64px side margins on a 1920px display, ~180px
     // on a 2560px one.
     max-width: min(2200px, calc(100vw - 8em));
-    height: var(--npn-docked-height);
-    --modal-max-height: var(--npn-docked-height);
-    max-height: var(--npn-docked-height);
+    height: var(--npn-docked-h);
+    --modal-max-height: var(--npn-docked-h);
+    max-height: var(--npn-docked-h);
     border-radius: 0;
     border-top-left-radius: var(--d-border-radius-large);
     border-top-right-radius: var(--d-border-radius-large);
@@ -3599,7 +3613,7 @@
   // step to keep the footer flush. The left pane still scrolls as a safety
   // net if a short dock ever under-reserves.
   .npn-critique-reply-modal__layout {
-    height: calc(var(--npn-docked-height) - 8.7em);
+    height: calc(var(--npn-docked-h) - 8.7em);
   }
 
   // The panes carry a 2.5em bottom padding for breathing room above the
@@ -3644,7 +3658,7 @@
   &.npn-critique-reply-modal--visual-focus .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus
     .npn-critique-reply-modal__processing-example-large {
-    max-height: max(380px, calc(var(--npn-docked-height) - 20em));
+    max-height: max(380px, calc(var(--npn-docked-h) - 20em));
   }
 
   // Crop mode adds the aspect-ratio chip row below the toolbar (~3em);
@@ -3653,7 +3667,7 @@
     .npn-critique-image-reference__img,
   &.npn-critique-reply-modal--visual-focus.npn-critique-reply-modal--crop-mode
     .npn-critique-reply-modal__processing-example-large {
-    max-height: max(340px, calc(var(--npn-docked-height) - 23em));
+    max-height: max(340px, calc(var(--npn-docked-h) - 23em));
   }
 
   // Normal (non-focus, non-crop) docked view: size the reference image to
@@ -3734,6 +3748,10 @@
   @media (max-width: 720px) {
     .d-modal__container {
       --npn-docked-height: calc(var(--composer-vh, 1dvh) * 100);
+      // Already full-screen — opt out of the 92dvh desktop cap so the
+      // panel fills the viewport (and re-declared here, where the
+      // container-level `--npn-docked-height` is visible).
+      --npn-docked-h: var(--npn-docked-height);
       width: 100%;
       max-width: 100%;
       border-top-left-radius: 0;
@@ -3753,7 +3771,10 @@
 .d-modal.npn-critique-reply-modal--fullscreen {
   // Pin the docked height var to the full viewport so the docked
   // layout/image caps that key off it size against the maximized panel.
+  // Override the capped `--npn-docked-h` too (this block follows the
+  // docked block, so it wins) so the maximized panel isn't held to 92dvh.
   --npn-docked-height: 100dvh;
+  --npn-docked-h: 100dvh;
 
   .d-modal__container {
     position: fixed;
