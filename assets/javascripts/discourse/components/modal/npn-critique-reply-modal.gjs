@@ -1427,6 +1427,102 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this.activeWritingContext = WRITING_CONTEXT_OVERALL;
     this._appendToActiveText(quote);
+    // This quote OPENED the workspace cold (native-Quote → "Start a
+    // Critique"), so nothing has focused the editor yet — without this the
+    // critique field stays un-highlighted after the modal appears. Once the
+    // writing surface is mounted, pull focus into it and land the caret on a
+    // fresh line just below the seeded quote so the critic can start typing.
+    this._focusCaretBelowColdStartQuote();
+  }
+
+  // Cold-start companion to the in-modal quote flow. When a quote opens the
+  // workspace from scratch the editor isn't mounted at insert time, so the
+  // focus + caret placement has to wait for it: poll briefly for the writing
+  // surface, then focus it and drop the caret on a fresh line below the
+  // seeded quote (rich path) or at the end of the text (textarea / DEditor
+  // markdown path). Self-cancels if the modal tears down or the surface
+  // never appears; non-fatal on any error.
+  _focusCaretBelowColdStartQuote(attemptsLeft = 12) {
+    if (this._destroyed) {
+      return;
+    }
+    const retry = () => {
+      if (attemptsLeft > 0) {
+        setTimeout(
+          () => this._focusCaretBelowColdStartQuote(attemptsLeft - 1),
+          30
+        );
+      }
+    };
+
+    const tm = this.#textManipulation;
+    // Rich (ProseMirror) editor active → caret on a fresh empty line below
+    // the quote (mirrors `_moveCaretBelowInsertedQuote`, but from the END of
+    // the doc since the cold-start caret defaults to the start).
+    if (tm?.view) {
+      try {
+        const view = tm.view;
+        view.focus();
+        const { state } = view;
+        const { quote, blockquote, paragraph } = state.schema.nodes;
+        // The seeded quote lands at the END of the document; grab the last
+        // top-level quote/blockquote node's closing position.
+        let quoteEnd = null;
+        state.doc.forEach((node, offset) => {
+          if (node.type === quote || node.type === blockquote) {
+            quoteEnd = offset + node.nodeSize;
+          }
+        });
+        let tr = state.tr;
+        let caret;
+        if (quoteEnd === null) {
+          // No quote node (unexpected) — caret to the end of the doc.
+          caret = state.doc.content.size;
+        } else {
+          const following =
+            quoteEnd < state.doc.content.size
+              ? state.doc.resolve(quoteEnd).nodeAfter
+              : null;
+          if (
+            following &&
+            following.type === paragraph &&
+            following.content.size === 0
+          ) {
+            caret = quoteEnd + 1;
+          } else {
+            tr = tr.insert(quoteEnd, paragraph.createAndFill());
+            caret = quoteEnd + 1;
+          }
+        }
+        view.dispatch(
+          tr
+            .setSelection(state.selection.constructor.create(tr.doc, caret))
+            .scrollIntoView()
+        );
+      } catch {
+        // Non-fatal: leave the caret wherever the editor placed it.
+      }
+      return;
+    }
+
+    // A non-ProseMirror surface is active (plain textarea, or DEditor's
+    // markdown sub-mode) → focus it and drop the caret at the end.
+    const textarea =
+      this.#textarea ||
+      document.getElementById("npn-critique-reply-textarea");
+    if (tm && textarea) {
+      try {
+        textarea.focus();
+        const end = textarea.value.length;
+        textarea.setSelectionRange(end, end);
+      } catch {
+        // Non-fatal.
+      }
+      return;
+    }
+
+    // Nothing ready yet — wait for the writing surface to mount.
+    retry();
   }
 
   // Lifecycle hook for the native-Quote override (see the
