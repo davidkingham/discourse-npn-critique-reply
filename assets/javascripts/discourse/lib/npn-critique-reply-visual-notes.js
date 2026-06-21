@@ -77,6 +77,17 @@ function badgeShadowBlurFor(inkEdge) {
   return Math.max(EXPORT_BADGE_SHADOW_BLUR, Math.round(inkEdge * 0.0038));
 }
 
+// Shared on-image tag sizing so EVERY badge (E1 / A1 / D1 / R1 / S1 / Crop N)
+// renders at the SAME size. The 0.02 ratio is a touch larger than the marks'
+// own base ratios so the labels stay readable once the post downscales the
+// export. (Eye Path used to render a smaller, quieter badge — it now matches
+// the rest in the export.) Editor sizing lives in the Konva stage.
+function badgeMetricsFor(inkEdge) {
+  const fontSize = Math.max(12, Math.round(inkEdge * 0.02));
+  const padding = Math.max(3, Math.round(fontSize * 0.3));
+  return { fontSize, padding };
+}
+
 function withHaloShadow(ctx, fn, blur = EXPORT_HALO_SHADOW_BLUR) {
   const prevShadowColor = ctx.shadowColor;
   const prevShadowBlur = ctx.shadowBlur;
@@ -339,8 +350,8 @@ function drawCropOnCanvas(ctx, crop, width, height) {
   // token in the prose. Sits just inside the crop's top-left corner
   // so it reads as attached without obscuring the framed content.
   if (crop.label) {
-    const badgeFontSize = Math.max(11, Math.round(inkEdge * 0.018));
-    const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+    const { fontSize: badgeFontSize, padding: badgePadding } =
+      badgeMetricsFor(inkEdge);
     const badgeOffset = Math.max(3, Math.round(inkEdge * 0.004));
     const badgeCornerRadius = 3;
     ctx.font = `bold ${badgeFontSize}px sans-serif`;
@@ -480,8 +491,8 @@ function drawAttentionPullsOnCanvas(ctx, pulls, width, height) {
   const dashOn = Math.max(8, Math.round(inkEdge * 0.013));
   const dashOff = Math.max(7, Math.round(inkEdge * 0.011));
 
-  const badgeFontSize = Math.max(11, Math.round(inkEdge * 0.018));
-  const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+  const { fontSize: badgeFontSize, padding: badgePadding } =
+    badgeMetricsFor(inkEdge);
   const badgeOffset = Math.max(3, Math.round(inkEdge * 0.004));
   const badgeCornerRadius = 3;
   const haloShadowBlur = haloShadowBlurFor(inkEdge);
@@ -594,8 +605,8 @@ function drawStrongAreasOnCanvas(ctx, areas, width, height) {
   // in the photograph; the wider halo gives the stroke more contrast.
   const haloWidth = Math.max(5, Math.round(inkEdge * 0.0075));
   const strokeWidth = Math.max(2, Math.round(inkEdge * 0.0035));
-  const badgeFontSize = Math.max(11, Math.round(inkEdge * 0.018));
-  const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+  const { fontSize: badgeFontSize, padding: badgePadding } =
+    badgeMetricsFor(inkEdge);
   const badgeOffset = Math.max(3, Math.round(inkEdge * 0.004));
   const badgeCornerRadius = 3;
   const haloShadowBlur = haloShadowBlurFor(inkEdge);
@@ -1010,15 +1021,14 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
       ctx.fill();
     }
 
-    // Label badge — small tertiary pill above-right of the start
-    // dot. Quieter than the D/R arrow badges and much quieter than
-    // the Notes pin: smaller font (~12% smaller) + 0.7 opacity so
-    // Eye Path reads as organic flow first and "labeled callout"
-    // second. Matches the editor (renderEyePath in the Konva stage).
+    // Label badge — tertiary pill above-right of the start dot. The
+    // export renders it at the SAME size / opacity / keyline as the other
+    // on-image tags (E1 must match A1 / D1 / R1 / S1 / Crop in the post);
+    // the editor keeps its quieter, smaller Eye-Path badge.
     const label = eyePath.label;
     if (label) {
-      const badgeFontSize = Math.max(10, Math.round(inkEdge * 0.016));
-      const badgePadding = Math.max(2, Math.round(badgeFontSize * 0.25));
+      const { fontSize: badgeFontSize, padding: badgePadding } =
+        badgeMetricsFor(inkEdge);
       const badgeOffset = Math.max(6, Math.round(inkEdge * 0.006));
       ctx.font = `bold ${badgeFontSize}px sans-serif`;
       ctx.textBaseline = "top";
@@ -1029,10 +1039,10 @@ function drawEyePathOnCanvas(ctx, eyePath, width, height) {
       const by = start.y - badgeHeight - badgeOffset;
       tracePillRect(ctx, bx, by, badgeWidth, badgeHeight, 3);
       ctx.fillStyle = tertiary;
-      ctx.globalAlpha = 0.7;
+      ctx.globalAlpha = 0.95;
       withBadgeShadow(ctx, () => ctx.fill(), eyeBadgeShadowBlur);
       ctx.strokeStyle = secondary;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.globalAlpha = 1;
       ctx.fillStyle = secondary;
@@ -1245,8 +1255,8 @@ function drawArrowOnCanvas(
   // editor (without the dynamic flip; the export is static so we
   // just centre the badge perpendicular to the line at its midpoint).
   if (arrow.label) {
-    const badgeFontSize = Math.max(11, Math.round(inkEdge * 0.018));
-    const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+    const { fontSize: badgeFontSize, padding: badgePadding } =
+      badgeMetricsFor(inkEdge);
     const badgeHeight = badgeFontSize + 2 * badgePadding;
     const badgeOffset = Math.max(6, Math.round(inkEdge * 0.006));
     ctx.font = `bold ${badgeFontSize}px sans-serif`;
