@@ -1317,6 +1317,24 @@
     margin: 0;
   }
 
+  // Right-side cluster in the notes panel header: the always-visible Quote
+  // button + the Close X.
+  &__notes-panel-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+  }
+
+  &__notes-panel-quote.btn {
+    flex: 0 0 auto;
+    font-size: var(--font-down-1);
+
+    .d-icon {
+      margin-right: 0.35em;
+    }
+  }
+
   &__notes-panel-close.btn {
     flex: 0 0 auto;
   }

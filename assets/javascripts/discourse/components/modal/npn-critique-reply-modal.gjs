@@ -3769,19 +3769,45 @@ export default class NpnCritiqueReplyModal extends Component {
     return out.join("\n");
   }
 
-  // Click handler for the floating Quote button. Builds the quote
-  // BBCode + inserts at the textarea caret via TextareaTextManipulation
-  // (same path as Insert link). Dispatches a synthetic `input` event
-  // so the draft autosaver picks up the change. Focuses the textarea
-  // afterwards so the critic can keep typing.
+  // Read the live text selection IF it lies entirely within the
+  // Photographer's Notes panel; returns the normalized quote text or "".
+  // Shared fallback for the quote handler so quoting works even when the
+  // floating button's selectionchange snapshot is empty (e.g. the
+  // always-visible header button, or the rich-editor selection quirk).
+  _readNotesSelection() {
+    const container = this._photographersNotesElement;
+    if (!container) {
+      return "";
+    }
+    const selection = window.getSelection?.();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      return "";
+    }
+    const range = selection.getRangeAt(0);
+    if (
+      !container.contains(range.startContainer) ||
+      !container.contains(range.endContainer)
+    ) {
+      return "";
+    }
+    return this._normalizeQuoteText(selection.toString());
+  }
+
+  // Click handler for the Quote buttons (the floating one that appears on
+  // selection, and the always-visible one in the notes panel header).
+  // Builds the quote BBCode and inserts it into the active writing
+  // context, then closes the panel so the critic sees the result.
   @action
   insertQuoteFromPhotographersNotes(event) {
-    // Preventing default on mousedown / click keeps text selection
-    // alive in some browsers, but since we read `_quoteSelectionText`
-    // (snapshotted on selectionchange), even a cleared selection
-    // doesn't break the insert.
+    // Preventing default on mousedown keeps the text selection alive
+    // through the click so we can read it.
     event?.preventDefault?.();
-    const text = this._quoteSelectionText;
+    // Prefer the snapshot captured on selectionchange (the floating
+    // button), but fall back to reading the live selection. The
+    // always-visible header Quote button relies on the fallback, and it
+    // also covers cases where the floating button's selectionchange
+    // capture doesn't fire with the rich (ProseMirror) editor mounted.
+    const text = this._quoteSelectionText || this._readNotesSelection();
     if (!text) {
       this._quoteButtonPosition = null;
       return;
@@ -11175,13 +11201,39 @@ export default class NpnCritiqueReplyModal extends Component {
                 >
                   {{i18n "npn_critique_reply.modal.photographers_notes.title"}}
                 </h3>
-                <DButton
-                  class="btn-flat npn-critique-reply-modal__notes-panel-close"
-                  @icon="xmark"
-                  @action={{this.closePhotographersNotes}}
-                  @title="npn_critique_reply.modal.photographers_notes.close"
-                  @ariaLabel="npn_critique_reply.modal.photographers_notes.close"
-                />
+                <div class="npn-critique-reply-modal__notes-panel-actions">
+                  {{! Always-visible Quote button: select text in the notes
+                      below, then click to drop a quote into your critique.
+                      A plain <button> on `mousedown` so the click doesn't
+                      collapse the selection before we read it (the floating
+                      on-selection button can be unreliable with the rich
+                      editor mounted). }}
+                  <button
+                    type="button"
+                    class="btn btn-default btn-small btn-icon-text npn-critique-reply-modal__notes-panel-quote"
+                    title={{i18n
+                      "npn_critique_reply.modal.photographers_notes.quote_title"
+                    }}
+                    aria-label={{i18n
+                      "npn_critique_reply.modal.photographers_notes.quote_aria"
+                    }}
+                    {{on "mousedown" this.insertQuoteFromPhotographersNotes}}
+                  >
+                    {{dIcon "quote-left"}}
+                    <span class="d-button-label">
+                      {{i18n
+                        "npn_critique_reply.modal.photographers_notes.quote"
+                      }}
+                    </span>
+                  </button>
+                  <DButton
+                    class="btn-flat npn-critique-reply-modal__notes-panel-close"
+                    @icon="xmark"
+                    @action={{this.closePhotographersNotes}}
+                    @title="npn_critique_reply.modal.photographers_notes.close"
+                    @ariaLabel="npn_critique_reply.modal.photographers_notes.close"
+                  />
+                </div>
               </div>
               <div class="npn-critique-reply-modal__notes-panel-body">
                 {{#if this._opCookedLoading}}
