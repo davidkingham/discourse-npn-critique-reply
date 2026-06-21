@@ -19,6 +19,7 @@ import dAutocomplete from "discourse/ui-kit/modifiers/d-autocomplete";
 import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { getURLWithCDN } from "discourse/lib/get-url";
 import { cook } from "discourse/lib/text";
+import DiscourseURL from "discourse/lib/url";
 import TextareaTextManipulation, {
   TextareaAutocompleteHandler,
 } from "discourse/lib/textarea-text-manipulation";
@@ -7638,7 +7639,21 @@ export default class NpnCritiqueReplyModal extends Component {
       // toast and modal close don't depend on the delete completing.
       this._clearDraftAfterSuccess();
 
+      // Jump to the critique we just posted so the user lands ON their new
+      // reply (Discourse scrolls to + highlights it) instead of being left
+      // at the bottom of the topic by the stream refresh. Prefer the url the
+      // server returns; fall back to building it from the topic + post
+      // number. Captured before closeModal so it survives teardown.
+      const postedNumber = response?.post?.post_number;
+      const postedUrl =
+        response?.post?.url ??
+        (topic?.url && postedNumber ? `${topic.url}/${postedNumber}` : null);
+
       this.args.closeModal();
+
+      if (postedUrl) {
+        DiscourseURL.routeTo(postedUrl);
+      }
     } catch (error) {
       if (this._destroyed) {
         return;
