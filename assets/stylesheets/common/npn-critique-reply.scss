@@ -2481,37 +2481,47 @@
     cursor: crosshair;
   }
 
-  // Subtle outline on the frame while pin-placement mode is active so
-  // critics see at a glance that the image is interactive. Uses tertiary
-  // so it picks up the same accent family as the rest of the plugin.
-  &.is-note-mode &__frame {
-    outline: 2px solid var(--tertiary);
-    outline-offset: 2px;
+  // Active-tool border: a colored ring on the image frame that follows the
+  // active tool, so the same accent appears on every tool (Notes, Eye path,
+  // Crop, Area, Strong area, Arrow, Relationship) and matches the marks that
+  // tool draws. Each `is-<tool>-mode` class sets `--npn-active-tool-color`
+  // (hexes mirror npn-critique-reply-annotation colours in
+  // npn-critique-reply-colors.js); the single rule below paints the ring.
+  //
+  // `outline` (not `border`) is painted OUTSIDE the box and never affects
+  // layout, so switching tools can't reflow / make the workspace jump — the
+  // ring can therefore be applied to every tool with no jumpiness cost.
+  &.is-note-mode {
+    --npn-active-tool-color: #2d728f; // NOTE_BLUE
+  }
+  &.is-eye-path-mode {
+    --npn-active-tool-color: #8fd3e8; // EYE_PATH_PALE_CYAN
+  }
+  &.is-crop-mode {
+    --npn-active-tool-color: #4a8fa6; // CROP_EDITOR_BLUE_GRAY
+  }
+  &.is-attention-pull-mode {
+    --npn-active-tool-color: #c2a15a; // ATTENTION_PULL_OCHRE (Area)
+  }
+  &.is-strong-area-mode {
+    --npn-active-tool-color: #8fb9a7; // STRONG_AREA_SAGE
+  }
+  &.is-direction-arrow-mode {
+    --npn-active-tool-color: #7478ad; // DIRECTION_ARROW_INDIGO
+  }
+  &.is-relationship-arrow-mode {
+    --npn-active-tool-color: #a89c84; // RELATIONSHIP_TAUPE
   }
 
-  // Eye-path mode shares the click-to-add gesture with numbered notes,
-  // so it gets the same outline cue. Crop mode has its own cursor
-  // affordance during drag so it doesn't need the outline.
-  &.is-eye-path-mode &__frame {
-    outline: 2px solid var(--tertiary);
+  &.is-visual-mode &__frame {
+    outline: 2px solid var(--npn-active-tool-color, var(--tertiary));
     outline-offset: 2px;
-  }
-
-  // Attention-pull mode uses the warm amber accent to signal it's a
-  // different kind of tool than the tertiary-tinted ones — observational
-  // rather than corrective. `--bookmark` is Discourse's standard amber;
-  // explicit hex is the fallback.
-  &.is-attention-pull-mode &__frame {
-    outline: 2px solid var(--bookmark, #e89e2c);
-    outline-offset: 2px;
-  }
-
-  // Strong-area mode uses Discourse's `--success` green — the supportive
-  // counterpart to Attention Pull's amber. Falls back to a muted teal
-  // when the theme doesn't define `--success`.
-  &.is-strong-area-mode &__frame {
-    outline: 2px solid var(--success, #2a8c4a);
-    outline-offset: 2px;
+    // A soft same-colour glow + faint neutral lift so the muted / pale tool
+    // colours (cyan, sage, taupe) still read against a light or dark image
+    // edge. box-shadow doesn't reflow either, so this stays jump-free.
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.08),
+      0 0 6px -1px var(--npn-active-tool-color, var(--tertiary));
   }
 
   &__hint {
