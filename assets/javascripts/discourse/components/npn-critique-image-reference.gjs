@@ -1146,24 +1146,10 @@ export default class NpnCritiqueImageReference extends Component {
           {{/if}}
         </div>
 
-        {{! Per-tool hints have moved into the modal's secondary
-            toolbar (right next to where the tool was activated). The
-            crop hint stays here because it changes based on whether
-            a crop exists yet, and it's positioned alongside the
-            aspect-ratio chooser, so the inline-below-image placement
-            still reads naturally. }}
-        {{#if (eq @visualMode "crop_suggestion")}}
-          <p
-            class="npn-critique-image-reference__hint"
-            aria-live="polite"
-          >{{i18n
-              (if
-                @crop
-                "npn_critique_reply.visual_notes.crop_present_hint"
-                "npn_critique_reply.visual_notes.crop_hint"
-              )
-            }}</p>
-        {{/if}}
+        {{! All per-tool hints (crop included) live in the modal's
+            secondary toolbar under Optional Visual Notes, right where the
+            tool was activated. No below-image hint here — it pushed the
+            tool row down and hid it, and duplicated the toolbar hint. }}
       </figure>
     {{/if}}
   </template>
