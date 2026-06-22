@@ -2513,15 +2513,22 @@
     --npn-active-tool-color: #a89c84; // RELATIONSHIP_TAUPE
   }
 
-  &.is-visual-mode &__frame {
+  // Draw the ring INSIDE the visible image (negative outline-offset on the
+  // IMG), not as an outside outline on the full-width `__frame`. The frame
+  // spans the whole image column (a portrait image is centered inside it with
+  // letterbox), so an outside outline sat at the column/pane edges — in
+  // Visual Focus / fullscreen (no image-col padding, layout `overflow:hidden`)
+  // its top + sides were clipped and only the bottom survived. An inset ring
+  // on the IMG hugs the actual image in every layout and can never be clipped
+  // by ancestor overflow, with no padding needed. Still jump-free (outline /
+  // box-shadow don't reflow).
+  &.is-visual-mode &__img {
     outline: 2px solid var(--npn-active-tool-color, var(--tertiary));
-    outline-offset: 2px;
-    // A soft same-colour glow + faint neutral lift so the muted / pale tool
-    // colours (cyan, sage, taupe) still read against a light or dark image
-    // edge. box-shadow doesn't reflow either, so this stays jump-free.
-    box-shadow:
-      0 0 0 1px rgba(0, 0, 0, 0.08),
-      0 0 6px -1px var(--npn-active-tool-color, var(--tertiary));
+    outline-offset: -2px;
+    // Faint dark inset just inside the colored ring so the muted / pale tool
+    // colors (cyan, sage, taupe) read against a bright image edge. Inset (not
+    // outer) so it isn't clipped either.
+    box-shadow: inset 0 0 0 4px rgba(0, 0, 0, 0.14);
   }
 
   &__hint {
