@@ -3874,8 +3874,17 @@
 // one, so this wins over (2) as well as (1). The `:has()` scope keeps it
 // strictly limited to when our docked panel is mounted. On modal close
 // DModal's own unlock restores everything — we never touch its JS state.
-html.modal-open:has(.npn-critique-reply-modal--docked-experiment) {
-  overflow: auto !important;
-  padding-right: 0 !important;
-  scrollbar-gutter: auto !important;
+//
+// DESKTOP ONLY. On mobile the docked panel is a full-screen sheet, so the
+// "topic scrolls behind it" affordance gains nothing — and unlocking the
+// background scroll there breaks the on-screen keyboard: focusing the text
+// field lets iOS scroll the page under the fixed sheet, which registers as
+// a swipe/outside interaction and dismisses the modal. Keeping DModal's
+// normal scroll-lock on mobile (matching every other modal) fixes that.
+@media (min-width: 721px) {
+  html.modal-open:has(.npn-critique-reply-modal--docked-experiment) {
+    overflow: auto !important;
+    padding-right: 0 !important;
+    scrollbar-gutter: auto !important;
+  }
 }
