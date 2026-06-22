@@ -2481,60 +2481,10 @@
     cursor: crosshair;
   }
 
-  // Active-tool border: a colored ring on the image frame that follows the
-  // active tool, so the same accent appears on every tool (Notes, Eye path,
-  // Crop, Area, Strong area, Arrow, Relationship) and matches the marks that
-  // tool draws. Each `is-<tool>-mode` class sets `--npn-active-tool-color`
-  // (hexes mirror npn-critique-reply-annotation colours in
-  // npn-critique-reply-colors.js); the single rule below paints the ring.
-  //
-  // `outline` (not `border`) is painted OUTSIDE the box and never affects
-  // layout, so switching tools can't reflow / make the workspace jump — the
-  // ring can therefore be applied to every tool with no jumpiness cost.
-  &.is-note-mode {
-    --npn-active-tool-color: #2d728f; // NOTE_BLUE
-  }
-  &.is-eye-path-mode {
-    --npn-active-tool-color: #8fd3e8; // EYE_PATH_PALE_CYAN
-  }
-  &.is-crop-mode {
-    --npn-active-tool-color: #4a8fa6; // CROP_EDITOR_BLUE_GRAY
-  }
-  &.is-attention-pull-mode {
-    --npn-active-tool-color: #c2a15a; // ATTENTION_PULL_OCHRE (Area)
-  }
-  &.is-strong-area-mode {
-    --npn-active-tool-color: #8fb9a7; // STRONG_AREA_SAGE
-  }
-  &.is-direction-arrow-mode {
-    --npn-active-tool-color: #7478ad; // DIRECTION_ARROW_INDIGO
-  }
-  &.is-relationship-arrow-mode {
-    --npn-active-tool-color: #a89c84; // RELATIONSHIP_TAUPE
-  }
-
-  // Draw the ring INSIDE the visible image (negative outline-offset on the
-  // IMG), not as an outside outline on the full-width `__frame`. The frame
-  // spans the whole image column (a portrait image is centered inside it with
-  // letterbox), so an outside outline sat at the column/pane edges — in
-  // Visual Focus / fullscreen (no image-col padding, layout `overflow:hidden`)
-  // its top + sides were clipped and only the bottom survived. An inset ring
-  // on the IMG hugs the actual image in every layout and can never be clipped
-  // by ancestor overflow, with no padding needed. Still jump-free (outline /
-  // box-shadow don't reflow).
-  &.is-visual-mode &__img {
-    // Halo frame: the active tool's color at the image edge, a white halo
-    // just inside it, and a hair of dark innermost — the same color + halo
-    // language the annotation marks use, so the cue pops on both bright and
-    // dark photos (a flat single line was too easy to miss). All inset
-    // (stacked box-shadows) so it hugs the image and can't be clipped by
-    // ancestor overflow; the first layer paints on top, so the bands read
-    // edge → in as color, white, dark.
-    box-shadow:
-      inset 0 0 0 2px var(--npn-active-tool-color, var(--tertiary)),
-      inset 0 0 0 4px rgba(255, 255, 255, 0.92),
-      inset 0 0 0 5px rgba(0, 0, 0, 0.25);
-  }
+  // No active-tool border on the image frame: it was either too subtle to
+  // earn its place or (as a ring) shrank the usable image, and keeping the
+  // image as large as possible matters more. The on-image Konva cursor +
+  // the per-tool toolbar hint already signal which tool is active.
 
   &__hint {
     margin: 0.5em 0 0;
