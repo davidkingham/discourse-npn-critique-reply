@@ -3585,11 +3585,15 @@
   }
 
   // The backdrop is a sibling rendered immediately after `.d-modal`.
-  // Drop its dimming and pointer capture so clicks/drags fall through
-  // to the topic underneath.
-  & ~ .d-modal__backdrop {
-    background-color: transparent;
-    pointer-events: none;
+  // Drop its dimming and pointer capture so clicks/drags fall through to
+  // the topic underneath. DESKTOP ONLY — on mobile the panel takes over the
+  // whole screen like the composer, so we keep DModal's default opaque
+  // backdrop + pointer capture there (no see-through, no second scroll).
+  @media (min-width: 721px) {
+    & ~ .d-modal__backdrop {
+      background-color: transparent;
+      pointer-events: none;
+    }
   }
 
   // Composer-style card: pinned to the viewport bottom, centered with a
@@ -3790,6 +3794,11 @@
       // panel fills the viewport (and re-declared here, where the
       // container-level `--npn-docked-height` is visible).
       --npn-docked-h: var(--npn-docked-height);
+      // Anchor to the TOP (full-screen takeover) like the composer's mobile
+      // view, instead of bottom-pinning a drawer. Combined with the opaque
+      // backdrop + scroll-lock above, this gives a single scroll surface.
+      top: 0;
+      bottom: 0;
       width: 100%;
       max-width: 100%;
       border-top-left-radius: 0;
