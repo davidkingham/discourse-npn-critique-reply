@@ -1,0 +1,66 @@
+name: Claude fix on failure
+
+# Reacts ONLY when the weekly (scheduled) or post-merge (main) "Plugin Tests"
+# run fails. PR runs are intentionally ignored so this never fires — and never
+# costs API tokens — during normal development. Its job: diagnose a core-update
+# breakage, open a DRAFT pull request with an attempted fix, and always file /
+# update a GitHub issue as the human-readable report.
+on:
+  workflow_run:
+    workflows: ["Plugin Tests"]
+    types:
+      - completed
+
+# Needed to push a fix branch, open the draft PR, and write the report issue.
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  fix:
+    # Only failures of the scheduled run or a push to main. Skips PR failures.
+    if: >
+      github.event.workflow_run.conclusion == 'failure' &&
+      (github.event.workflow_run.event == 'schedule' ||
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Allow the run to read CI logs, branch/commit, push, and open PRs/issues.
+          claude_args: |
+            --allowedTools "Bash(gh:*),Bash(git:*),Read,Edit,Write,Grep,Glob"
+          prompt: |
+            The "Plugin Tests" CI for this Discourse plugin just failed.
+            Failed run: ${{ github.event.workflow_run.html_url }}
+            Trigger event: ${{ github.event.workflow_run.event }}
+            Head branch: ${{ github.event.workflow_run.head_branch }}
+
+            Your goal: figure out whether a Discourse CORE change broke this
+            plugin, attempt a fix, and report clearly. Steps:
+
+            1. Use `gh run view ${{ github.event.workflow_run.id }} --log-failed`
+               to read the failing job logs.
+            2. Focus on the `latest` core leg — that is the branch production
+               runs. If ONLY the `stable` leg failed, do NOT open a fix PR;
+               instead just file the report issue noting it is stable-only.
+            3. Determine the root cause. If it is a renamed/removed/changed core
+               API, an Ember/JS change, or a deprecation that became an error,
+               make the minimal fix on a new branch named
+               `claude/core-compat-fix-<short-date>` and open a DRAFT pull
+               request describing the core change and the fix.
+            4. ALWAYS open OR update (do not duplicate) a GitHub issue titled
+               "Weekly core-compat check FAILED". In it summarize: which core
+               leg failed, the suspected core change (link the core commit/PR if
+               you can identify it), and either a link to your draft PR or, if
+               you could not fix it, the diagnosis and what a human should do.
+
+            Hard rules: never push to main, never mark the PR ready for review,
+            never merge. If you cannot reproduce or diagnose, still file the
+            issue with the logs excerpt so a human is alerted.

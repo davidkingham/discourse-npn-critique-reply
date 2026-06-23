@@ -4,8 +4,10 @@ name: Plugin Tests
 #   - push to main      → every merge runs the full matrix
 #   - pull_request      → CI on every PR commit
 #   - workflow_dispatch → run manually from the Actions tab
-#   - schedule (weekly) → catch upstream Discourse changes that break
-#                         this plugin even when its own code is unchanged
+#   - schedule (weekly) → catch upstream Discourse core changes that break
+#                         this plugin even when its own code is unchanged.
+#                         This is the "core update won't break production"
+#                         canary; on failure the claude-fix workflow reacts.
 on:
   push:
     branches:
@@ -13,33 +15,31 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    # Mondays at 05:00 UTC. Pick a quiet time outside business hours
-    # in any major timezone so weekly runs don't compete with active
-    # PR CI for runners.
+    # Mondays at 05:00 UTC — quiet hours, and a fixed day makes the weekly
+    # core-compat result easy to find in the Actions history.
     - cron: "0 5 * * 1"
 
-# Cancel an in-progress run when a newer commit lands on the same
-# branch. Main is excluded so post-merge runs (and the scheduled run)
-# always complete and report status to the commit history.
+# Cancel superseded runs on the same branch. main is excluded so post-merge
+# and scheduled runs always complete and record status.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   ci:
-    # Calls the reusable workflow maintained by the Discourse core team:
+    # Discourse core team's reusable plugin workflow. Pinned to a tag (not
+    # @main) so the workflow itself can't change under us silently.
     # https://github.com/discourse/.github/blob/main/.github/workflows/discourse-plugin.yml
-    # `@main` tracks the upstream-maintained "always-current" version
-    # of the workflow. Pin to a tag if you need stricter reproducibility.
-    uses: discourse/.github/.github/workflows/discourse-plugin.yml@main
+    uses: discourse/.github/.github/workflows/discourse-plugin.yml@v1
     strategy:
       fail-fast: false
       matrix:
         core_ref:
-          # "latest" is the upstream workflow's default — Discourse's
-          # most recent passing build.
+          # "latest" = Discourse `tests-passed`, the branch the production
+          # NPN site tracks. This is the leg that matters for production.
           - latest
-          # "stable" is the current Discourse stable release branch.
+          # "stable" = current Discourse stable release branch. Kept as a
+          # secondary signal; the claude-fix bot only auto-fixes `latest`.
           - stable
     with:
       core_ref: ${{ matrix.core_ref }}
