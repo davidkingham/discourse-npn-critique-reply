@@ -1,0 +1,62 @@
+name: Update compat branch
+
+# Production-hardening. Whenever "Plugin Tests" passes against the latest core
+# on a scheduled or main run, point this plugin's `d-compat/<core major.minor>`
+# branch at that verified commit.
+#
+# Discourse core's plugin checkout (Discourse.find_compatible_git_resource ->
+# find_compatible_git_branch) looks for `origin/d-compat/<MAJOR>.<MINOR>` of the
+# RUNNING core version BEFORE falling back to the .discourse-compatibility file
+# or plain HEAD. So a production `launcher rebuild` on e.g. core 2026.6.x will
+# check out the last commit this CI verified green against 2026.6 — not raw,
+# possibly-unverified HEAD. If core is pinned older than plugin HEAD, it pins
+# back to the last commit known-good for that older core line.
+#
+# We update the branch (rather than write .discourse-compatibility) because a
+# green run only tells us "this commit is good for THIS core version" — it
+# cannot know the future version at which compatibility breaks, which is the
+# upper bound the file format requires.
+on:
+  workflow_run:
+    workflows: ["Plugin Tests"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      (github.event.workflow_run.event == 'schedule' ||
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Resolve core major.minor for `latest` (tests-passed)
+        id: core
+        run: |
+          set -euo pipefail
+          string=$(curl -fsSL https://raw.githubusercontent.com/discourse/discourse/tests-passed/lib/version.rb \
+            | grep -oE 'STRING = "[^"]+"' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$string" ]; then echo "Could not read core version"; exit 1; fi
+          mm=$(printf '%s' "$string" | cut -d. -f1-2)
+          echo "Core latest = $string  ->  d-compat/$mm"
+          echo "branch=d-compat/$mm" >> "$GITHUB_OUTPUT"
+
+      - name: Point compat branch at the verified commit
+        run: |
+          set -euo pipefail
+          branch='${{ steps.core.outputs.branch }}'
+          ref="heads/$branch"
+          if gh api "repos/$REPO/git/refs/$ref" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/$REPO/git/refs/$ref" -f sha="$SHA" -F force=true >/dev/null
+            echo "Updated $branch -> $SHA"
+          else
+            gh api -X POST "repos/$REPO/git/refs" -f ref="refs/$ref" -f sha="$SHA" >/dev/null
+            echo "Created $branch -> $SHA"
+          fi
