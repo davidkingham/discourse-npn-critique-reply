@@ -1,7 +1,7 @@
 name: Plugin Tests
 
 # Triggers:
-#   - push to main      → every merge runs the full matrix
+#   - push to main      → every merge
 #   - pull_request      → CI on every PR commit
 #   - workflow_dispatch → run manually from the Actions tab
 #   - schedule (weekly) → catch upstream Discourse core changes that break
@@ -31,15 +31,9 @@ jobs:
     # @main) so the workflow itself can't change under us silently.
     # https://github.com/discourse/.github/blob/main/.github/workflows/discourse-plugin.yml
     uses: discourse/.github/.github/workflows/discourse-plugin.yml@v1
-    strategy:
-      fail-fast: false
-      matrix:
-        core_ref:
-          # "latest" = Discourse `tests-passed`, the branch the production
-          # NPN site tracks. This is the leg that matters for production.
-          - latest
-          # "stable" = current Discourse stable release branch. Kept as a
-          # secondary signal; the claude-fix bot only auto-fixes `latest`.
-          - stable
     with:
-      core_ref: ${{ matrix.core_ref }}
+      # Only `latest` (Discourse `tests-passed`) — the branch the production
+      # NPN site tracks. We deliberately do NOT test `stable`: these plugins
+      # are built against tests-passed, so stable failures are noise for a
+      # release we don't run. Add a matrix leg back here if that ever changes.
+      core_ref: latest
