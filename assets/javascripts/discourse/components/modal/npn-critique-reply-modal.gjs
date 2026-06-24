@@ -284,6 +284,13 @@ export default class NpnCritiqueReplyModal extends Component {
   @service toasts;
   @service dialog;
   @service appEvents;
+  // Core's global (Mousetrap) topic shortcuts. We pause them for the
+  // lifetime of an open workspace so keys like `b` (bookmark), `r`
+  // (reply), arrow navigation, and Enter don't leak through to the
+  // topic underneath while the critic is writing — the docked workspace
+  // keeps the topic interactive, so focus can sit on the canvas/buttons
+  // (not a text field) where Mousetrap's input-exclusion wouldn't help.
+  @service keyboardShortcuts;
   // Owns the minimized-workspace session + dock. Minimize hands off to it
   // after a confirmed draft save; the dock reads it to offer Resume.
   @service npnCritiqueWorkspace;
@@ -852,6 +859,10 @@ export default class NpnCritiqueReplyModal extends Component {
     // override reverts to native quoting. Covers close AND minimize
     // (minimize destroys the modal too).
     this.npnCritiqueWorkspace.unregisterOpenInstance(this);
+    // Re-enable core's global topic shortcuts (paused in
+    // registerOpenInstance). Covers close AND minimize, since both
+    // destroy the modal. unpause() guards its own torn-down state.
+    this.keyboardShortcuts.unpause();
     // Drop refs so the GC can clear the textarea and the
     // TextareaTextManipulation helper. The dAutocomplete modifier
     // wires its own teardown when the textarea is removed from the
@@ -1540,6 +1551,10 @@ export default class NpnCritiqueReplyModal extends Component {
       this,
       this.topic?.id ?? null
     );
+    // Suppress core's global topic shortcuts for the lifetime of this
+    // workspace (paired with `unpause` in willDestroy). pause() guards
+    // its own torn-down state, so this is safe to call unconditionally.
+    this.keyboardShortcuts.pause();
   }
 
   // Public entry point for the native-Quote override: a quote selected from
