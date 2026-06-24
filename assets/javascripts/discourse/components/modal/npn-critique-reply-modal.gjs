@@ -9247,6 +9247,14 @@ export default class NpnCritiqueReplyModal extends Component {
       @title={{i18n "npn_critique_reply.modal.title"}}
       @closeModal={{@closeModal}}
       @beforeClose={{this.beforeClose}}
+      {{! Enter / Shift+Enter must stay newlines in the writing surface.
+          DModal otherwise clicks the primary footer button on Enter
+          unless focus is in a <form>/<textarea>/select-kit — and the
+          rich DEditor (ProseMirror) is a contenteditable <div>, so it
+          slips past that exclusion and Enter fires "Preview Critique".
+          We have an explicit primary button, so submit-on-Enter is
+          never wanted here. }}
+      @submitOnEnter={{false}}
       class={{this.modalClassNames}}
       style={{this.dockedStyle}}
       {{didInsert this.registerOpenInstance}}
