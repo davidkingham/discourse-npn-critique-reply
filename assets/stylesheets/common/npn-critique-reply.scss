@@ -2728,6 +2728,14 @@
   // rather than the viewport. (A viewport media query can't tell a wide
   // single-column focus view from a narrow two-column one.)
   container: npn-vn-toolbar / inline-size;
+  // `container-type` establishes a stacking context on this toolbar, so
+  // the Rotate/Flip dropdown (an absolutely-positioned child) is trapped
+  // inside it and would paint UNDER the sections that follow the toolbar
+  // in the DOM, no matter the dropdown's own z-index. Lift the whole
+  // toolbar context above those later siblings so the open dropdown
+  // stays on top. (position: relative so the z-index reliably applies.)
+  position: relative;
+  z-index: 20;
 }
 
 // Narrower toolbar: collapse the tool buttons to icon-only so the row
