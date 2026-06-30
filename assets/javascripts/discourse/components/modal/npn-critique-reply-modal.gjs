@@ -1156,9 +1156,27 @@ export default class NpnCritiqueReplyModal extends Component {
   // drafts/preview/post pipeline and inline validation stay in sync.
   // (The legacy <Textarea> uses Ember's two-way binding instead, so this
   // handler only runs on the rich-editor path.)
+  // Dedicated @change per writing context. The template renders a SEPARATE
+  // rich editor per context (two `{{#if}}` branches), and each writes
+  // straight into its OWN markdown field — never via `activeWritingContext`.
+  // Two reasons this matters: (1) a single shared editor doesn't re-seed
+  // when the incoming markdown equals what it last emitted (core's
+  // `#lastSerialized` guard), so switching contexts left the prior text on
+  // screen; (2) a late @change from the OUTGOING editor (blur/teardown
+  // firing after the context already flipped) would land in the wrong
+  // bucket and clobber the context just switched to. A distinct editor +
+  // distinct handler per context removes both: each editor is torn down and
+  // rebuilt on switch (fresh `#lastSerialized`) and can only write its own
+  // field.
   @action
-  onCritiqueChange(event) {
-    this.activeWritingText = event?.target?.value ?? "";
+  onOverallCritiqueChange(event) {
+    this.overallCritiqueText = event?.target?.value ?? "";
+    this.clearValidationOnInput();
+  }
+
+  @action
+  onImageNotesChange(event) {
+    this._activeImageNotes = event?.target?.value ?? "";
     this.clearValidationOnInput();
   }
 
@@ -7673,15 +7691,20 @@ export default class NpnCritiqueReplyModal extends Component {
     // First annotation reference for this session reveals the Image/Visual
     // Notes context (sticky — see `_imageNotesRevealed`).
     this._imageNotesRevealed = true;
-    if (this.activeWritingContext !== WRITING_CONTEXT_IMAGE) {
+    const switchingContext =
+      this.activeWritingContext !== WRITING_CONTEXT_IMAGE;
+    if (switchingContext) {
       this.activeWritingContext = WRITING_CONTEXT_IMAGE;
     }
-    // On the rich path the context switch re-seeds the editor with the
-    // image-notes document; the in-place insert is deferred (putCursorAtEnd
-    // + next) so it lands after that re-seed, at the end of the right doc,
-    // and focuses the editor itself.
-    const insertedInPlace = this.#usingDEditor && this.#textManipulation;
-    this._appendToActiveSurface(addition);
+    // Switching context rebuilds the rich editor (it's keyed on
+    // `writingContextKey`), so an in-place insert on the OUTGOING editor's
+    // text manipulation would race its teardown. Append via the bound
+    // value in that case — the freshly-built image-notes editor seeds from
+    // it. When we're already in the image context the editor stays put, so
+    // keep the in-place insert (preserves cursor + undo history).
+    const insertedInPlace =
+      !switchingContext && this.#usingDEditor && this.#textManipulation;
+    this._appendToActiveSurface(addition, switchingContext);
     // Textarea path: pull focus into the field so the critic can keep
     // typing right after the reference (the rich path focuses itself as
     // part of the insert, so we skip the extra hop there).
@@ -7702,8 +7725,8 @@ export default class NpnCritiqueReplyModal extends Component {
   // after the cursor lands, and after any context-switch re-seed). Falls
   // back to a value mutation if the in-place insert throws. Textarea path
   // mutates the bound value directly.
-  _appendToActiveSurface(addition) {
-    if (this.#usingDEditor && this.#textManipulation) {
+  _appendToActiveSurface(addition, forceValue = false) {
+    if (!forceValue && this.#usingDEditor && this.#textManipulation) {
       const tm = this.#textManipulation;
       try {
         tm.putCursorAtEnd();
@@ -11843,20 +11866,48 @@ export default class NpnCritiqueReplyModal extends Component {
                   class="npn-critique-reply-modal__editor-wrap
                     {{if this.critiqueToolbarOpen '--toolbar-open'}}"
                 >
-                  <DEditor
-                    @value={{this.activeWritingText}}
-                    @change={{this.onCritiqueChange}}
-                    @onSetup={{this.setupEditorManipulation}}
-                    @topicId={{this.topic.id}}
-                    @categoryId={{this.topic.category_id}}
-                    @placeholder={{i18n
-                      "npn_critique_reply.modal.textarea_placeholder"
-                    }}
-                    @disabled={{this.isPosting}}
-                    @showLink={{false}}
-                    @textAreaId="npn-critique-reply-textarea"
-                    class="npn-critique-reply-modal__editor"
-                  />
+                  {{! A SEPARATE editor per writing context. The two if
+                      branches are distinct component instances, so switching
+                      contexts tears one down and builds the other — each
+                      starts with a clean ProseMirror document seeded from its
+                      own field, sidestepping core's skip-re-seed-when-value-
+                      equals-lastSerialized guard that otherwise left the
+                      prior context's text on screen. Each binds value/change
+                      to its OWN field so a late teardown change cannot
+                      clobber the other context. }}
+                  {{#if this.writingContextIsImage}}
+                    <DEditor
+                      @value={{this._activeImageNotes}}
+                      @change={{this.onImageNotesChange}}
+                      @onSetup={{this.setupEditorManipulation}}
+                      @topicId={{this.topic.id}}
+                      @categoryId={{this.topic.category_id}}
+                      @placeholder={{i18n
+                        "npn_critique_reply.modal.textarea_placeholder"
+                      }}
+                      @disabled={{this.isPosting}}
+                      @showLink={{false}}
+                      @textAreaId="npn-critique-reply-textarea"
+                      class="npn-critique-reply-modal__editor"
+                      data-writing-context="image"
+                    />
+                  {{else}}
+                    <DEditor
+                      @value={{this.overallCritiqueText}}
+                      @change={{this.onOverallCritiqueChange}}
+                      @onSetup={{this.setupEditorManipulation}}
+                      @topicId={{this.topic.id}}
+                      @categoryId={{this.topic.category_id}}
+                      @placeholder={{i18n
+                        "npn_critique_reply.modal.textarea_placeholder"
+                      }}
+                      @disabled={{this.isPosting}}
+                      @showLink={{false}}
+                      @textAreaId="npn-critique-reply-textarea"
+                      class="npn-critique-reply-modal__editor"
+                      data-writing-context="overall"
+                    />
+                  {{/if}}
                 </div>
               {{else}}
                 <Textarea
