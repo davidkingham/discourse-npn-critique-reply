@@ -9689,6 +9689,12 @@ export default class NpnCritiqueReplyModal extends Component {
     this.strongAreas = [];
     this.directionArrows = [];
     this.relationshipArrows = [];
+    // The live arrays above are only the ACTIVE image's marks. In a
+    // multi-image critique every other image's annotations live in the
+    // per-image snapshot map; clear it too, or Discard would wipe just
+    // the current image and leave the other images' marks intact (they
+    // reappear the moment the critic flips back to those images).
+    this._annotationsByImageIndex.clear();
     this.cropSelected = false;
     this.selectedEyePathId = null;
     this.selectedPinNumber = null;
