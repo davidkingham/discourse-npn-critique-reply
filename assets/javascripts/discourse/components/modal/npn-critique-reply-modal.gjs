@@ -5141,6 +5141,16 @@ export default class NpnCritiqueReplyModal extends Component {
       this.pendingStrongAreaPopoverText = "";
     }
     if (this.pendingEyePathPopover && mode !== "eye_path") {
+      // Leaving the tool with the describe popover still open = implicit
+      // Skip: keep the path but unlabeled (no [E#]), matching the Skip
+      // button. Previously the path kept its auto-assigned label, so a
+      // tool switch silently left a numbered note behind.
+      const path = this.activeEyePath ?? this.selectedEyePath;
+      if (path?.id) {
+        this.eyePaths = this.eyePaths.map((p) =>
+          p.id === path.id ? { ...p, label: "" } : p
+        );
+      }
       this.pendingEyePathPopover = null;
       this.pendingEyePathPopoverText = "";
     }
@@ -5152,6 +5162,11 @@ export default class NpnCritiqueReplyModal extends Component {
       this.pendingDirectionArrowPopover &&
       mode !== "direction_arrow"
     ) {
+      // Implicit Skip — keep the arrow but unlabeled (no [D#]).
+      const { id } = this.pendingDirectionArrowPopover;
+      this.directionArrows = this.directionArrows.map((a) =>
+        a.id === id ? { ...a, label: "" } : a
+      );
       this.pendingDirectionArrowPopover = null;
       this.pendingDirectionArrowPopoverText = "";
     }
@@ -5159,6 +5174,11 @@ export default class NpnCritiqueReplyModal extends Component {
       this.pendingRelationshipArrowPopover &&
       mode !== "relationship_arrow"
     ) {
+      // Implicit Skip — keep the arrow but unlabeled (no [R#]).
+      const { id } = this.pendingRelationshipArrowPopover;
+      this.relationshipArrows = this.relationshipArrows.map((a) =>
+        a.id === id ? { ...a, label: "" } : a
+      );
       this.pendingRelationshipArrowPopover = null;
       this.pendingRelationshipArrowPopoverText = "";
     }
