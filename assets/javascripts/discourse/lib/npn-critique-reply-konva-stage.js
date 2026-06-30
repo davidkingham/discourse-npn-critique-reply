@@ -576,11 +576,13 @@ export async function createAnnotationStage({
   onAddAttentionPull,
   onAddAttentionPullPath,
   onRetraceAttentionPullPath,
+  onMoveAttentionPullPoint,
   onSelectAttentionPull,
   onUpdateAttentionPull,
   onAddStrongArea,
   onAddStrongAreaPath,
   onRetraceStrongAreaPath,
+  onMoveStrongAreaPoint,
   onSelectStrongArea,
   onUpdateStrongArea,
   onAddDirectionArrow,
@@ -1029,6 +1031,14 @@ export async function createAnnotationStage({
       shortEdge,
       onSelect,
       modeMatches,
+      // When true, the marker is selected in its own tool mode and not
+      // suppressed by an open popover — per-vertex drag handles are
+      // mounted so the user can reshape the path after the fact.
+      editEnabled,
+      // Fired on a handle dragend with (index, xPct, yPct). The caller
+      // updates both the closure state array and the modal so the
+      // edit survives the next sync.
+      onMovePoint,
       // When true, the existing shape is hidden so the user can see
       // the underlying image while tracing the replacement. The
       // toolbar's "Cancel retrace" button + hint copy keep retrace
@@ -1047,20 +1057,12 @@ export async function createAnnotationStage({
     if (isRetracing) {
       return;
     }
-    const flat = [];
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    for (const p of points) {
-      const x = (p.xPct / 100) * stageWidth;
-      const y = (p.yPct / 100) * stageHeight;
-      flat.push(x, y);
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
+
+    // Per-vertex editing is offered only when the marker is selected,
+    // its tool mode is active, editing isn't suppressed (no open
+    // popover), and we're not mid-retrace. Mirrors the oval variant's
+    // `canEdit` gate.
+    const editable = isSelected && modeMatches && editEnabled;
 
     // Stroke / halo widths follow the same percent-of-short-edge
     // formulas as the ellipse variant so paths and ovals read at the
@@ -1078,116 +1080,222 @@ export async function createAnnotationStage({
     // back to the first.
     const tension = 0.4;
 
-    const halo = new Konva.Line({
-      points: flat,
-      closed: true,
-      stroke: haloColor,
-      strokeWidth: haloWidth,
-      fillEnabled: false,
-      tension,
-      opacity: 0.85,
-      listening: false,
-      // Soft dark outer edge so the white halo still reads on
-      // high-key images (snow / fog / overexposed sky). Invisible
-      // on dark backgrounds — the white halo is doing the work
-      // there and the dark blur blends into the photograph.
-      shadowColor: ANNOTATION_HALO_SHADOW,
-      shadowBlur: ANNOTATION_HALO_SHADOW_BLUR,
-      shadowOpacity: ANNOTATION_HALO_SHADOW_OPACITY,
-      shadowForStrokeEnabled: true,
-    });
-    layer.add(halo);
+    // Mutable pixel-space control points. A handle drag patches one
+    // entry; OTHER handles then read the up-to-date geometry. Mirrors
+    // the eye_path `livePts` pattern.
+    const livePts = points.map((p) => ({
+      x: (p.xPct / 100) * stageWidth,
+      y: (p.yPct / 100) * stageHeight,
+    }));
 
-    // Visible fill — pure decoration now. Was previously the click
-    // target (entire interior caught selection), which felt
-    // imprecise: dragging a stage tool inside an already-placed area
-    // accidentally selected it. Made non-listening so only the stroke
-    // catches clicks; the interior is visually filled but
-    // pass-through.
-    const fillBody = new Konva.Line({
-      points: flat,
-      closed: true,
-      fill: tertiary,
-      tension,
-      opacity: isSelected
-        ? AREA_FILL_OPACITY_SELECTED
-        : AREA_FILL_OPACITY_UNSELECTED,
-      strokeEnabled: false,
-      listening: false,
-      name: `area-path-${model.id}`,
-    });
-    layer.add(fillBody);
+    // The shape (halo + fill + stroke + badge) lives in its own group
+    // so a vertex drag can destroy + rebuild it every frame without
+    // disturbing the persistent handles, which are added to `layer`
+    // AFTER this group so they win hit-testing (Konva tests
+    // front-to-back).
+    const shapeGroup = new Konva.Group();
+    layer.add(shapeGroup);
 
-    // Border stroke — visible AND the hit target. `hitStrokeWidth`
-    // widens the invisible hit zone around the stroke so users don't
-    // need pixel-perfect aim on the thin dashed line. Sized off the
-    // shortEdge so it scales with stage zoom.
-    const hitWidth = Math.max(14, strokeWidth * 4);
-    const stroke = new Konva.Line({
-      points: flat,
-      closed: true,
-      stroke: tertiary,
-      strokeWidth,
-      dash: isSelected ? [] : [dashOn, dashOff],
-      tension,
-      fillEnabled: false,
-      listening: true,
-      hitStrokeWidth: hitWidth,
-      name: `area-path-stroke-${model.id}`,
-    });
-    stroke.on("click tap", (e) => {
-      e.cancelBubble = true;
-      onSelect?.();
-    });
-    stroke.on("mouseenter", () => {
-      container.style.cursor = "pointer";
-    });
-    stroke.on("mouseleave", () => {
-      applyContainerCursor();
-    });
-    layer.add(stroke);
+    function buildAreaShape(pts) {
+      shapeGroup.destroyChildren();
+      const flat = [];
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const p of pts) {
+        flat.push(p.x, p.y);
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }
 
-    if (model.label) {
-      const badgeOffset = Math.max(3, Math.round(shortEdge * 0.004));
-      const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
-      const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
-      const badge = new Konva.Label({
-        x: minX + badgeOffset,
-        y: minY + badgeOffset,
-        listening: false,
-      });
-      badge.add(
-        new Konva.Tag({
-          fill: tertiary,
-          cornerRadius: 3,
+      shapeGroup.add(
+        new Konva.Line({
+          points: flat,
+          closed: true,
           stroke: haloColor,
-          strokeWidth: 1.5,
-          opacity: isSelected ? 1 : 0.95,
+          strokeWidth: haloWidth,
+          fillEnabled: false,
+          tension,
+          opacity: 0.85,
+          listening: false,
+          // Soft dark outer edge so the white halo still reads on
+          // high-key images (snow / fog / overexposed sky). Invisible
+          // on dark backgrounds — the white halo is doing the work
+          // there and the dark blur blends into the photograph.
+          shadowColor: ANNOTATION_HALO_SHADOW,
+          shadowBlur: ANNOTATION_HALO_SHADOW_BLUR,
+          shadowOpacity: ANNOTATION_HALO_SHADOW_OPACITY,
+          shadowForStrokeEnabled: true,
+        })
+      );
+
+      // Visible fill — pure decoration. Non-listening so only the
+      // stroke catches clicks; the interior is visually filled but
+      // pass-through (dragging a stage tool inside the area must not
+      // accidentally select it).
+      shapeGroup.add(
+        new Konva.Line({
+          points: flat,
+          closed: true,
+          fill: tertiary,
+          tension,
+          opacity: isSelected
+            ? AREA_FILL_OPACITY_SELECTED
+            : AREA_FILL_OPACITY_UNSELECTED,
+          strokeEnabled: false,
+          listening: false,
+          name: `area-path-${model.id}`,
+        })
+      );
+
+      // Border stroke — visible AND the hit target. `hitStrokeWidth`
+      // widens the invisible hit zone around the stroke so users don't
+      // need pixel-perfect aim on the thin dashed line.
+      const hitWidth = Math.max(14, strokeWidth * 4);
+      const stroke = new Konva.Line({
+        points: flat,
+        closed: true,
+        stroke: tertiary,
+        strokeWidth,
+        dash: isSelected ? [] : [dashOn, dashOff],
+        tension,
+        fillEnabled: false,
+        listening: true,
+        hitStrokeWidth: hitWidth,
+        name: `area-path-stroke-${model.id}`,
+      });
+      stroke.on("click tap", (e) => {
+        e.cancelBubble = true;
+        onSelect?.();
+      });
+      stroke.on("mouseenter", () => {
+        container.style.cursor = "pointer";
+      });
+      stroke.on("mouseleave", () => {
+        applyContainerCursor();
+      });
+      shapeGroup.add(stroke);
+
+      if (model.label) {
+        const badgeOffset = Math.max(3, Math.round(shortEdge * 0.004));
+        const badgeFontSize = Math.max(11, Math.round(shortEdge * 0.018));
+        const badgePadding = Math.max(3, Math.round(badgeFontSize * 0.3));
+        const badge = new Konva.Label({
+          x: minX + badgeOffset,
+          y: minY + badgeOffset,
+          listening: false,
+        });
+        badge.add(
+          new Konva.Tag({
+            fill: tertiary,
+            cornerRadius: 3,
+            stroke: haloColor,
+            strokeWidth: 1.5,
+            opacity: isSelected ? 1 : 0.95,
+            shadowColor: ANNOTATION_HALO_SHADOW,
+            shadowBlur: ANNOTATION_BADGE_SHADOW_BLUR,
+            shadowOpacity: ANNOTATION_BADGE_SHADOW_OPACITY,
+          })
+        );
+        badge.add(
+          new Konva.Text({
+            text: model.label,
+            fontSize: badgeFontSize,
+            fontStyle: "600",
+            fill: "#ffffff",
+            padding: badgePadding,
+            listening: false,
+          })
+        );
+        shapeGroup.add(badge);
+      }
+
+      return { minX, maxX, minY, maxY };
+    }
+
+    const bbox = buildAreaShape(livePts);
+
+    // Per-vertex drag handles. Area path points carry no per-point id
+    // (unlike eye_path), so each handle patches the points array by
+    // its positional INDEX. The stage's mousedown handler bails on
+    // `e.target !== stage`, so grabbing a handle never starts a new
+    // area draw — empty-canvas presses still do.
+    if (editable) {
+      const handleR = Math.max(6, Math.round(shortEdge * 0.011));
+      const handleStroke = Math.max(2, Math.round(shortEdge * 0.003));
+      for (let i = 0; i < livePts.length; i++) {
+        const pointIndex = i;
+        const handle = new Konva.Circle({
+          x: livePts[i].x,
+          y: livePts[i].y,
+          radius: handleR,
+          fill: "#ffffff",
+          stroke: tertiary,
+          strokeWidth: handleStroke,
+          opacity: 0.95,
+          draggable: true,
+          name: `area-path-handle-${model.id}-${pointIndex}`,
           shadowColor: ANNOTATION_HALO_SHADOW,
           shadowBlur: ANNOTATION_BADGE_SHADOW_BLUR,
           shadowOpacity: ANNOTATION_BADGE_SHADOW_OPACITY,
-        })
-      );
-      badge.add(
-        new Konva.Text({
-          text: model.label,
-          fontSize: badgeFontSize,
-          fontStyle: "600",
-          fill: "#ffffff",
-          padding: badgePadding,
-          listening: false,
-        })
-      );
-      layer.add(badge);
+          dragBoundFunc(pos) {
+            const stageW = stage.width();
+            const stageH = stage.height();
+            return {
+              x: Math.max(0, Math.min(stageW, pos.x)),
+              y: Math.max(0, Math.min(stageH, pos.y)),
+            };
+          },
+        });
+
+        handle.on("mouseenter", () => {
+          container.style.cursor = "move";
+        });
+        handle.on("mouseleave", () => {
+          applyContainerCursor();
+        });
+
+        // Live redraw of the shape group from a locally-patched copy
+        // so the outline follows the dragged vertex in real time.
+        handle.on("dragmove", () => {
+          const updated = livePts.map((pt, j) =>
+            j === pointIndex ? { x: handle.x(), y: handle.y() } : pt
+          );
+          buildAreaShape(updated);
+          annotationsLayer.batchDraw();
+        });
+
+        handle.on("dragend", () => {
+          const curW = stage.width();
+          const curH = stage.height();
+          if (curW === 0 || curH === 0) {
+            return;
+          }
+          const newXPct = Math.max(
+            0,
+            Math.min(100, (handle.x() / curW) * 100)
+          );
+          const newYPct = Math.max(
+            0,
+            Math.min(100, (handle.y() / curH) * 100)
+          );
+          livePts[pointIndex] = { x: handle.x(), y: handle.y() };
+          buildAreaShape(livePts);
+          annotationsLayer.batchDraw();
+          // The caller updates the closure state array (so the next
+          // sync sees identical values and skips a redundant render)
+          // before forwarding to the modal.
+          onMovePoint?.(pointIndex, newXPct, newYPct);
+        });
+
+        layer.add(handle);
+      }
     }
 
-    // Ignore unused params from the destructure so linters stay quiet
-    // — they're part of the shared signature with the ellipse path
-    // and may be wired up later for transform handles.
-    void stageWidth;
-    void stageHeight;
-    void modeMatches;
-    return { minX, maxX, minY, maxY };
+    return bbox;
   }
 
   // Attention-pull renderer. Each marker is a soft ellipse:
@@ -1237,6 +1345,22 @@ export async function createAnnotationStage({
           shortEdge,
           onSelect: () => onSelectAttentionPull?.(pull.id),
           modeMatches: state.visualMode === "attention_pull",
+          editEnabled: state.attentionPullEditEnabled,
+          onMovePoint: (index, xPct, yPct) => {
+            // Patch the closure state first so the modal's echo back
+            // through update() compares equal and skips a re-render.
+            state.attentionPulls = state.attentionPulls.map((p) =>
+              p.id === pull.id
+                ? {
+                    ...p,
+                    points: (p.points ?? []).map((pt, i) =>
+                      i === index ? { ...pt, xPct, yPct } : pt
+                    ),
+                  }
+                : p
+            );
+            onMoveAttentionPullPoint?.(pull.id, index, xPct, yPct);
+          },
           isRetracing: pull.id === state.retracingAttentionPullId,
         });
         continue;
@@ -1580,6 +1704,20 @@ export async function createAnnotationStage({
           shortEdge,
           onSelect: () => onSelectStrongArea?.(area.id),
           modeMatches: state.visualMode === "strong_area",
+          editEnabled: state.strongAreaEditEnabled,
+          onMovePoint: (index, xPct, yPct) => {
+            state.strongAreas = state.strongAreas.map((p) =>
+              p.id === area.id
+                ? {
+                    ...p,
+                    points: (p.points ?? []).map((pt, i) =>
+                      i === index ? { ...pt, xPct, yPct } : pt
+                    ),
+                  }
+                : p
+            );
+            onMoveStrongAreaPoint?.(area.id, index, xPct, yPct);
+          },
           isRetracing: area.id === state.retracingStrongAreaId,
         });
         continue;

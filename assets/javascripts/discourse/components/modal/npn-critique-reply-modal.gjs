@@ -6360,6 +6360,66 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
+  // Per-vertex edit (path-shape only). Fired by the Konva stage when
+  // the user drags a waypoint handle of a selected area path. Area
+  // points carry no per-point identity (unlike eye_path), so the
+  // target vertex is addressed by array INDEX. The stage already
+  // patched its own closure copy before calling back, so the next
+  // sync compares equal and skips a redundant re-render.
+  @action
+  moveAttentionPullPoint(id, index, xPct, yPct) {
+    if (!id || index == null) {
+      return;
+    }
+    this.attentionPulls = this.attentionPulls.map((p) =>
+      p.id === id && p.shape === "path"
+        ? {
+            ...p,
+            points: (p.points ?? []).map((pt, i) =>
+              i === index ? { ...pt, xPct, yPct } : pt
+            ),
+          }
+        : p
+    );
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] move-attention-pull-point", {
+        topicId: this.topic?.id,
+        id,
+        index,
+        xPct,
+        yPct,
+      });
+    }
+  }
+
+  @action
+  moveStrongAreaPoint(id, index, xPct, yPct) {
+    if (!id || index == null) {
+      return;
+    }
+    this.strongAreas = this.strongAreas.map((p) =>
+      p.id === id && p.shape === "path"
+        ? {
+            ...p,
+            points: (p.points ?? []).map((pt, i) =>
+              i === index ? { ...pt, xPct, yPct } : pt
+            ),
+          }
+        : p
+    );
+    if (this.siteSettings.npn_critique_reply_debug_enabled) {
+      // eslint-disable-next-line no-console
+      console.info("[npn-critique-reply] move-strong-area-point", {
+        topicId: this.topic?.id,
+        id,
+        index,
+        xPct,
+        yPct,
+      });
+    }
+  }
+
   // Twin of addAttentionPull — same shape, different kind/label
   // prefix/starter copy.
   @action
@@ -9632,6 +9692,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onAddAttentionPull={{this.addAttentionPull}}
                 @onAddAttentionPullPath={{this.addAttentionPullPath}}
                 @onRetraceAttentionPullPath={{this.retraceAttentionPullPath}}
+                @onMoveAttentionPullPoint={{this.moveAttentionPullPoint}}
                 @onSelectAttentionPull={{this.selectAttentionPull}}
                 @onUpdateAttentionPull={{this.updateAttentionPull}}
                 @pendingAttentionPullPopover={{this.pendingAttentionPullPopover}}
@@ -9648,6 +9709,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onAddStrongArea={{this.addStrongArea}}
                 @onAddStrongAreaPath={{this.addStrongAreaPath}}
                 @onRetraceStrongAreaPath={{this.retraceStrongAreaPath}}
+                @onMoveStrongAreaPoint={{this.moveStrongAreaPoint}}
                 @onSelectStrongArea={{this.selectStrongArea}}
                 @onUpdateStrongArea={{this.updateStrongArea}}
                 @pendingStrongAreaPopover={{this.pendingStrongAreaPopover}}

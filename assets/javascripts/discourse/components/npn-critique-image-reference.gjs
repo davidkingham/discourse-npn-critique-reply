@@ -221,6 +221,8 @@ export default class NpnCritiqueImageReference extends Component {
           this.args.onAddAttentionPullPath?.(points),
         onRetraceAttentionPullPath: (id, points) =>
           this.args.onRetraceAttentionPullPath?.(id, points),
+        onMoveAttentionPullPoint: (id, index, xPct, yPct) =>
+          this.args.onMoveAttentionPullPoint?.(id, index, xPct, yPct),
         onSelectAttentionPull: (id) =>
           this.args.onSelectAttentionPull?.(id),
         onUpdateAttentionPull: (id, xPct, yPct, widthPct, heightPct) =>
@@ -241,6 +243,8 @@ export default class NpnCritiqueImageReference extends Component {
           this.args.onAddStrongAreaPath?.(points),
         onRetraceStrongAreaPath: (id, points) =>
           this.args.onRetraceStrongAreaPath?.(id, points),
+        onMoveStrongAreaPoint: (id, index, xPct, yPct) =>
+          this.args.onMoveStrongAreaPoint?.(id, index, xPct, yPct),
         onSelectStrongArea: (id) => this.args.onSelectStrongArea?.(id),
         onUpdateStrongArea: (id, xPct, yPct, widthPct, heightPct) =>
           this.args.onUpdateStrongArea?.(
