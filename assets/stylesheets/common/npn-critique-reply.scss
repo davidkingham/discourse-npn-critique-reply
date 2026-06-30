@@ -2792,7 +2792,13 @@
 
 .npn-critique-reply-modal__transform-menu {
   position: absolute;
-  top: calc(100% + 0.3em);
+  // Open UPWARD, above the trigger. The toolbar sits low in the
+  // scrolling left pane (only the pane's 2.5em bottom padding sits
+  // below it), so a downward menu was clipped almost immediately by
+  // the pane's `overflow-y: auto`. There's always room above — the
+  // reference image fills the space over the toolbar — and the
+  // toolbar's z-index keeps the menu above that image.
+  bottom: calc(100% + 0.3em);
   left: 0;
   z-index: 5;
   min-width: 15em;
