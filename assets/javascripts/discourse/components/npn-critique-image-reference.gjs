@@ -1085,14 +1085,6 @@ export default class NpnCritiqueImageReference extends Component {
                   }}</button>
                 <button
                   type="button"
-                  class="btn btn-default btn-small
-                    npn-critique-image-reference__note-popover-redraw"
-                  {{on "click" @onRedrawPendingDirectionArrowPopover}}
-                >{{i18n
-                    "npn_critique_reply.visual_notes.popover_redraw"
-                  }}</button>
-                <button
-                  type="button"
                   class="btn btn-flat btn-small
                     npn-critique-image-reference__note-popover-cancel"
                   {{on "click" @onCancelPendingDirectionArrowPopover}}
@@ -1155,14 +1147,6 @@ export default class NpnCritiqueImageReference extends Component {
                   {{on "click" @onSkipPendingRelationshipArrowPopover}}
                 >{{i18n
                     "npn_critique_reply.visual_notes.popover_skip"
-                  }}</button>
-                <button
-                  type="button"
-                  class="btn btn-default btn-small
-                    npn-critique-image-reference__note-popover-redraw"
-                  {{on "click" @onRedrawPendingRelationshipArrowPopover}}
-                >{{i18n
-                    "npn_critique_reply.visual_notes.popover_redraw"
                   }}</button>
                 <button
                   type="button"

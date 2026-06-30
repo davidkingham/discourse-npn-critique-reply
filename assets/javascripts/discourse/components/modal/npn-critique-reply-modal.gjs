@@ -6795,11 +6795,6 @@ export default class NpnCritiqueReplyModal extends Component {
     this.pendingDirectionArrowPopoverText = "";
   }
 
-  @action
-  redrawPendingDirectionArrowPopover() {
-    this.cancelPendingDirectionArrowPopover();
-  }
-
   // Skip: keep the arrow but drop its label, so NO [D#] badge or text
   // reference is added. Lets the critic place purely-visual arrows and
   // create several in a row without labelling each. Distinct from
@@ -6977,11 +6972,6 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     this.pendingRelationshipArrowPopover = null;
     this.pendingRelationshipArrowPopoverText = "";
-  }
-
-  @action
-  redrawPendingRelationshipArrowPopover() {
-    this.cancelPendingRelationshipArrowPopover();
   }
 
   // Skip: keep the relationship arrow but drop its label (no [R#]
@@ -9793,7 +9783,6 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onConfirmPendingDirectionArrowPopover={{this.confirmPendingDirectionArrowPopover}}
                 @onCancelPendingDirectionArrowPopover={{this.cancelPendingDirectionArrowPopover}}
                 @onSkipPendingDirectionArrowPopover={{this.skipPendingDirectionArrowPopover}}
-                @onRedrawPendingDirectionArrowPopover={{this.redrawPendingDirectionArrowPopover}}
                 @pendingDirectionArrowPopoverCanConfirm={{this.pendingDirectionArrowPopoverCanConfirm}}
                 @relationshipArrows={{this.relationshipArrows}}
                 @selectedRelationshipArrowId={{this.selectedRelationshipArrowId}}
@@ -9806,7 +9795,6 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onConfirmPendingRelationshipArrowPopover={{this.confirmPendingRelationshipArrowPopover}}
                 @onCancelPendingRelationshipArrowPopover={{this.cancelPendingRelationshipArrowPopover}}
                 @onSkipPendingRelationshipArrowPopover={{this.skipPendingRelationshipArrowPopover}}
-                @onRedrawPendingRelationshipArrowPopover={{this.redrawPendingRelationshipArrowPopover}}
                 @pendingRelationshipArrowPopoverCanConfirm={{this.pendingRelationshipArrowPopoverCanConfirm}}
                 @cropAspectRatio={{this.cropAspectRatio}}
                 @pendingPin={{this.pendingPin}}
