@@ -2293,20 +2293,21 @@ export default class NpnCritiqueReplyModal extends Component {
     return i18n("npn_critique_reply.modal.writing_context.overall");
   }
 
-  // Mark count shown on the notes tab — the SELECTED image's annotation
-  // count (annotationCount tracks the active image). 0 → no badge.
+  // Mark count shown on the notes tab — the SELECTED image's TAGGED
+  // annotation count (unlabelled Skip marks don't bump the badge).
+  // 0 → no badge.
   get activeImageMarkCount() {
-    return this.annotationCount;
+    return this.taggedAnnotationCount;
   }
 
   // Tooltip + accessible label that disambiguates the numeric badge on
   // the Image Notes tab ("1 visual annotation" / "2 visual annotations"),
   // so the bare "1" can't be misread as the image number or note count.
-  // Counting rule: visual annotations on the currently selected image
-  // (same value as the badge); image-note text is NOT counted.
+  // Counting rule: tagged visual annotations on the currently selected
+  // image (same value as the badge); image-note text is NOT counted.
   get imageNotesCountLabel() {
     return i18n("npn_critique_reply.modal.writing_context.annotation_count", {
-      count: this.annotationCount,
+      count: this.taggedAnnotationCount,
     });
   }
 
@@ -2539,6 +2540,10 @@ export default class NpnCritiqueReplyModal extends Component {
     return label ? `[${label}]` : "[Crop]";
   }
 
+  // Full count of marks on the active image — every shape, labelled or
+  // not. Drives the a11y list summary so it matches the list below it
+  // (which renders every mark, including unlabelled ones so they stay
+  // selectable / removable for screen-reader users).
   get annotationCount() {
     return (
       this.notes.length +
@@ -2548,6 +2553,25 @@ export default class NpnCritiqueReplyModal extends Component {
       this.strongAreas.length +
       this.directionArrows.length +
       this.relationshipArrows.length
+    );
+  }
+
+  // Count shown on the Visual Notes tab badge. Counts only TAGGED marks
+  // — those carrying a label badge ([N]/[Crop]/[A#]/[S#]/[E#]/[D#]/
+  // [R#]). Eye paths and arrows can be left unlabelled via Skip (label
+  // ""), and a purely-visual mark with no tag must not bump the badge.
+  // Pins, crop, attention pulls, and strong areas are always labelled,
+  // so they count as-is.
+  get taggedAnnotationCount() {
+    return (
+      this.notes.length +
+      (this.crop ? 1 : 0) +
+      this.eyePaths.filter((p) => (p.points?.length ?? 0) > 0 && p.label)
+        .length +
+      this.attentionPulls.length +
+      this.strongAreas.length +
+      this.directionArrows.filter((a) => a.label).length +
+      this.relationshipArrows.filter((a) => a.label).length
     );
   }
 
