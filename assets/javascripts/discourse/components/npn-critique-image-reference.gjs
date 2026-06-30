@@ -83,6 +83,12 @@ export default class NpnCritiqueImageReference extends Component {
     return this._naturalWidth > 0 && this._naturalHeight > 0;
   }
 
+  // Caption shown under the image in the zoom lightbox: the submission
+  // title when available, else the descriptive alt text.
+  get lightboxTitle() {
+    return this.args.imageTitle ?? this.altText;
+  }
+
   get pins() {
     return Array.isArray(this.args.pins) ? this.args.pins : [];
   }
@@ -168,10 +174,12 @@ export default class NpnCritiqueImageReference extends Component {
       return;
     }
     this._wireLightboxGuards();
-    await lightbox(
-      anchor.closest(".npn-critique-image-reference__frame"),
-      this.siteSettings
-    );
+    // NOTE: do NOT pass siteSettings (or any large object) as the 2nd
+    // arg — `lightbox()` treats it as `additionalData` and copies every
+    // key onto each slide, so `siteSettings.title` ("Discourse") would
+    // clobber the caption title. The lib reads siteSettings it needs
+    // from its own helperContext.
+    await lightbox(anchor.closest(".npn-critique-image-reference__frame"));
     if (this._destroyed) {
       return;
     }
@@ -748,19 +756,16 @@ export default class NpnCritiqueImageReference extends Component {
           {{/if}}
 
           {{! Hidden anchor PhotoSwipe reads (href = full-res source,
-              dims drive zoom-to-100%). Triggered programmatically by
-              `openDetailLightbox`; visually hidden via CSS. No `title`
-              on purpose: a title makes the shared lightbox render a
-              caption AND reserve 75px of bottom padding for it
-              (paddingFn) — leaving empty space below the image and the
-              stray "Discourse" caption. Without it the image just
-              centers with minimal symmetric padding. }}
+              dims drive zoom-to-100%, title becomes the caption).
+              Triggered programmatically by `openDetailLightbox`;
+              visually hidden via CSS. }}
           <a
             class="lightbox npn-critique-image-reference__lightbox-anchor"
             href={{@imageUrl}}
             data-large-src={{@imageUrl}}
             data-target-width={{this._naturalWidth}}
             data-target-height={{this._naturalHeight}}
+            title={{this.lightboxTitle}}
             rel="nofollow ugc noopener"
             aria-hidden="true"
             tabindex="-1"
