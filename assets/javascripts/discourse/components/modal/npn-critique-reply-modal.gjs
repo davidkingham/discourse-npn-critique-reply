@@ -9436,6 +9436,29 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedStrongAreaId = null;
     this.selectedDirectionArrowId = null;
     this.selectedRelationshipArrowId = null;
+    // Dismiss any open describe-popover (the small text input for
+    // labelling a pin / area / arrow / eye path). Without this, the
+    // popover stays floating over a now-empty workspace after Discard.
+    this.pendingPin = null;
+    this.pendingPinNoteText = "";
+    this.pendingAttentionPullPopover = null;
+    this.pendingAttentionPullPopoverText = "";
+    this.pendingStrongAreaPopover = null;
+    this.pendingStrongAreaPopoverText = "";
+    this.pendingEyePathPopover = null;
+    this.pendingEyePathPopoverText = "";
+    this.pendingDirectionArrowPopover = null;
+    this.pendingDirectionArrowPopoverText = "";
+    this.pendingRelationshipArrowPopover = null;
+    this.pendingRelationshipArrowPopoverText = "";
+    this.pendingCropPopover = null;
+    this.pendingCropPopoverText = "";
+    // Rotate/flip is workspace state too — clear every image's
+    // transform and drop the rebaked bitmaps so the displayed image
+    // (effectiveImageUrl) falls back to the original orientation.
+    this._imageTransform = { ...IDENTITY_TRANSFORM };
+    this._imageTransformsByImageIndex.clear();
+    this._transformedImageUrls = new Map();
     // Processing example is part of the workspace state too — wipe it
     // here so Discard draft returns the modal to a true clean-start,
     // not "everything except the uploaded example".
