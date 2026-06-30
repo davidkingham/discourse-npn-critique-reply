@@ -515,6 +515,15 @@ export default class NpnCritiqueReplyModal extends Component {
   // current path session. Reset on each entry into eye_path mode so
   // each new path triggers exactly one description prompt.
   _eyePathStarterInserted = false;
+  // Create vs edit sub-state of eye_path mode. True = the next
+  // empty-canvas gesture draws a new path (and existing paths are
+  // inert). False = the path is finished — its waypoints become
+  // draggable / selectable and no new path is started. Committing a
+  // path flips this to false (one path per gesture, per user
+  // request); the explicit "New eye path" action flips it back to
+  // true. Entry into the tool sets it from whether a path already
+  // exists. Tracked so the Konva stage re-renders when it changes.
+  @tracked eyePathCreating = true;
 
   // Attention Pull state. `attentionPulls` is an array of
   // `{ id, xPct, yPct, widthPct, heightPct }`. `selectedAttentionPullId`
@@ -4493,6 +4502,7 @@ export default class NpnCritiqueReplyModal extends Component {
     // Transient state always resets on image swap.
     this._activeEyePathId = null;
     this._eyePathStarterInserted = false;
+    this.eyePathCreating = true;
     this.selectedPinNumber = null;
     this.cropSelected = false;
     this.selectedEyePathId = null;
@@ -5164,6 +5174,10 @@ export default class NpnCritiqueReplyModal extends Component {
     if (mode === "eye_path" && previousMode !== "eye_path") {
       this._activeEyePathId = null;
       this._eyePathStarterInserted = false;
+      // Enter ready-to-draw only when there's nothing to edit yet.
+      // If a path already exists, start in the edit sub-state so the
+      // user can reshape it; drawing another requires "New eye path".
+      this.eyePathCreating = !this.hasEyePath;
     } else if (previousMode === "eye_path" && mode !== "eye_path") {
       this._activeEyePathId = null;
     }
@@ -5485,6 +5499,11 @@ export default class NpnCritiqueReplyModal extends Component {
     // attaches noteText to the right shape.
     this._activeEyePathId = null;
     this.selectedEyePathId = newId;
+    // One path per gesture: leave the create sub-state so the path is
+    // finished. Its waypoints become draggable and the curve becomes
+    // selectable; the next empty-canvas press no longer spawns a
+    // second path. Drawing another requires the "New eye path" action.
+    this.eyePathCreating = false;
 
     // Same description popover trigger the click flow uses — opens
     // at the end of the just-drawn path so the user can label it.
@@ -5644,6 +5663,9 @@ export default class NpnCritiqueReplyModal extends Component {
       if (this._activeEyePathId === targetId) {
         this._activeEyePathId = null;
       }
+      if (this.eyePaths.length === 0) {
+        this.eyePathCreating = true;
+      }
       // Popover only ever anchored to the path currently being built;
       // if we just removed THAT path, clear the popover too.
       this.pendingEyePathPopover = null;
@@ -5681,6 +5703,9 @@ export default class NpnCritiqueReplyModal extends Component {
       this._activeEyePathId = null;
       this._eyePathStarterInserted = false;
     }
+    if (this.eyePaths.length === 0) {
+      this.eyePathCreating = true;
+    }
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] remove-eye-path-by-id", {
@@ -5707,6 +5732,11 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this._activeEyePathId === targetId) {
       this._activeEyePathId = null;
       this._eyePathStarterInserted = false;
+    }
+    // If that was the last path, re-arm create so the user can draw
+    // again without first pressing "New eye path".
+    if (this.eyePaths.length === 0) {
+      this.eyePathCreating = true;
     }
     this.pendingEyePathPopover = null;
     this.pendingEyePathPopoverText = "";
@@ -5778,6 +5808,9 @@ export default class NpnCritiqueReplyModal extends Component {
     this._activeEyePathId = null;
     this._eyePathStarterInserted = false;
     this.selectedEyePathId = null;
+    // Re-arm the create sub-state — the next empty-canvas gesture
+    // draws a fresh path again.
+    this.eyePathCreating = true;
     if (this.pendingEyePathPopover) {
       this.pendingEyePathPopover = null;
       this.pendingEyePathPopoverText = "";
@@ -5809,6 +5842,9 @@ export default class NpnCritiqueReplyModal extends Component {
     this.selectedEyePathId = null;
     this._activeEyePathId = null;
     this._eyePathStarterInserted = false;
+    // Nothing left to edit — re-arm the create sub-state so the next
+    // gesture draws again.
+    this.eyePathCreating = true;
     this.pendingEyePathPopover = null;
     this.pendingEyePathPopoverText = "";
     // Textarea text stays; the critic decides if they want to edit
@@ -6899,6 +6935,11 @@ export default class NpnCritiqueReplyModal extends Component {
     // on to the next.
     this._activeEyePathId = null;
     this._eyePathStarterInserted = false;
+    // The path is finished — leave the create sub-state so its
+    // waypoints become editable and no further path is auto-started.
+    // (Stroke already set this on commit; this also covers Points
+    // mode, where the path is only finalised on popover confirm.)
+    this.eyePathCreating = false;
   }
 
   @action
@@ -6917,6 +6958,9 @@ export default class NpnCritiqueReplyModal extends Component {
     this.pendingEyePathPopoverText = "";
     this._activeEyePathId = null;
     this._eyePathStarterInserted = false;
+    // The just-drawn path was discarded — re-arm the create sub-state
+    // so the next gesture (or the Redraw button) draws a fresh path.
+    this.eyePathCreating = true;
   }
 
   @action
@@ -9551,6 +9595,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @pendingCropPopoverCanConfirm={{this.pendingCropPopoverCanConfirm}}
                 @eyePaths={{this.eyePaths}}
                 @selectedEyePathId={{this.selectedEyePathId}}
+                @eyePathCreating={{this.eyePathCreating}}
                 @onAddEyePathPoint={{this.addEyePathPoint}}
                 @onCommitEyePath={{this.commitEyePath}}
                 @onSelectEyePath={{this.selectEyePath}}

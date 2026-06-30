@@ -192,6 +192,7 @@ export default class NpnCritiqueImageReference extends Component {
         visualMode: this.args.visualMode,
         areaShapeMode: this.args.areaShapeMode,
         eyePathInteractionMode: this.args.eyePathInteractionMode,
+        eyePathCreating: this.args.eyePathCreating,
         aspectRatio: this.args.cropAspectRatio,
         pinMoveEnabled: this.args.pinMoveEnabled,
         onAddPin: (xPct, yPct) => this.args.onImageClick?.(xPct, yPct),
@@ -337,6 +338,7 @@ export default class NpnCritiqueImageReference extends Component {
       visualMode: this.args.visualMode,
       areaShapeMode: this.args.areaShapeMode,
       eyePathInteractionMode: this.args.eyePathInteractionMode,
+      eyePathCreating: this.args.eyePathCreating,
       aspectRatio: this.args.cropAspectRatio,
       pinMoveEnabled: this.args.pinMoveEnabled,
       attentionPullEditEnabled: this.args.attentionPullEditEnabled,
@@ -644,6 +646,7 @@ export default class NpnCritiqueImageReference extends Component {
                 @visualMode
                 @areaShapeMode
                 @eyePathInteractionMode
+                @eyePathCreating
                 @crop
                 @cropSelected
                 @cropAspectRatio

@@ -547,6 +547,16 @@ export async function createAnnotationStage({
   // or "points" (click-to-add ordered stops). In stroke mode a
   // short tap is ignored; in points mode a drag is ignored.
   eyePathInteractionMode = "stroke",
+  // Whether eye_path mode is in CREATE sub-state (true) or EDIT
+  // sub-state (false). In create, empty-canvas gestures begin a new
+  // path and existing paths' hit-lines / waypoint handles are inert.
+  // In edit, no new path is started — the curve hit-zone and handles
+  // become live so the user can select / reshape the path they just
+  // drew. The modal flips this to false the moment a path is
+  // committed (one path per gesture), and back to true only on the
+  // explicit "New eye path" action. Defaults true so a fresh tool
+  // entry with no paths starts ready to draw.
+  eyePathCreating = true,
   // Retrace targets: when set, the next path-shape drag in the
   // matching tool mode REPLACES that marker's points instead of
   // creating a new marker. Cleared on commit, cancel, or any of the
@@ -664,9 +674,16 @@ export async function createAnnotationStage({
     strongAreaEditEnabled,
     areaShapeMode,
     eyePathInteractionMode,
+    eyePathCreating,
     retracingAttentionPullId,
     retracingStrongAreaId,
   };
+
+  // True only while eye_path mode is actively in its create sub-state.
+  // Gates the three creation-vs-edit decisions below (new-path
+  // mousedown, curve hit-line listening, waypoint handle listening).
+  const eyePathCreatingNow = () =>
+    state.visualMode === "eye_path" && state.eyePathCreating;
 
   // Drag-to-create attention-pull state — set on mousedown over empty
   // stage in attention_pull mode, cleared on mouseup.
@@ -814,7 +831,9 @@ export async function createAnnotationStage({
     } else if (state.visualMode === "crop_suggestion" && !state.crop) {
       container.style.cursor = "crosshair";
     } else if (state.visualMode === "eye_path") {
-      container.style.cursor = "crosshair";
+      // Crosshair only while drawing; in the edit sub-state the path is
+      // finished and the canvas behaves like a select/reshape surface.
+      container.style.cursor = state.eyePathCreating ? "crosshair" : "default";
     } else if (state.visualMode === "attention_pull") {
       container.style.cursor = "crosshair";
     } else if (state.visualMode === "strong_area") {
@@ -2091,7 +2110,10 @@ export async function createAnnotationStage({
         // stage's mousedown/up handlers (which begin a stroke drag or
         // add a Points-mode point). Outside eye_path mode the hit-
         // zone is the primary way to click-to-select an existing path.
-        const hitLineListening = state.visualMode !== "eye_path";
+        // Once the path is committed (edit sub-state) the hit-zone goes
+        // live again even within eye_path mode so the user can reselect
+        // it — only the create sub-state suppresses selection.
+        const hitLineListening = !eyePathCreatingNow();
         const hitLine = new Konva.Line({
           points: flat,
           stroke: "black",
@@ -2415,13 +2437,15 @@ export async function createAnnotationStage({
     // where the handles ARE; these are the underlying hit areas.
     // Handles are added AFTER the decorations group so they sit on
     // top in the hit canvas.
-    // Handles are inert during eye_path creation mode for the same
+    // Handles are inert during eye_path CREATE sub-state for the same
     // reason the curve hit-line is — a click/drag starting near an
     // existing waypoint should begin a new path or point, not get
-    // captured by Konva's drag-to-reshape. Reshape stays available
-    // whenever the user is in any non-eye_path mode.
+    // captured by Konva's drag-to-reshape. Once the path is committed
+    // (edit sub-state) the handles go live so the user can reshape the
+    // path they just drew without leaving the tool. Reshape also stays
+    // available in any non-eye_path mode.
     const handleHitR = Math.max(10, Math.round(shortEdge * 0.014));
-    const handlesListening = state.visualMode !== "eye_path";
+    const handlesListening = !eyePathCreatingNow();
     for (let i = 0; i < livePts.length; i++) {
       const p = livePts[i];
       const pointNumber = path.points[i].number ?? i + 1;
@@ -3919,7 +3943,11 @@ export async function createAnnotationStage({
       relationshipArrowDrag = { startX: pos.x, startY: pos.y };
       return;
     }
-    if (state.visualMode === "eye_path") {
+    // Only begin a new path drag in the create sub-state. After a path
+    // is committed eye_path mode stays active for editing, but a fresh
+    // empty-canvas press must NOT spawn a second path — it falls
+    // through so the handles / hit-line (now listening) can take it.
+    if (state.visualMode === "eye_path" && state.eyePathCreating) {
       eyePathDrag = {
         startX: pos.x,
         startY: pos.y,
@@ -4337,6 +4365,7 @@ export async function createAnnotationStage({
       strongAreaEditEnabled,
       areaShapeMode,
       eyePathInteractionMode,
+      eyePathCreating,
       retracingAttentionPullId,
       retracingStrongAreaId,
     } = {}) {
@@ -4458,6 +4487,25 @@ export async function createAnnotationStage({
         // accidentally commit a stroke after switching to points
         // mid-press.
         if (eyePathDrag) {
+          eyePathDrag = null;
+          clearPreview();
+        }
+      }
+      if (
+        eyePathCreating !== undefined &&
+        eyePathCreating !== state.eyePathCreating
+      ) {
+        state.eyePathCreating = eyePathCreating;
+        // Cursor reflects create (crosshair) vs edit (default).
+        applyContainerCursor();
+        // Existing paths' hit-line + handle `listening`/`draggable`
+        // flags depend on this sub-state — re-render so they flip.
+        if (Array.isArray(state.eyePaths) && state.eyePaths.length > 0) {
+          eyePathChanged = true;
+        }
+        // Leaving the create sub-state mid-press must not commit a
+        // stray stroke.
+        if (!eyePathCreating && eyePathDrag) {
           eyePathDrag = null;
           clearPreview();
         }
