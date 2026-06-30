@@ -8411,6 +8411,15 @@ export default class NpnCritiqueReplyModal extends Component {
       // Multi-image picker — include the index so an autosave fires
       // when the critic just switches images without other edits.
       this._selectedImageIndex,
+      // Active image's rotate/flip. Without this, rotating/flipping an
+      // image that has no annotations changes nothing the signature
+      // watches, so no autosave fires and the orientation is lost on
+      // reopen. (Per-image transforms for OTHER images only change via
+      // the active one, and switching images already bumps the index
+      // above.)
+      `${this._imageTransform?.rotation ?? 0}:${
+        this._imageTransform?.flipH ? 1 : 0
+      }:${this._imageTransform?.flipV ? 1 : 0}`,
       this.notes.length,
       this.notes.map((n) => `${n.number}:${n.xPct}:${n.yPct}`).join(","),
       this.crop
