@@ -42,6 +42,9 @@ register_svg_icon "arrows-left-right"
 # the Larger Image layout.
 register_svg_icon "up-right-and-down-left-from-center"
 register_svg_icon "down-left-and-up-right-to-center"
+# "Focus on Image" toggle uses a panel-layout icon (two columns) to
+# signal the two-pane → image-only layout change.
+register_svg_icon "table-columns"
 # Rotate / Flip transform tools. The Rotate toolbar button uses
 # `rotate-right`; its menu items use `rotate-right`, `rotate-left`,
 # and `arrow-rotate-left` (Reset orientation). The Flip toolbar

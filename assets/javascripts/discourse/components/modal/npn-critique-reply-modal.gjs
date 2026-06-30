@@ -9812,7 +9812,7 @@ export default class NpnCritiqueReplyModal extends Component {
                     <DButton
                       class="btn-flat btn-small npn-critique-reply-modal__visual-focus-toggle"
                       @action={{this.toggleVisualFocusMode}}
-                      @icon="up-right-and-down-left-from-center"
+                      @icon="table-columns"
                       @label="npn_critique_reply.modal.visual_focus.enter"
                       @title="npn_critique_reply.modal.visual_focus.enter_title"
                       aria-pressed="false"
