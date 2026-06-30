@@ -2416,17 +2416,34 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // True when the workspace holds something worth persisting as a
   // draft: written text (overall or any image notes), any visual
-  // annotation on any image, or an attached processing example.
-  // Drives the autosave/flush emptiness guard so a workspace that's
-  // opened-and-closed with nothing done — or one whose draft was just
-  // discarded — never (re)creates an empty server draft that would
-  // leave the entry-point button stuck on "Resume Critique Draft".
+  // annotation on any image, an attached processing example, or a
+  // rotate/flip applied to any image. Drives the autosave/flush
+  // emptiness guard so a workspace that's opened-and-closed with
+  // nothing done — or one whose draft was just discarded — never
+  // (re)creates an empty server draft that would leave the entry-point
+  // button stuck on "Resume Critique Draft".
   get hasMeaningfulDraftContent() {
     return (
       this.hasUnsavedText ||
       this.hasAnyImageAnnotations ||
-      this.hasProcessingExample
+      this.hasProcessingExample ||
+      this.hasImageTransform
     );
+  }
+
+  // Whether any image carries a non-identity rotate/flip. The active
+  // image's transform lives in `_imageTransform`; other images' live
+  // in the per-image map (populated on image switch).
+  get hasImageTransform() {
+    if (!isIdentityTransform(this._imageTransform)) {
+      return true;
+    }
+    for (const t of this._imageTransformsByImageIndex.values()) {
+      if (!isIdentityTransform(t)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // Walk every image's stored annotation array of the given key
