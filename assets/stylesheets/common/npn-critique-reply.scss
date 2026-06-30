@@ -2457,30 +2457,25 @@
   &__img {
     display: block;
     max-width: 100%;
-    // Rebalanced ceiling so Optional Visual Notes is visible above
-    // the fold at 1920×1080 — the most common desktop resolution —
-    // without shrinking the image on taller monitors. Formula:
-    //
-    //   clamp(380px, calc(60vh - 4em), 660px)
-    //
-    // At 1080p the modal body has ~800px of usable content. With
-    // ~200px reserved below the image for the "Showing X" status
-    // line, Optional Visual Notes heading/helper, the tool button
-    // row, and the pane's padding-bottom, this cap lands the image
-    // at ~580px — large enough to feel like a workspace photo,
-    // small enough that the tool row sits well above the sticky
-    // footer.
-    //
-    // At 1440p (864px) the cap is ~660px. At 4K, also 660px. The
-    // 380px floor keeps the image legible on cramped laptops
-    // (1366×768, 1280×720). Visual Focus Mode overrides this with
-    // a higher cap when the writing pane is hidden.
+    // Ceiling sized so the first row of visual-note tools always
+    // clears the sticky footer. We size against the MEASURED pane
+    // height (`--npn-pane-px`, published by setupLeftPane), not `60vh`:
+    // the modal body is shorter than the viewport (it has its own
+    // header/footer chrome), so a viewport-based reserve overestimated
+    // the available space and let the image grow tall enough to clip
+    // the toolbar. The ~13em reserve covers the "Showing X" status
+    // line, the Optional Visual Notes heading + helper, the tool
+    // button row, and the pane's padding-bottom. Falls back to `60vh`
+    // for the first frame before the pane is measured; clamped to
+    // 660px on tall screens and a 340px floor on cramped ones (where
+    // the cue still surfaces anything that doesn't fit). Visual Focus
+    // Mode overrides this with its own higher cap.
     //
     // Konva alignment: the image element is what ResizeObserver
     // watches, so the stage tracks the new bounds automatically.
     // Annotation coordinates are percent-based, so they scale to
     // the resized image without drift.
-    max-height: clamp(380px, calc(60vh - 4em), 660px);
+    max-height: clamp(340px, calc(var(--npn-pane-px, 60vh) - 13em), 660px);
     width: auto;
     height: auto;
     margin: 0 auto;
