@@ -9901,7 +9901,6 @@ export default class NpnCritiqueReplyModal extends Component {
               <NpnCritiqueImageReference
                 @imageUrl={{this.effectiveImageUrl}}
                 @alt={{this.imageAlt}}
-                @imageTitle={{this.topic.title}}
                 @pins={{this.notes}}
                 @crop={{this.crop}}
                 @visualMode={{this.visualMode}}

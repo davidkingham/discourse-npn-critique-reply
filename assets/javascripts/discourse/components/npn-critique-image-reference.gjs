@@ -83,12 +83,6 @@ export default class NpnCritiqueImageReference extends Component {
     return this._naturalWidth > 0 && this._naturalHeight > 0;
   }
 
-  // Caption shown under the image in the zoom lightbox: the submission
-  // title when available, else the descriptive alt text.
-  get lightboxTitle() {
-    return this.args.imageTitle ?? this.altText;
-  }
-
   get pins() {
     return Array.isArray(this.args.pins) ? this.args.pins : [];
   }
@@ -756,16 +750,18 @@ export default class NpnCritiqueImageReference extends Component {
           {{/if}}
 
           {{! Hidden anchor PhotoSwipe reads (href = full-res source,
-              dims drive zoom-to-100%, title becomes the caption).
-              Triggered programmatically by `openDetailLightbox`;
-              visually hidden via CSS. }}
+              dims drive zoom-to-100%). Triggered programmatically by
+              `openDetailLightbox`; visually hidden via CSS. No `title`
+              on purpose: a title makes the shared lightbox render a
+              caption AND reserve 75px of bottom padding for it
+              (paddingFn). Without one there's no caption and the image
+              expands into that space (symmetric ~20px padding). }}
           <a
             class="lightbox npn-critique-image-reference__lightbox-anchor"
             href={{@imageUrl}}
             data-large-src={{@imageUrl}}
             data-target-width={{this._naturalWidth}}
             data-target-height={{this._naturalHeight}}
-            title={{this.lightboxTitle}}
             rel="nofollow ugc noopener"
             aria-hidden="true"
             tabindex="-1"
