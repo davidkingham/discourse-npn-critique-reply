@@ -2413,6 +2413,21 @@ export default class NpnCritiqueReplyModal extends Component {
     return false;
   }
 
+  // True when the workspace holds something worth persisting as a
+  // draft: written text (overall or any image notes), any visual
+  // annotation on any image, or an attached processing example.
+  // Drives the autosave/flush emptiness guard so a workspace that's
+  // opened-and-closed with nothing done — or one whose draft was just
+  // discarded — never (re)creates an empty server draft that would
+  // leave the entry-point button stuck on "Resume Critique Draft".
+  get hasMeaningfulDraftContent() {
+    return (
+      this.hasUnsavedText ||
+      this.hasAnyImageAnnotations ||
+      this.hasProcessingExample
+    );
+  }
+
   // Walk every image's stored annotation array of the given key
   // (notes / attentionPulls / strongAreas / etc.) and yield each
   // annotation in submission order. Used to compute label uniqueness
@@ -8379,6 +8394,16 @@ export default class NpnCritiqueReplyModal extends Component {
   // schema-aware helpers, so any geometry caps / id normalization
   // applied client-side mirrors the server's normalizer.
   _buildDraftPayload() {
+    // Emptiness guard: never persist a draft for a workspace with no
+    // text, annotations, or processing example. Returning null makes
+    // DraftAutosaver._flush skip the PUT (and skip the SAVED status /
+    // DRAFT_CHANGED broadcast), so opening-and-closing an untouched
+    // workspace — or closing right after a Discard — leaves no server
+    // record and the entry-point button stays on "Start a Critique".
+    if (!this.hasMeaningfulDraftContent) {
+      return null;
+    }
+
     // Snapshot the active image's edits into the per-image maps so the
     // serialized payload picks them up alongside every other image's
     // stored annotations + notes.
