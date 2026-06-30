@@ -2427,13 +2427,25 @@ body.npn-critique-reply-zoom-enabled .pswp__caption {
   // Hidden anchor that PhotoSwipe reads (href = full-res source). Kept
   // in the DOM and clickable-by-script, but never visible or focusable
   // — the visible affordance is `__zoom-button`, which triggers it.
+  // Uses the bulletproof visually-hidden pattern with `!important` on
+  // the out-of-flow properties so core `.lightbox` / `a` defaults can't
+  // pull it back into the flow and add empty space below the image.
   &__lightbox-anchor {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
     opacity: 0;
     pointer-events: none;
+
+    .meta {
+      display: none;
+    }
   }
 
   // In-flow IMG sized purely by max-width / max-height caps. With
