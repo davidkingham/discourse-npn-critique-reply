@@ -2799,7 +2799,11 @@
   // reference image fills the space over the toolbar — and the
   // toolbar's z-index keeps the menu above that image.
   bottom: calc(100% + 0.3em);
-  left: 0;
+  // Align to the trigger's RIGHT edge and grow leftward. Rotate/Flip
+  // sit at the toolbar's right end, so a left-aligned menu ran past
+  // the left pane's right edge and was clipped by its overflow; the
+  // pane is comfortably wider than the menu's 15em to the left.
+  right: 0;
   z-index: 5;
   min-width: 15em;
   padding: 0.35em 0;
