@@ -1019,8 +1019,9 @@ export async function createAnnotationStage({
   // stack the ellipse renderer uses (halo / fill / stroke) but with
   // Konva.Line(closed: true) instead of Konva.Ellipse. Label badge
   // anchors at the bounding box's top-left, matching the ellipse
-  // marker convention. Editing is select+remove only — no drag /
-  // transform — per spec ("Optional if straightforward").
+  // marker convention. When the marker is selected in its tool mode,
+  // per-vertex drag handles are mounted so the user can reshape the
+  // path; Retrace remains available for a full redraw.
   function renderAreaPath(layer, model, opts) {
     const {
       isSelected,
@@ -1031,10 +1032,6 @@ export async function createAnnotationStage({
       shortEdge,
       onSelect,
       modeMatches,
-      // When true, the marker is selected in its own tool mode and not
-      // suppressed by an open popover — per-vertex drag handles are
-      // mounted so the user can reshape the path after the fact.
-      editEnabled,
       // Fired on a handle dragend with (index, xPct, yPct). The caller
       // updates both the closure state array and the modal so the
       // edit survives the next sync.
@@ -1058,11 +1055,13 @@ export async function createAnnotationStage({
       return;
     }
 
-    // Per-vertex editing is offered only when the marker is selected,
-    // its tool mode is active, editing isn't suppressed (no open
-    // popover), and we're not mid-retrace. Mirrors the oval variant's
-    // `canEdit` gate.
-    const editable = isSelected && modeMatches && editEnabled;
+    // Per-vertex editing is offered whenever the marker is selected in
+    // its own tool mode (and not mid-retrace — handled by the early
+    // return above). Deliberately NOT gated on the note popover: the
+    // handles appear immediately on creation so the user can fine-tune
+    // the freshly-drawn shape while the description popover is still
+    // open, rather than having to dismiss it first.
+    const editable = isSelected && modeMatches;
 
     // Stroke / halo widths follow the same percent-of-short-edge
     // formulas as the ellipse variant so paths and ovals read at the
@@ -1345,7 +1344,6 @@ export async function createAnnotationStage({
           shortEdge,
           onSelect: () => onSelectAttentionPull?.(pull.id),
           modeMatches: state.visualMode === "attention_pull",
-          editEnabled: state.attentionPullEditEnabled,
           onMovePoint: (index, xPct, yPct) => {
             // Patch the closure state first so the modal's echo back
             // through update() compares equal and skips a re-render.
@@ -1704,7 +1702,6 @@ export async function createAnnotationStage({
           shortEdge,
           onSelect: () => onSelectStrongArea?.(area.id),
           modeMatches: state.visualMode === "strong_area",
-          editEnabled: state.strongAreaEditEnabled,
           onMovePoint: (index, xPct, yPct) => {
             state.strongAreas = state.strongAreas.map((p) =>
               p.id === area.id
