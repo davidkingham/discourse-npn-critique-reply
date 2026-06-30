@@ -10256,7 +10256,11 @@ export default class NpnCritiqueReplyModal extends Component {
                     class="npn-critique-reply-modal__visual-tools-content"
                   >
                 <div
-                  class="npn-critique-reply-modal__visual-notes-toolbar"
+                  class="npn-critique-reply-modal__visual-notes-toolbar
+                    {{if
+                      (or this._rotateMenuOpen this._flipMenuOpen)
+                      'is-transform-menu-open'
+                    }}"
                   role="toolbar"
                   aria-label={{i18n "npn_critique_reply.visual_notes.toolbar_label"}}
                 >
