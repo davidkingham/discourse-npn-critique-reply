@@ -907,6 +907,7 @@ export default class NpnCritiqueReplyModal extends Component {
       );
       this._flipMenuOutsideHandler = null;
     }
+    this._detachTransformMenuReposition();
     // Drop Photographer's Notes selection listener if it's still
     // attached (panel may be open at modal close).
     this.teardownPhotographersNotes();
@@ -4662,6 +4663,10 @@ export default class NpnCritiqueReplyModal extends Component {
 
   _openRotateMenu() {
     this._rotateMenuOpen = true;
+    this._attachTransformMenuReposition(
+      "npn-critique-reply-rotate-trigger",
+      "npn-critique-reply-rotate-menu"
+    );
     requestAnimationFrame(() => {
       if (this._destroyed || !this._rotateMenuOpen) {
         return;
@@ -4691,6 +4696,7 @@ export default class NpnCritiqueReplyModal extends Component {
 
   _closeRotateMenu() {
     this._rotateMenuOpen = false;
+    this._detachTransformMenuReposition();
     if (this._rotateMenuOutsideHandler) {
       document.removeEventListener(
         "mousedown",
@@ -4728,6 +4734,10 @@ export default class NpnCritiqueReplyModal extends Component {
 
   _openFlipMenu() {
     this._flipMenuOpen = true;
+    this._attachTransformMenuReposition(
+      "npn-critique-reply-flip-trigger",
+      "npn-critique-reply-flip-menu"
+    );
     requestAnimationFrame(() => {
       if (this._destroyed || !this._flipMenuOpen) {
         return;
@@ -4755,6 +4765,7 @@ export default class NpnCritiqueReplyModal extends Component {
 
   _closeFlipMenu() {
     this._flipMenuOpen = false;
+    this._detachTransformMenuReposition();
     if (this._flipMenuOutsideHandler) {
       document.removeEventListener(
         "mousedown",
@@ -4776,6 +4787,80 @@ export default class NpnCritiqueReplyModal extends Component {
       event.preventDefault();
       this._closeFlipMenu();
       document.getElementById("npn-critique-reply-flip-trigger")?.focus?.();
+    }
+  }
+
+  // Keep a transform dropdown inside the left pane's visible width.
+  //
+  // The menu opens UPWARD (CSS `bottom: 100%`) over the image, so the
+  // vertical axis is safe. Horizontally it's clamped here: the
+  // Rotate/Flip triggers wrap between the toolbar's right end and the
+  // next line's left edge, so a static left/right anchor clips on one
+  // side or the other against the pane's `overflow`. `position: fixed`
+  // can't escape that clip either — the toolbar's `container-type`
+  // captures fixed positioning, keeping the menu inside the clip — so
+  // instead we shift the (absolutely-positioned) menu just enough that
+  // its whole width stays within the pane's bounds, where nothing
+  // clips it. `did-insert` calls this; resize/scroll re-runs it.
+  @action
+  positionTransformMenu(key, menuEl) {
+    const triggerId =
+      key === "rotate"
+        ? "npn-critique-reply-rotate-trigger"
+        : "npn-critique-reply-flip-trigger";
+    this._clampTransformMenu(triggerId, menuEl);
+  }
+
+  _clampTransformMenu(triggerId, menuEl) {
+    const trigger = document.getElementById(triggerId);
+    const wrap = menuEl?.parentElement;
+    if (!trigger || !wrap) {
+      return;
+    }
+    const pad = 8;
+    // Reset to the natural left-aligned position before measuring.
+    menuEl.style.right = "auto";
+    menuEl.style.left = "0px";
+    const wrapRect = wrap.getBoundingClientRect();
+    const menuW = menuEl.offsetWidth;
+    // Clamp within the left pane (its overflow is what clips); fall back
+    // to the viewport if the pane can't be found.
+    const pane = menuEl.closest(".npn-critique-reply-modal__left-pane");
+    const bounds = pane
+      ? pane.getBoundingClientRect()
+      : { left: 0, right: window.innerWidth };
+    const minLeft = bounds.left + pad;
+    const maxLeft = bounds.right - pad - menuW;
+    // Desired = aligned to the trigger/wrap; clamp into [min, max].
+    let desiredLeft = wrapRect.left;
+    if (maxLeft >= minLeft) {
+      desiredLeft = Math.min(Math.max(desiredLeft, minLeft), maxLeft);
+    } else {
+      // Menu wider than the available width — pin to the left edge.
+      desiredLeft = minLeft;
+    }
+    // `left` is relative to the wrap (the abs-pos containing block).
+    menuEl.style.left = `${Math.round(desiredLeft - wrapRect.left)}px`;
+  }
+
+  _attachTransformMenuReposition(triggerId, menuId) {
+    this._detachTransformMenuReposition();
+    this._transformMenuReposition = () => {
+      const menuEl = document.getElementById(menuId);
+      if (menuEl) {
+        this._clampTransformMenu(triggerId, menuEl);
+      }
+    };
+    // Capture phase so the left pane's own scroll is caught too.
+    window.addEventListener("scroll", this._transformMenuReposition, true);
+    window.addEventListener("resize", this._transformMenuReposition);
+  }
+
+  _detachTransformMenuReposition() {
+    if (this._transformMenuReposition) {
+      window.removeEventListener("scroll", this._transformMenuReposition, true);
+      window.removeEventListener("resize", this._transformMenuReposition);
+      this._transformMenuReposition = null;
     }
   }
 
@@ -10282,6 +10367,7 @@ export default class NpnCritiqueReplyModal extends Component {
                         class="npn-critique-reply-modal__transform-menu"
                         role="menu"
                         {{on "keydown" this.onRotateMenuKeydown}}
+                        {{didInsert (fn this.positionTransformMenu "rotate")}}
                       >
                         <p class="npn-critique-reply-modal__transform-menu-hint">
                           {{i18n
@@ -10345,6 +10431,7 @@ export default class NpnCritiqueReplyModal extends Component {
                         class="npn-critique-reply-modal__transform-menu"
                         role="menu"
                         {{on "keydown" this.onFlipMenuKeydown}}
+                        {{didInsert (fn this.positionTransformMenu "flip")}}
                       >
                         <p class="npn-critique-reply-modal__transform-menu-hint">
                           {{i18n

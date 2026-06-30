@@ -2799,11 +2799,12 @@
   // reference image fills the space over the toolbar — and the
   // toolbar's z-index keeps the menu above that image.
   bottom: calc(100% + 0.3em);
-  // Align to the trigger's RIGHT edge and grow leftward. Rotate/Flip
-  // sit at the toolbar's right end, so a left-aligned menu ran past
-  // the left pane's right edge and was clipped by its overflow; the
-  // pane is comfortably wider than the menu's 15em to the left.
-  right: 0;
+  // Default left-aligned; the modal's `positionTransformMenu` then
+  // shifts `left` so the whole menu stays within the left pane's
+  // visible width (the pane's overflow is what clips it). A static
+  // anchor can't handle the trigger wrapping between the toolbar's
+  // right end and the next line's left edge — hence the JS clamp.
+  left: 0;
   z-index: 5;
   min-width: 15em;
   padding: 0.35em 0;
