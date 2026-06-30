@@ -186,18 +186,13 @@ export default class NpnCritiqueImageReference extends Component {
   // → fires first in the capture phase, before any document /
   // documentElement listener): when a PhotoSwipe overlay is open, close
   // IT and stop the event so the modal stays; otherwise let Escape fall
-  // through to the modal as normal.
-  //
-  // Also add a body class so scoped CSS can hide PhotoSwipe's caption
-  // (the lib builds a cooked-post-style caption that's noise here).
-  // Wired once per component; both are inert when no lightbox is open
-  // and are removed on teardown.
+  // through to the modal as normal. Wired once per component; inert when
+  // no lightbox is open; removed on teardown.
   _wireLightboxGuards() {
     if (this._lightboxGuardsWired) {
       return;
     }
     this._lightboxGuardsWired = true;
-    document.body.classList.add("npn-critique-reply-zoom-enabled");
     this._lightboxEscHandler = (event) => {
       if (event.key !== "Escape") {
         return;
@@ -217,7 +212,6 @@ export default class NpnCritiqueImageReference extends Component {
     if (!this._lightboxGuardsWired) {
       return;
     }
-    document.body.classList.remove("npn-critique-reply-zoom-enabled");
     if (this._lightboxEscHandler) {
       window.removeEventListener("keydown", this._lightboxEscHandler, true);
       this._lightboxEscHandler = null;
@@ -755,14 +749,18 @@ export default class NpnCritiqueImageReference extends Component {
 
           {{! Hidden anchor PhotoSwipe reads (href = full-res source,
               dims drive zoom-to-100%). Triggered programmatically by
-              `openDetailLightbox`; visually hidden via CSS. }}
+              `openDetailLightbox`; visually hidden via CSS. No `title`
+              on purpose: a title makes the shared lightbox render a
+              caption AND reserve 75px of bottom padding for it
+              (paddingFn) — leaving empty space below the image and the
+              stray "Discourse" caption. Without it the image just
+              centers with minimal symmetric padding. }}
           <a
             class="lightbox npn-critique-image-reference__lightbox-anchor"
             href={{@imageUrl}}
             data-large-src={{@imageUrl}}
             data-target-width={{this._naturalWidth}}
             data-target-height={{this._naturalHeight}}
-            title={{this.altText}}
             rel="nofollow ugc noopener"
             aria-hidden="true"
             tabindex="-1"
