@@ -2471,6 +2471,19 @@
     }
   }
 
+  // While a visual tool is active, the canvas owns pointer drags —
+  // drawing a shape, dragging a vertex / resize handle. Without this,
+  // a drag that begins on the canvas lets the browser start a touch
+  // scroll OR a mouse text-selection, and the latter auto-scrolls the
+  // page behind the workspace as the pointer moves. Scoped to
+  // `is-visual-mode` so normal page scrolling still works when no tool
+  // is active.
+  &.is-visual-mode &__konva-container {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
   // When Konva is the active renderer, suppress the figure's
   // `is-note-mode` outline-glow since Konva handles its own visual cue.
   // (Optional polish — keep the outline visible for now so the UI
