@@ -6685,9 +6685,14 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     if (this.pendingDirectionArrowPopover) {
-      // A previous arrow's popover is still open — treat the new
-      // drag as implicit Skip on it (same pattern as attention pull
-      // / strong area).
+      // A previous arrow's popover is still open — starting a new arrow
+      // is an implicit Skip on it: keep the arrow but unlabelled (no
+      // [D#]), exactly like the Skip button. Done BEFORE computing the
+      // new label so the abandoned one frees its number.
+      const prevId = this.pendingDirectionArrowPopover.id;
+      this.directionArrows = this.directionArrows.map((a) =>
+        a.id === prevId ? { ...a, label: "" } : a
+      );
       this.pendingDirectionArrowPopover = null;
       this.pendingDirectionArrowPopoverText = "";
     }
@@ -6871,6 +6876,12 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     if (this.pendingRelationshipArrowPopover) {
+      // Implicit Skip on the previous arrow — keep it but unlabelled
+      // (no [R#]). See addDirectionArrow.
+      const prevId = this.pendingRelationshipArrowPopover.id;
+      this.relationshipArrows = this.relationshipArrows.map((a) =>
+        a.id === prevId ? { ...a, label: "" } : a
+      );
       this.pendingRelationshipArrowPopover = null;
       this.pendingRelationshipArrowPopoverText = "";
     }
