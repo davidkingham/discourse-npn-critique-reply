@@ -940,6 +940,14 @@ export default class NpnCritiqueImageReference extends Component {
                 <button
                   type="button"
                   class="btn btn-default btn-small
+                    npn-critique-image-reference__note-popover-skip"
+                  {{on "click" @onSkipPendingEyePathPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_skip"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-default btn-small
                     npn-critique-image-reference__note-popover-redraw"
                   {{on "click" @onRedrawPendingEyePathPopover}}
                 >{{i18n
@@ -1070,6 +1078,14 @@ export default class NpnCritiqueImageReference extends Component {
                 <button
                   type="button"
                   class="btn btn-default btn-small
+                    npn-critique-image-reference__note-popover-skip"
+                  {{on "click" @onSkipPendingDirectionArrowPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_skip"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-default btn-small
                     npn-critique-image-reference__note-popover-redraw"
                   {{on "click" @onRedrawPendingDirectionArrowPopover}}
                 >{{i18n
@@ -1131,6 +1147,14 @@ export default class NpnCritiqueImageReference extends Component {
                   {{on "click" @onConfirmPendingRelationshipArrowPopover}}
                 >{{i18n
                     "npn_critique_reply.visual_notes.popover_save"
+                  }}</button>
+                <button
+                  type="button"
+                  class="btn btn-default btn-small
+                    npn-critique-image-reference__note-popover-skip"
+                  {{on "click" @onSkipPendingRelationshipArrowPopover}}
+                >{{i18n
+                    "npn_critique_reply.visual_notes.popover_skip"
                   }}</button>
                 <button
                   type="button"

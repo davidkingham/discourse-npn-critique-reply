@@ -6800,6 +6800,25 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cancelPendingDirectionArrowPopover();
   }
 
+  // Skip: keep the arrow but drop its label, so NO [D#] badge or text
+  // reference is added. Lets the critic place purely-visual arrows and
+  // create several in a row without labelling each. Distinct from
+  // Cancel (which deletes the arrow) and Save (which keeps the label).
+  @action
+  skipPendingDirectionArrowPopover() {
+    if (!this.pendingDirectionArrowPopover) {
+      return;
+    }
+    const { id } = this.pendingDirectionArrowPopover;
+    // Empty-string label is the "intentionally unlabeled" sentinel —
+    // preserved through serialize/restore so no [D#] is ever assigned.
+    this.directionArrows = this.directionArrows.map((a) =>
+      a.id === id ? { ...a, label: "" } : a
+    );
+    this.pendingDirectionArrowPopover = null;
+    this.pendingDirectionArrowPopoverText = "";
+  }
+
   // ---- Relationship Arrow -------------------------------------------
   //
   // Twin of Direction Arrow but with arrowheads on both ends and
@@ -6965,6 +6984,21 @@ export default class NpnCritiqueReplyModal extends Component {
     this.cancelPendingRelationshipArrowPopover();
   }
 
+  // Skip: keep the relationship arrow but drop its label (no [R#]
+  // badge / reference). Twin of skipPendingDirectionArrowPopover.
+  @action
+  skipPendingRelationshipArrowPopover() {
+    if (!this.pendingRelationshipArrowPopover) {
+      return;
+    }
+    const { id } = this.pendingRelationshipArrowPopover;
+    this.relationshipArrows = this.relationshipArrows.map((a) =>
+      a.id === id ? { ...a, label: "" } : a
+    );
+    this.pendingRelationshipArrowPopover = null;
+    this.pendingRelationshipArrowPopoverText = "";
+  }
+
   // ---- Eye-path popover ----------------------------------------------
 
   @action
@@ -7041,6 +7075,27 @@ export default class NpnCritiqueReplyModal extends Component {
   @action
   redrawPendingEyePathPopover() {
     this.cancelPendingEyePathPopover();
+  }
+
+  // Skip: keep the path but drop its label, so NO [E#] badge or text
+  // reference is added — a purely-visual flow line. Distinct from
+  // Cancel (which deletes the path) and Save (which keeps the label).
+  // Mirrors confirm's "path is finished" bookkeeping so the waypoints
+  // become editable and no new path auto-starts.
+  @action
+  skipPendingEyePathPopover() {
+    const path = this.activeEyePath ?? this.selectedEyePath;
+    if (path?.id) {
+      // "" = intentionally unlabeled (no [E#]); preserved on save/restore.
+      this.eyePaths = this.eyePaths.map((p) =>
+        p.id === path.id ? { ...p, label: "" } : p
+      );
+    }
+    this.pendingEyePathPopover = null;
+    this.pendingEyePathPopoverText = "";
+    this._activeEyePathId = null;
+    this._eyePathStarterInserted = false;
+    this.eyePathCreating = false;
   }
 
   // ---- Crop popover -------------------------------------------------
@@ -9724,6 +9779,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onPendingEyePathPopoverInput={{this.updatePendingEyePathPopoverText}}
                 @onConfirmPendingEyePathPopover={{this.confirmPendingEyePathPopover}}
                 @onCancelPendingEyePathPopover={{this.cancelPendingEyePathPopover}}
+                @onSkipPendingEyePathPopover={{this.skipPendingEyePathPopover}}
                 @onRedrawPendingEyePathPopover={{this.redrawPendingEyePathPopover}}
                 @pendingEyePathPopoverCanConfirm={{this.pendingEyePathPopoverCanConfirm}}
                 @directionArrows={{this.directionArrows}}
@@ -9736,6 +9792,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onPendingDirectionArrowPopoverInput={{this.updatePendingDirectionArrowPopoverText}}
                 @onConfirmPendingDirectionArrowPopover={{this.confirmPendingDirectionArrowPopover}}
                 @onCancelPendingDirectionArrowPopover={{this.cancelPendingDirectionArrowPopover}}
+                @onSkipPendingDirectionArrowPopover={{this.skipPendingDirectionArrowPopover}}
                 @onRedrawPendingDirectionArrowPopover={{this.redrawPendingDirectionArrowPopover}}
                 @pendingDirectionArrowPopoverCanConfirm={{this.pendingDirectionArrowPopoverCanConfirm}}
                 @relationshipArrows={{this.relationshipArrows}}
@@ -9748,6 +9805,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 @onPendingRelationshipArrowPopoverInput={{this.updatePendingRelationshipArrowPopoverText}}
                 @onConfirmPendingRelationshipArrowPopover={{this.confirmPendingRelationshipArrowPopover}}
                 @onCancelPendingRelationshipArrowPopover={{this.cancelPendingRelationshipArrowPopover}}
+                @onSkipPendingRelationshipArrowPopover={{this.skipPendingRelationshipArrowPopover}}
                 @onRedrawPendingRelationshipArrowPopover={{this.redrawPendingRelationshipArrowPopover}}
                 @pendingRelationshipArrowPopoverCanConfirm={{this.pendingRelationshipArrowPopoverCanConfirm}}
                 @cropAspectRatio={{this.cropAspectRatio}}

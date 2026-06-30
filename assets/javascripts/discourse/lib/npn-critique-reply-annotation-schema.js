@@ -588,10 +588,15 @@ export function normalizeEyePathAnnotation(raw) {
   // single payload from all defaulting to "eye_path_1" / "E1".
   const id = isNonEmptyString(raw.id) ? raw.id : null;
   const rawLabel = raw.label;
+  // "" is the intentional-unlabeled (Skip) sentinel — preserved so the
+  // array normalizer doesn't reassign an E# label. Any other non-
+  // matching value becomes null ("missing → assign one").
   const label =
-    typeof rawLabel === "string" && EYE_PATH_LABEL_PATTERN.test(rawLabel)
-      ? rawLabel
-      : null;
+    rawLabel === ""
+      ? ""
+      : typeof rawLabel === "string" && EYE_PATH_LABEL_PATTERN.test(rawLabel)
+        ? rawLabel
+        : null;
   const mode = normalizeEyePathMode(raw.mode);
   return {
     id,
@@ -1119,10 +1124,15 @@ export function normalizeDirectionArrowAnnotation(raw) {
   }
   const id = isNonEmptyString(raw.id) ? raw.id : null;
   const rawLabel = raw.label;
+  // "" preserves the intentional-Skip sentinel; other non-matching
+  // values become null ("missing → assign").
   const label =
-    typeof rawLabel === "string" && DIRECTION_ARROW_LABEL_PATTERN.test(rawLabel)
-      ? rawLabel
-      : null;
+    rawLabel === ""
+      ? ""
+      : typeof rawLabel === "string" &&
+          DIRECTION_ARROW_LABEL_PATTERN.test(rawLabel)
+        ? rawLabel
+        : null;
   return {
     id,
     kind: ANNOTATION_KINDS.DIRECTION_ARROW,
@@ -1138,11 +1148,15 @@ export function normalizeRelationshipArrowAnnotation(raw) {
   }
   const id = isNonEmptyString(raw.id) ? raw.id : null;
   const rawLabel = raw.label;
+  // "" preserves the intentional-Skip sentinel; other non-matching
+  // values become null ("missing → assign").
   const label =
-    typeof rawLabel === "string" &&
-    RELATIONSHIP_ARROW_LABEL_PATTERN.test(rawLabel)
-      ? rawLabel
-      : null;
+    rawLabel === ""
+      ? ""
+      : typeof rawLabel === "string" &&
+          RELATIONSHIP_ARROW_LABEL_PATTERN.test(rawLabel)
+        ? rawLabel
+        : null;
   return {
     id,
     kind: ANNOTATION_KINDS.RELATIONSHIP_ARROW,
@@ -1176,10 +1190,21 @@ export function directionArrowsToAnnotations(arrows) {
       if (!normalized.id) {
         normalized.id = `direction_arrow_${idCounter}`;
       }
-      if (!normalized.label || usedLabels.has(normalized.label)) {
+      // An empty-string label is the intentional-Skip sentinel: the
+      // critic pressed Skip on the describe popover, so the arrow is
+      // kept but carries NO [D#] badge / reference. It is never
+      // assigned a label and never participates in dedup. A genuinely
+      // MISSING label (null/undefined) still gets one assigned — the
+      // defensive fallback for legacy / programmatic input.
+      if (
+        normalized.label !== "" &&
+        (!normalized.label || usedLabels.has(normalized.label))
+      ) {
         normalized.label = nextDirectionArrowLabel(Array.from(usedLabels));
       }
-      usedLabels.add(normalized.label);
+      if (normalized.label) {
+        usedLabels.add(normalized.label);
+      }
       out.push(normalized);
       idCounter += 1;
     }
@@ -1210,10 +1235,17 @@ export function relationshipArrowsToAnnotations(arrows) {
       if (!normalized.id) {
         normalized.id = `relationship_arrow_${idCounter}`;
       }
-      if (!normalized.label || usedLabels.has(normalized.label)) {
+      // Empty-string label = intentional Skip (kept, no [R#] badge);
+      // missing label still gets assigned. See directionArrows above.
+      if (
+        normalized.label !== "" &&
+        (!normalized.label || usedLabels.has(normalized.label))
+      ) {
         normalized.label = nextRelationshipArrowLabel(Array.from(usedLabels));
       }
-      usedLabels.add(normalized.label);
+      if (normalized.label) {
+        usedLabels.add(normalized.label);
+      }
       out.push(normalized);
       idCounter += 1;
     }
@@ -1714,12 +1746,20 @@ function normalizeAnnotationsArray(raw) {
           if (!normalized.id) {
             normalized.id = `eye_path_${eyePathIdCounter}`;
           }
-          if (!normalized.label || usedEyePathLabels.has(normalized.label)) {
+          // Empty-string label = intentional Skip (kept, no [E#] badge
+          // / reference); never assigned, never deduped. A genuinely
+          // missing label still gets one assigned (legacy fallback).
+          if (
+            normalized.label !== "" &&
+            (!normalized.label || usedEyePathLabels.has(normalized.label))
+          ) {
             normalized.label = nextEyePathLabel(
               Array.from(usedEyePathLabels)
             );
           }
-          usedEyePathLabels.add(normalized.label);
+          if (normalized.label) {
+            usedEyePathLabels.add(normalized.label);
+          }
           eyePathCount += 1;
           eyePathIdCounter += 1;
         }
@@ -1812,15 +1852,20 @@ function normalizeAnnotationsArray(raw) {
           if (!normalized.id) {
             normalized.id = `direction_arrow_${directionArrowIdCounter}`;
           }
+          // Empty-string label = intentional Skip (kept, no [D#]);
+          // missing label still gets assigned. See the converter above.
           if (
-            !normalized.label ||
-            usedDirectionArrowLabels.has(normalized.label)
+            normalized.label !== "" &&
+            (!normalized.label ||
+              usedDirectionArrowLabels.has(normalized.label))
           ) {
             normalized.label = nextDirectionArrowLabel(
               Array.from(usedDirectionArrowLabels)
             );
           }
-          usedDirectionArrowLabels.add(normalized.label);
+          if (normalized.label) {
+            usedDirectionArrowLabels.add(normalized.label);
+          }
           directionArrowCount += 1;
           directionArrowIdCounter += 1;
         }
@@ -1835,15 +1880,20 @@ function normalizeAnnotationsArray(raw) {
           if (!normalized.id) {
             normalized.id = `relationship_arrow_${relationshipArrowIdCounter}`;
           }
+          // Empty-string label = intentional Skip (kept, no [R#]);
+          // missing label still gets assigned.
           if (
-            !normalized.label ||
-            usedRelationshipArrowLabels.has(normalized.label)
+            normalized.label !== "" &&
+            (!normalized.label ||
+              usedRelationshipArrowLabels.has(normalized.label))
           ) {
             normalized.label = nextRelationshipArrowLabel(
               Array.from(usedRelationshipArrowLabels)
             );
           }
-          usedRelationshipArrowLabels.add(normalized.label);
+          if (normalized.label) {
+            usedRelationshipArrowLabels.add(normalized.label);
+          }
           relationshipArrowCount += 1;
           relationshipArrowIdCounter += 1;
         }

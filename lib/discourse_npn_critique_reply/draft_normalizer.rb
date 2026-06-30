@@ -496,8 +496,7 @@ module DiscourseNpnCritiqueReply
       # used by normalize_rect for crop / attention_pull / strong_area.
       id = normalize_string(entry["id"] || entry[:id]) || "eye_path_#{rand(1_000_000)}"
       out = { "id" => id, "kind" => "eye_path", "mode" => mode, "points" => points }
-      label = normalize_string(entry["label"] || entry[:label])
-      out["label"] = label if label
+      assign_label(out, entry)
       note = normalize_string(entry["note"] || entry[:note])
       out["note"] = note if note
       out
@@ -528,11 +527,27 @@ module DiscourseNpnCritiqueReply
         "x2_pct" => x2,
         "y2_pct" => y2,
       }
-      label = normalize_string(entry["label"] || entry[:label])
-      out["label"] = label if label
+      assign_label(out, entry)
       note = normalize_string(entry["note"] || entry[:note])
       out["note"] = note if note
       out
+    end
+
+    # Assign the label onto `out`, preserving the intentional-Skip
+    # sentinel. An empty-string label ("") means the critic pressed
+    # Skip on the describe popover for an eye path / arrow — the marker
+    # is kept but must carry NO [E#]/[D#]/[R#] badge. It has to survive
+    # the round-trip verbatim, otherwise the client treats the label as
+    # merely missing and reassigns one. normalize_string("") returns
+    # nil, so the sentinel is handled explicitly here.
+    def assign_label(out, entry)
+      raw_label = entry["label"] || entry[:label]
+      if raw_label == ""
+        out["label"] = ""
+      else
+        label = normalize_string(raw_label)
+        out["label"] = label if label
+      end
     end
 
     # --- low-level coercions ----------------------------------------

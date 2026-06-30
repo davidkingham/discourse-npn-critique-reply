@@ -719,10 +719,13 @@ en:
         # non-empty description; Cancel removes the just-drawn marker
         # and closes the popover; Redraw also removes the marker but
         # leaves the tool armed so the next click/drag starts a fresh
-        # one immediately.
+        # one immediately. Skip (eye path / arrows only) keeps the
+        # marker but gives it NO label, so no [E#]/[D#]/[R#] badge or
+        # text reference is added — for quick purely-visual marks.
         popover_save: "Save"
         popover_cancel: "Cancel"
         popover_redraw: "Redraw"
+        popover_skip: "Skip"
         # Inline hint shown under the input when text is empty — the
         # critic must add a description (or back out via Cancel /
         # Redraw) before the marker is committed.
