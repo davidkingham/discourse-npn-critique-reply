@@ -3911,17 +3911,17 @@ export default class NpnCritiqueReplyModal extends Component {
           this._rightPaneHasMore = !intersecting;
         }
       },
-      // Bottom rootMargin is a dead zone that absorbs the scroll cue's
-      // own height. The cue (`__pane-scroll-cue`) is an absolutely-
-      // positioned child of the scrolling pane, so mounting/unmounting
-      // it via `{{#if hasMore}}` perturbs the pane's scrollHeight, which
-      // nudges this sentinel and could re-fire the observer — a
-      // show→grow→hide→shrink oscillation that jitters the scroll near
-      // the bottom. Treating the sentinel as "at the bottom" once it's
-      // within 64px (comfortably more than the cue's ~40px) means the
-      // cue's height change can never flip the state back, breaking the
-      // loop.
-      { root, rootMargin: "0px 0px 64px 0px", threshold: 0.01 }
+      // Small bottom rootMargin: hide the cue once the sentinel is within
+      // 20px of the visible bottom — i.e. the trailing content (e.g. the
+      // Processing Example download/upload buttons) has effectively come
+      // into view. An earlier value of 64px hid the cue while that content
+      // was still below the fold ("disappears too soon"). 20px stays clear
+      // of zero: in the docked layout the cue is `position: sticky` and so
+      // adds its own height to scrollHeight, and hiding it at exactly the
+      // bottom (rootMargin 0) would clamp scrollTop and flip the sentinel
+      // back out — a show→hide oscillation. A nonzero dead zone makes the
+      // cue hide before that boundary, so its removal never re-fires here.
+      { root, rootMargin: "0px 0px 20px 0px", threshold: 0.01 }
     );
     observer.observe(element);
     this._paneSentinelObservers.push(observer);
