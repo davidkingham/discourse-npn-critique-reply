@@ -53,6 +53,9 @@ register_svg_icon "rotate-right"
 register_svg_icon "rotate-left"
 register_svg_icon "arrows-up-down"
 register_svg_icon "arrow-rotate-left"
+# "Inspect detail" zoom button on the reference image — opens the
+# full-resolution PhotoSwipe lightbox so critics can check sharpness.
+register_svg_icon "magnifying-glass-plus"
 
 module ::DiscourseNpnCritiqueReply
   PLUGIN_NAME = "discourse-npn-critique-reply"

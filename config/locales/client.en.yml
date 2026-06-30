@@ -146,6 +146,9 @@ en:
         optional_processing_example_heading: "Optional Processing Example"
         optional_processing_example_helper: "Upload an edited example only when it helps show a possible direction."
         image_alt: "Image being critiqued"
+        # Inspect-detail zoom button overlaid on the reference image.
+        image_zoom: "Inspect detail"
+        image_zoom_title: "Open the full-resolution view — zoom and pan to check sharpness and detail"
         image_alt_with_title: "Image being critiqued: %{title}"
         image_alt_versioned: "%{label} image being critiqued"
         image_alt_versioned_with_title: "%{label} image being critiqued: %{title}"

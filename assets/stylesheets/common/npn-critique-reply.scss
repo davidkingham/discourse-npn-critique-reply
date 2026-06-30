@@ -2391,6 +2391,41 @@
     overflow: hidden;
   }
 
+  // "Inspect detail" zoom button overlaid on the image's top-right
+  // corner. `btn-default` supplies the look; this just positions it
+  // above the Konva canvas (which is position:absolute z-auto, so a
+  // positive z-index wins) and keeps it subtle until hovered.
+  &__zoom-button {
+    position: absolute;
+    top: 0.5em;
+    right: 0.5em;
+    z-index: 6;
+    opacity: 0.9;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    transition: opacity 0.12s ease;
+
+    &:hover,
+    &:focus-visible {
+      opacity: 1;
+    }
+
+    .d-icon {
+      margin: 0;
+    }
+  }
+
+  // Hidden anchor that PhotoSwipe reads (href = full-res source). Kept
+  // in the DOM and clickable-by-script, but never visible or focusable
+  // — the visible affordance is `__zoom-button`, which triggers it.
+  &__lightbox-anchor {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
   // In-flow IMG sized purely by max-width / max-height caps. With
   // both width and height set to `auto`, the IMG element renders
   // at its natural aspect ratio scaled to fit the smaller of

@@ -8,6 +8,8 @@ import didInsert from "@ember/render-modifiers/modifiers/did-insert";
 import didUpdate from "@ember/render-modifiers/modifiers/did-update";
 import willDestroy from "@ember/render-modifiers/modifiers/will-destroy";
 import { modifier } from "ember-modifier";
+import lightbox from "discourse/lib/lightbox";
+import dIcon from "discourse/ui-kit/helpers/d-icon";
 import { eq } from "discourse/truth-helpers";
 import { i18n } from "discourse-i18n";
 import { createAnnotationStage } from "../lib/npn-critique-reply-konva-stage";
@@ -65,8 +67,20 @@ export default class NpnCritiqueImageReference extends Component {
   // don't touch a torn-down stage / tracked properties.
   _destroyed = false;
 
+  // Natural (intrinsic) pixel size of the loaded image. Fed to the
+  // lightbox anchor's `.informations` so PhotoSwipe can zoom to actual
+  // pixels for a sharpness check. 0 until the image decodes.
+  @tracked _naturalWidth = 0;
+  @tracked _naturalHeight = 0;
+
   get altText() {
     return this.args.alt ?? i18n("npn_critique_reply.modal.image_alt");
+  }
+
+  // The "inspect detail" zoom affordance is only meaningful once we
+  // know the real dimensions (so the lightbox can offer 100%).
+  get canZoom() {
+    return this._naturalWidth > 0 && this._naturalHeight > 0;
   }
 
   get pins() {
@@ -114,6 +128,8 @@ export default class NpnCritiqueImageReference extends Component {
   @action
   registerImage(element) {
     this._imageElement = element;
+    // Cached images may already be decoded by the time this runs.
+    this._captureNaturalSize();
     // If the modal opened mid-session with pins already present (a
     // future scenario), trigger Konva loading immediately.
     this._maybeFlagKonvaNeeded();
@@ -121,8 +137,44 @@ export default class NpnCritiqueImageReference extends Component {
 
   @action
   handleImageLoad() {
-    // No state change required; the resize observer inside the stage
-    // will pick up the image's final dimensions when it mounts.
+    // Record the intrinsic size for the zoom/inspect lightbox. (The
+    // resize observer inside the stage handles annotation reflow.)
+    this._captureNaturalSize();
+  }
+
+  _captureNaturalSize() {
+    const img = this._imageElement;
+    if (!img) {
+      return;
+    }
+    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+      this._naturalWidth = img.naturalWidth;
+      this._naturalHeight = img.naturalHeight;
+    }
+  }
+
+  // Open the currently-displayed reference image in Discourse's
+  // PhotoSwipe lightbox (fullscreen + scroll/pinch zoom to 100% + pan)
+  // so the critic can inspect detail / sharpness. Mirrors the canonical
+  // `uppy-image-uploader` trigger: wire the hidden `a.lightbox` anchor,
+  // then click it. PhotoSwipe renders its own top-layer overlay, so the
+  // workspace modal + Konva stage are untouched underneath.
+  @action
+  async openDetailLightbox() {
+    const anchor = document.querySelector(
+      ".npn-critique-image-reference__lightbox-anchor"
+    );
+    if (!anchor) {
+      return;
+    }
+    await lightbox(
+      anchor.closest(".npn-critique-image-reference__frame"),
+      this.siteSettings
+    );
+    if (this._destroyed) {
+      return;
+    }
+    anchor.click();
   }
 
   // ---- Konva mount / sync / destroy -------------------------------
@@ -637,6 +689,41 @@ export default class NpnCritiqueImageReference extends Component {
             {{didInsert this.registerImage}}
             {{on "load" this.handleImageLoad}}
           />
+
+          {{! Inspect-detail control. Opens the full-resolution image in
+              Discourse's PhotoSwipe lightbox (fullscreen, zoom to 100%,
+              pan) so the critic can judge sharpness. Sits on the image
+              so it's reachable in both normal and Visual Focus mode. }}
+          {{#if this.canZoom}}
+            <button
+              type="button"
+              class="npn-critique-image-reference__zoom-button btn btn-default btn-small"
+              title={{i18n "npn_critique_reply.modal.image_zoom_title"}}
+              aria-label={{i18n "npn_critique_reply.modal.image_zoom"}}
+              {{on "click" this.openDetailLightbox}}
+            >{{dIcon "magnifying-glass-plus"}}</button>
+          {{/if}}
+
+          {{! Hidden anchor PhotoSwipe reads (href = full-res source,
+              dims drive zoom-to-100%). Triggered programmatically by
+              `openDetailLightbox`; visually hidden via CSS. }}
+          <a
+            class="lightbox npn-critique-image-reference__lightbox-anchor"
+            href={{@imageUrl}}
+            data-large-src={{@imageUrl}}
+            data-target-width={{this._naturalWidth}}
+            data-target-height={{this._naturalHeight}}
+            title={{this.altText}}
+            rel="nofollow ugc noopener"
+            aria-hidden="true"
+            tabindex="-1"
+          >
+            <div class="meta">
+              <span class="informations">
+                {{this._naturalWidth}}x{{this._naturalHeight}}
+              </span>
+            </div>
+          </a>
 
           {{#if this._showKonvaContainer}}
             <div
