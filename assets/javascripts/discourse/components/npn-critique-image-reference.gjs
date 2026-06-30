@@ -167,6 +167,7 @@ export default class NpnCritiqueImageReference extends Component {
     if (!anchor) {
       return;
     }
+    this._wireLightboxGuards();
     await lightbox(
       anchor.closest(".npn-critique-image-reference__frame"),
       this.siteSettings
@@ -175,6 +176,53 @@ export default class NpnCritiqueImageReference extends Component {
       return;
     }
     anchor.click();
+  }
+
+  // The workspace DModal listens for Escape in the CAPTURE phase on
+  // documentElement; PhotoSwipe's own Escape handler is bubble-phase
+  // (and the lib disables PhotoSwipe's built-in escKey), so without
+  // help, Escape closes the workspace and leaves the lightbox up.
+  // Register a capture-phase handler on `window` (the outermost target
+  // → fires first in the capture phase, before any document /
+  // documentElement listener): when a PhotoSwipe overlay is open, close
+  // IT and stop the event so the modal stays; otherwise let Escape fall
+  // through to the modal as normal.
+  //
+  // Also add a body class so scoped CSS can hide PhotoSwipe's caption
+  // (the lib builds a cooked-post-style caption that's noise here).
+  // Wired once per component; both are inert when no lightbox is open
+  // and are removed on teardown.
+  _wireLightboxGuards() {
+    if (this._lightboxGuardsWired) {
+      return;
+    }
+    this._lightboxGuardsWired = true;
+    document.body.classList.add("npn-critique-reply-zoom-enabled");
+    this._lightboxEscHandler = (event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      const pswp = document.querySelector(".pswp");
+      if (!pswp) {
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      pswp.querySelector("button.pswp__button--close")?.click();
+    };
+    window.addEventListener("keydown", this._lightboxEscHandler, true);
+  }
+
+  _teardownLightboxGuards() {
+    if (!this._lightboxGuardsWired) {
+      return;
+    }
+    document.body.classList.remove("npn-critique-reply-zoom-enabled");
+    if (this._lightboxEscHandler) {
+      window.removeEventListener("keydown", this._lightboxEscHandler, true);
+      this._lightboxEscHandler = null;
+    }
+    this._lightboxGuardsWired = false;
   }
 
   // ---- Konva mount / sync / destroy -------------------------------
@@ -414,6 +462,7 @@ export default class NpnCritiqueImageReference extends Component {
   @action
   teardownKonva() {
     this._destroyed = true;
+    this._teardownLightboxGuards();
     if (this._konvaStage) {
       try {
         this._konvaStage.destroy();

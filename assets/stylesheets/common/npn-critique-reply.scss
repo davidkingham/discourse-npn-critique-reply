@@ -2355,6 +2355,16 @@
   }
 }
 
+// While the critique workspace's "Inspect detail" lightbox is open,
+// hide PhotoSwipe's caption. The shared lightbox builds a cooked-post-
+// style caption (filename/site title + dimensions) that's just noise
+// when inspecting a reference image. PhotoSwipe renders on <body>, so
+// this is a top-level rule gated by a body class the component only
+// sets while its zoom is wired (see `_wireLightboxGuards`).
+body.npn-critique-reply-zoom-enabled .pswp__caption {
+  display: none;
+}
+
 // =====================================================================
 // Image reference component (image + reserved markup-tool overlay slot)
 // =====================================================================
