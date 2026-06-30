@@ -3838,7 +3838,11 @@ export default class NpnCritiqueReplyModal extends Component {
     ) {
       return;
     }
-    const margin = 10;
+    // Reserve room below the toolbar for the pinned "More below" scroll
+    // cue (~2.4em band) so the toolbar sits ABOVE it rather than behind
+    // it. A constant (not the cue's measured height) avoids a feedback
+    // loop: sizing on cue presence could hide→show→hide the cue.
+    const margin = 44;
     const maxImg = Math.max(
       220,
       Math.round(

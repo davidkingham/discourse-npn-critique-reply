@@ -2770,17 +2770,14 @@
   // rather than the viewport. (A viewport media query can't tell a wide
   // single-column focus view from a narrow two-column one.)
   container: npn-vn-toolbar / inline-size;
-  // The visual-note tools must stay visible: keep the toolbar above the
-  // pinned "More below" scroll cue (which sits at the pane's bottom and
-  // would otherwise cover the tools). An opaque background — matching
-  // the pane — occludes the cue's gradient/text where they overlap, so
-  // the tools read cleanly with no "More below" text crowding the
-  // buttons. The elevated stacking context also lets the Rotate/Flip
-  // dropdown escape the toolbar's `container-type` and paint on top.
-  // (position: relative so the z-index reliably applies.)
+  // Elevated stacking context so the Rotate/Flip dropdown escapes the
+  // toolbar's `container-type` and paints on top. (position: relative
+  // so the z-index reliably applies.) The image is sized by
+  // `_fitReferenceImageToTools` to keep the toolbar above the "More
+  // below" cue, so no opaque background is needed here — that would
+  // just cover the cue.
   position: relative;
   z-index: 20;
-  background: var(--secondary);
 }
 
 // Narrower toolbar: collapse the tool buttons to icon-only so the row
