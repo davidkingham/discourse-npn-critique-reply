@@ -3414,6 +3414,14 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.visualFocusMode && this.photographersNotesOpen) {
       this.closePhotographersNotes();
     }
+    // Entering focus mode clears the fit-to-tools inline cap (focus has
+    // its own CSS cap); exiting re-applies it. The layout change also
+    // re-fires the pane observer, but do it explicitly so it's immediate.
+    requestAnimationFrame(() => {
+      if (!this._destroyed) {
+        this._fitReferenceImageToTools();
+      }
+    });
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] visual-focus-mode", {
@@ -3752,16 +3760,94 @@ export default class NpnCritiqueReplyModal extends Component {
     // is the scroll viewport (padding box) and is independent of the
     // image's own height, so there's no measure→resize feedback loop.
     if (typeof ResizeObserver !== "undefined") {
-      const writeHeight = () => {
+      const recompute = () => {
         if (this._destroyed || !element.isConnected) {
           return;
         }
         element.style.setProperty("--npn-pane-px", `${element.clientHeight}px`);
+        this._fitReferenceImageToTools();
       };
-      writeHeight();
+      recompute();
       this._paneResizeObserver?.disconnect?.();
-      this._paneResizeObserver = new ResizeObserver(writeHeight);
+      this._paneResizeObserver = new ResizeObserver(recompute);
       this._paneResizeObserver.observe(element);
+      // Also watch the image and the tool row: re-fit when the image
+      // loads / swaps (aspect changes its rendered height) or the
+      // toolbar wraps. Setting the image's max-height changes its size
+      // and re-fires this observer, but `_fitReferenceImageToTools`
+      // writes the same value on the second pass and bails (no-op), so
+      // it converges without looping.
+      const img = element.querySelector(".npn-critique-image-reference__img");
+      if (img) {
+        this._paneResizeObserver.observe(img);
+      }
+      const toolbar = element.querySelector(
+        ".npn-critique-reply-modal__visual-notes-toolbar"
+      );
+      if (toolbar) {
+        this._paneResizeObserver.observe(toolbar);
+      }
+    }
+  }
+
+  // Shrink the reference image just enough that the first row of visual-
+  // note tools always clears the sticky footer. A fixed CSS reserve
+  // can't do this: the content ABOVE the image varies (multi-image
+  // picker, version/status rows, docked vs normal modal), so we measure
+  // the real layout. `aboveImage` (picker/status) and the offset from
+  // the image's bottom to the toolbar's bottom (heading + helper +
+  // toolbar) are both INDEPENDENT of the image's own height, so this is
+  // a stable one-shot computation — no oscillation. Visual Focus Mode
+  // is left to its own CSS cap (it hides the write column and is tuned
+  // separately), so we clear the inline override there.
+  _fitReferenceImageToTools() {
+    const pane = this._leftPaneElement;
+    if (!pane) {
+      return;
+    }
+    const img = pane.querySelector(".npn-critique-image-reference__img");
+    if (!img) {
+      return;
+    }
+    if (this.visualFocusMode) {
+      if (img.style.maxHeight) {
+        img.style.maxHeight = "";
+      }
+      return;
+    }
+    const toolbar = pane.querySelector(
+      ".npn-critique-reply-modal__visual-notes-toolbar"
+    );
+    if (!toolbar) {
+      return;
+    }
+    const paneRect = pane.getBoundingClientRect();
+    const imgRect = img.getBoundingClientRect();
+    const toolbarRect = toolbar.getBoundingClientRect();
+    // Bail on degenerate / mid-relayout measurements: if the toolbar or
+    // image isn't laid out yet (zero-size), or the toolbar isn't below
+    // the image, the math would produce a garbage cap. The next
+    // observer tick (after layout settles) recomputes cleanly.
+    const aboveImage = imgRect.top - paneRect.top;
+    const imageBottomToToolbarBottom = toolbarRect.bottom - imgRect.bottom;
+    if (
+      toolbarRect.height <= 0 ||
+      imgRect.height <= 0 ||
+      imageBottomToToolbarBottom <= 0 ||
+      aboveImage < 0
+    ) {
+      return;
+    }
+    const margin = 10;
+    const maxImg = Math.max(
+      220,
+      Math.round(
+        paneRect.height - aboveImage - imageBottomToToolbarBottom - margin
+      )
+    );
+    const next = `${maxImg}px`;
+    if (img.style.maxHeight !== next) {
+      img.style.maxHeight = next;
     }
   }
 
