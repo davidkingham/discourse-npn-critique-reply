@@ -3790,16 +3790,20 @@ export default class NpnCritiqueReplyModal extends Component {
     }
   }
 
-  // Shrink the reference image just enough that the first row of visual-
-  // note tools always clears the sticky footer. A fixed CSS reserve
-  // can't do this: the content ABOVE the image varies (multi-image
-  // picker, version/status rows, docked vs normal modal), so we measure
-  // the real layout. `aboveImage` (picker/status) and the offset from
-  // the image's bottom to the toolbar's bottom (heading + helper +
-  // toolbar) are both INDEPENDENT of the image's own height, so this is
-  // a stable one-shot computation — no oscillation. Visual Focus Mode
-  // is left to its own CSS cap (it hides the write column and is tuned
-  // separately), so we clear the inline override there.
+  // Grow the reference image as large as possible while keeping the
+  // FIRST row of visual-note tools fully above the fold. We deliberately
+  // fit to the first row's bottom (not the whole toolbar) so the image
+  // isn't over-shrunk: when the toolbar wraps to a second row, that row
+  // is left partly visible below the fold as a "there's more" peek.
+  //
+  // A fixed CSS reserve can't do this — the content ABOVE the image
+  // varies (multi-image picker, version/status rows, docked vs normal
+  // modal) — so we measure the real layout. `aboveImage` and the offset
+  // from the image's bottom to the first row's bottom (heading + helper
+  // + row 1) are both INDEPENDENT of the image's own height, so this is
+  // a stable one-shot computation — no oscillation. Visual Focus Mode is
+  // left to its own CSS cap (it hides the write column), so we clear the
+  // inline override there.
   _fitReferenceImageToTools() {
     const pane = this._leftPaneElement;
     if (!pane) {
@@ -3818,35 +3822,37 @@ export default class NpnCritiqueReplyModal extends Component {
     const toolbar = pane.querySelector(
       ".npn-critique-reply-modal__visual-notes-toolbar"
     );
-    if (!toolbar) {
+    // First row = the first toolbar item (it always lives in row 1, even
+    // when the toolbar wraps); its bottom is the row-1 bottom edge.
+    const firstItem = toolbar && toolbar.firstElementChild;
+    if (!firstItem) {
       return;
     }
     const paneRect = pane.getBoundingClientRect();
     const imgRect = img.getBoundingClientRect();
-    const toolbarRect = toolbar.getBoundingClientRect();
-    // Bail on degenerate / mid-relayout measurements: if the toolbar or
-    // image isn't laid out yet (zero-size), or the toolbar isn't below
-    // the image, the math would produce a garbage cap. The next
-    // observer tick (after layout settles) recomputes cleanly.
+    const firstRowRect = firstItem.getBoundingClientRect();
+    // Bail on degenerate / mid-relayout measurements: if the row or image
+    // isn't laid out yet (zero-size), or the row isn't below the image,
+    // the math would produce a garbage cap. The next observer tick (after
+    // layout settles) recomputes cleanly.
     const aboveImage = imgRect.top - paneRect.top;
-    const imageBottomToToolbarBottom = toolbarRect.bottom - imgRect.bottom;
+    const imageBottomToFirstRowBottom = firstRowRect.bottom - imgRect.bottom;
     if (
-      toolbarRect.height <= 0 ||
+      firstRowRect.height <= 0 ||
       imgRect.height <= 0 ||
-      imageBottomToToolbarBottom <= 0 ||
+      imageBottomToFirstRowBottom <= 0 ||
       aboveImage < 0
     ) {
       return;
     }
-    // Reserve room below the toolbar for the pinned "More below" scroll
-    // cue (~2.4em band) so the toolbar sits ABOVE it rather than behind
-    // it. A constant (not the cue's measured height) avoids a feedback
-    // loop: sizing on cue presence could hide→show→hide the cue.
-    const margin = 44;
+    // Small peek below row 1: enough that a wrapped second row shows a
+    // sliver (the toolbar's row gap is ~8px), without wasting space when
+    // the toolbar is a single row.
+    const peek = 20;
     const maxImg = Math.max(
       220,
       Math.round(
-        paneRect.height - aboveImage - imageBottomToToolbarBottom - margin
+        paneRect.height - aboveImage - imageBottomToFirstRowBottom - peek
       )
     );
     const next = `${maxImg}px`;
