@@ -235,7 +235,27 @@ export function decorateCriticueReplyAnnotations(cookedElement, helper) {
   if (labelMap.size === 0) {
     return;
   }
-  decorateAnnotationTokens(cookedElement, (label) => labelMap.get(label));
+  // Resolve by the post's own annotation payload first (authoritative —
+  // a crop's "Crop 2" label, a pin's number, etc. map to the exact
+  // kind that was saved). Fall back to the label FAMILY for any
+  // well-formed token the payload doesn't explicitly carry.
+  //
+  // Why the fallback matters: in a multi-image critique, labels are
+  // assigned GLOBALLY across images (A1, A2, …) but the cooked body
+  // groups text per image. A reference like `[A2]` can therefore sit in
+  // one image's notes while its area annotation rides under a different
+  // image_index — or the annotation may have been removed, leaving the
+  // reference behind. In all those cases the token is still a deliberate
+  // A/S/D/R/E/Crop/pin reference the critic typed, and the editor +
+  // live Preview already render it as a pill via the same family
+  // resolver. Without this fallback the FINAL post was the only surface
+  // that left `[A2]` as bare text — the bug this fixes. Tokens that
+  // aren't a recognized family (a stray `[A99]`-style typo) still
+  // resolve to null and stay plain.
+  decorateAnnotationTokens(
+    cookedElement,
+    (label) => labelMap.get(label) ?? annotationLabelToBadgeSuffix(label)
+  );
 }
 
 // Reusable: decorate an arbitrary element's annotation-reference tokens
