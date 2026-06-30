@@ -3787,6 +3787,19 @@ export default class NpnCritiqueReplyModal extends Component {
       if (toolbar) {
         this._paneResizeObserver.observe(toolbar);
       }
+      // Watch the whole visual-tools block too: in focus mode the image
+      // is sized to keep this entire block (toolbar + contextual action
+      // row) above the fold, so when a mode swap changes the action
+      // row's height (crop's aspect chips, a delete button appearing,
+      // helper text wrapping) we must re-fit. The block's height is
+      // independent of the image's height, so observing it can't feed
+      // back into a resize loop.
+      const controls = element.querySelector(
+        ".npn-critique-reply-modal__optional-visual-notes"
+      );
+      if (controls) {
+        this._paneResizeObserver.observe(controls);
+      }
     }
   }
 
@@ -3813,9 +3826,52 @@ export default class NpnCritiqueReplyModal extends Component {
     if (!img) {
       return;
     }
+    const paneRect = pane.getBoundingClientRect();
+    const imgRect = img.getBoundingClientRect();
+    const aboveImage = imgRect.top - paneRect.top;
     if (this.visualFocusMode) {
-      if (img.style.maxHeight) {
-        img.style.maxHeight = "";
+      // Focus mode hides the write column and grows the image to fill
+      // the modal. Unlike the normal layout (which fits to the FIRST
+      // tool row and lets the rest peek/scroll — there's a second pane
+      // to fall back on), here the image-only column IS the only place
+      // the tools live, so the WHOLE visual-tools block must stay above
+      // the fold: the toolbar AND the contextual action row beneath it
+      // (delete area, clear, crop's aspect chips, "Finish …", etc.).
+      // Measure down to the controls block's bottom and shrink the image
+      // to reserve exactly that. `aboveImage` and the offset from the
+      // image bottom to the controls bottom are both independent of the
+      // image's own height (content above/below shifts with the image
+      // but its extent doesn't), so this converges in one pass.
+      const controls = pane.querySelector(
+        ".npn-critique-reply-modal__optional-visual-notes"
+      );
+      if (!controls) {
+        if (img.style.maxHeight) {
+          img.style.maxHeight = "";
+        }
+        return;
+      }
+      const controlsRect = controls.getBoundingClientRect();
+      const imageBottomToControlsBottom = controlsRect.bottom - imgRect.bottom;
+      if (
+        imgRect.height <= 0 ||
+        imageBottomToControlsBottom <= 0 ||
+        aboveImage < 0
+      ) {
+        return;
+      }
+      // Breathing room below the last control so it isn't flush against
+      // the footer / pane edge.
+      const margin = 16;
+      const maxImg = Math.max(
+        260,
+        Math.round(
+          paneRect.height - aboveImage - imageBottomToControlsBottom - margin
+        )
+      );
+      const next = `${maxImg}px`;
+      if (img.style.maxHeight !== next) {
+        img.style.maxHeight = next;
       }
       return;
     }
@@ -3828,14 +3884,11 @@ export default class NpnCritiqueReplyModal extends Component {
     if (!firstItem) {
       return;
     }
-    const paneRect = pane.getBoundingClientRect();
-    const imgRect = img.getBoundingClientRect();
     const firstRowRect = firstItem.getBoundingClientRect();
     // Bail on degenerate / mid-relayout measurements: if the row or image
     // isn't laid out yet (zero-size), or the row isn't below the image,
     // the math would produce a garbage cap. The next observer tick (after
     // layout settles) recomputes cleanly.
-    const aboveImage = imgRect.top - paneRect.top;
     const imageBottomToFirstRowBottom = firstRowRect.bottom - imgRect.bottom;
     if (
       firstRowRect.height <= 0 ||
