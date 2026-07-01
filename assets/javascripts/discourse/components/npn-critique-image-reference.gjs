@@ -735,20 +735,6 @@ export default class NpnCritiqueImageReference extends Component {
             {{on "load" this.handleImageLoad}}
           />
 
-          {{! Inspect-detail control. Opens the full-resolution image in
-              Discourse's PhotoSwipe lightbox (fullscreen, zoom to 100%,
-              pan) so the critic can judge sharpness. Sits on the image
-              so it's reachable in both normal and Visual Focus mode. }}
-          {{#if this.canZoom}}
-            <button
-              type="button"
-              class="npn-critique-image-reference__zoom-button btn btn-default btn-small"
-              title={{i18n "npn_critique_reply.modal.image_zoom_title"}}
-              aria-label={{i18n "npn_critique_reply.modal.image_zoom"}}
-              {{on "click" this.openDetailLightbox}}
-            >{{dIcon "magnifying-glass-plus"}}</button>
-          {{/if}}
-
           {{! Hidden anchor PhotoSwipe reads (href = full-res source,
               dims drive zoom-to-100%). Triggered programmatically by
               `openDetailLightbox`; visually hidden via CSS. No `title`
@@ -1295,6 +1281,29 @@ export default class NpnCritiqueImageReference extends Component {
             </div>
           {{/if}}
         </div>
+
+        {{! Inspect-detail control. Opens the full-resolution image in
+            Discourse's PhotoSwipe lightbox (fullscreen, zoom to 100%, pan)
+            so the critic can judge sharpness. Sits BELOW the image (not
+            overlaid on it — the corner button could hide annotations /
+            image content) in a right-aligned bar, and stays reachable in
+            both normal and Visual Focus mode because this component renders
+            in both. }}
+        {{#if this.canZoom}}
+          <div class="npn-critique-image-reference__actions">
+            <button
+              type="button"
+              class="npn-critique-image-reference__zoom-button btn btn-default btn-small"
+              title={{i18n "npn_critique_reply.modal.image_zoom_title"}}
+              {{on "click" this.openDetailLightbox}}
+            >
+              {{dIcon "magnifying-glass-plus"}}
+              <span class="npn-critique-image-reference__zoom-button-label">
+                {{i18n "npn_critique_reply.modal.image_zoom"}}
+              </span>
+            </button>
+          </div>
+        {{/if}}
 
         {{! All per-tool hints (crop included) live in the modal's
             secondary toolbar under Optional Visual Notes, right where the

@@ -2391,27 +2391,30 @@
     overflow: hidden;
   }
 
-  // "Inspect detail" zoom button overlaid on the image's top-right
-  // corner. `btn-default` supplies the look; this just positions it
-  // above the Konva canvas (which is position:absolute z-auto, so a
-  // positive z-index wins) and keeps it subtle until hovered.
-  &__zoom-button {
-    position: absolute;
-    top: 0.5em;
-    right: 0.5em;
-    z-index: 6;
-    opacity: 0.9;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-    transition: opacity 0.12s ease;
+  // "Inspect detail" control row — sits BELOW the image, right-aligned,
+  // so the zoom affordance never overlaps annotations or image content.
+  // Rendered by this component, so it's present in both the normal and
+  // Visual Focus layouts.
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.4em;
+  }
 
-    &:hover,
-    &:focus-visible {
-      opacity: 1;
-    }
+  &__zoom-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
 
     .d-icon {
       margin: 0;
     }
+  }
+
+  // Keep the label from disappearing on very narrow panes: it's a short
+  // affordance, so let it wrap rather than truncate.
+  &__zoom-button-label {
+    white-space: nowrap;
   }
 
   // Hidden anchor that PhotoSwipe reads (href = full-res source). Kept
