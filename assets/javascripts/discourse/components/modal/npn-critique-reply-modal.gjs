@@ -2911,12 +2911,18 @@ export default class NpnCritiqueReplyModal extends Component {
       }
     }
     const ordered = [...indices].sort((a, b) => a - b);
+    // Each ordered index has either an annotated image or notes text, so it
+    // yields a non-empty section — the count tells the heading whether to
+    // label blocks by image ("Visual Notes for Image N") or use the plain
+    // single-image "Visual Notes".
+    const multiImage = ordered.length > 1;
     const sections = [];
     for (const idx of ordered) {
       const markdown = this._composeVisualNotesBlockForImage(
         idx,
         blockByIndex.get(idx) ?? null,
-        this._imageNotesForIndex(idx).trim()
+        this._imageNotesForIndex(idx).trim(),
+        multiImage
       );
       if (markdown) {
         sections.push(markdown);
@@ -3132,10 +3138,14 @@ export default class NpnCritiqueReplyModal extends Component {
   // Image Notes context (never reflowed or split). Returns "" when the
   // section would be heading-only (no notes, no image) so the caller
   // can drop it.
-  _composeVisualNotesBlockForImage(index, block, notesText) {
+  _composeVisualNotesBlockForImage(index, block, notesText, multiImage) {
     const sourceLabel =
       block?.sourceLabel ?? this._sourceLabelForImageIndex(index);
-    const heading = this._visualNotesHeadingForIndex(index, sourceLabel);
+    const heading = this._visualNotesHeadingForIndex(
+      index,
+      sourceLabel,
+      multiImage
+    );
     const parts = [heading];
     if (notesText) {
       parts.push(notesText);
@@ -3265,7 +3275,20 @@ export default class NpnCritiqueReplyModal extends Component {
     });
   }
 
-  _visualNotesHeadingForIndex(index, sourceLabel) {
+  // Markdown H2 heading above one image's flattened visual-notes block.
+  // Single-image critiques read "Visual Notes"; multi-image critiques name
+  // each block by its image ("Visual Notes for Image 1", "…Image 2", …).
+  // `multiImage` (whether the post carries more than one image section) is
+  // what distinguishes the two — a lone image shouldn't be labelled by
+  // number. The primary image (index 0) can be a specific revision; keep
+  // that in the heading so the critic knows which version they marked up.
+  _visualNotesHeadingForIndex(index, sourceLabel, multiImage) {
+    return `## ${this._visualNotesHeadingText(index, sourceLabel, multiImage)}`;
+  }
+
+  // Plain heading text (no markdown) shared by the posted body's H2 and the
+  // in-modal Preview so both surfaces read the same.
+  _visualNotesHeadingText(index, sourceLabel, multiImage) {
     if (index === 0) {
       const v = this.selectedVersion;
       if (v?.kind === "revision" && v.label) {
@@ -3274,11 +3297,18 @@ export default class NpnCritiqueReplyModal extends Component {
           { label: v.label }
         );
       }
-      return i18n("npn_critique_reply.modal.visual_notes_heading_original");
     }
-    return i18n("npn_critique_reply.modal.visual_notes_heading_labeled", {
-      label: sourceLabel ?? `Image ${index + 1}`,
-    });
+    if (multiImage) {
+      // The primary image's sourceLabel is a VERSION label ("Original"),
+      // not an image label, so number it by position; secondary images
+      // carry their own "Image N" picker label.
+      const imageLabel =
+        index > 0 && sourceLabel ? sourceLabel : `Image ${index + 1}`;
+      return i18n("npn_critique_reply.modal.visual_notes_heading_labeled", {
+        label: imageLabel,
+      });
+    }
+    return i18n("npn_critique_reply.modal.visual_notes_heading_original");
   }
 
   // Just the heading + image-markdown lines for the visual-notes
@@ -7877,11 +7907,18 @@ export default class NpnCritiqueReplyModal extends Component {
         indices.add(i);
       }
     }
+    const previewMultiImage = indices.size > 1;
     for (const idx of [...indices].sort((a, b) => a - b)) {
       const notes = this._imageNotesForIndex(idx).trim();
       visualNotesImages.push({
         index: idx,
-        label: this._sourceLabelForImageIndex(idx),
+        // Same wording as the posted body's section heading (minus the
+        // markdown), so Preview and the final post agree.
+        label: this._visualNotesHeadingText(
+          idx,
+          this._sourceLabelForImageIndex(idx),
+          previewMultiImage
+        ),
         objectUrl: objectUrlByIndex.get(idx) ?? null,
         // Cooked HTML (real markdown — quotes, links, mentions, lists)
         // with annotation tokens re-badged, or null when no notes. Cooked

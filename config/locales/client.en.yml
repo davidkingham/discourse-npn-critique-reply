@@ -332,14 +332,17 @@ en:
         uploading_visual_notes: "Uploading visual notes…"
         posting_critique: "Posting critique…"
         visual_notes_alt: "visual notes"
-        visual_notes_heading_original: "Visual notes based on the original image:"
-        visual_notes_heading_revision: "Visual notes based on %{label}:"
-        # Heading for visual-notes sections on secondary submission
-        # images (Image 2..N) when the OP attached multiple. Label is
-        # the picker pill text ("Image 2", "Image 3"...) so the post
-        # body reads as a faithful echo of what the critic was looking
-        # at.
-        visual_notes_heading_labeled: "Visual notes based on %{label}:"
+        # Section heading above each flattened visual-notes image in the
+        # posted critique. Single-image critiques get a plain "Visual
+        # Notes"; multi-image critiques label each block by its image
+        # (see visual_notes_heading_labeled). Rendered as a markdown H2.
+        visual_notes_heading_original: "Visual Notes"
+        visual_notes_heading_revision: "Visual Notes for %{label}"
+        # Heading for visual-notes sections in a MULTI-image critique.
+        # Label is the picker pill text ("Image 1", "Image 2"...) so the
+        # post body reads as a faithful echo of what the critic was
+        # looking at.
+        visual_notes_heading_labeled: "Visual Notes for %{label}"
         visual_notes_load_failed: "Couldn't load the reference image for export. Check your connection or try a different image version."
         visual_notes_export_failed: "Couldn't export the visual notes image. The reference image may be hosted on a server that blocks cross-origin export."
         visual_notes_upload_failed: "Couldn't upload the visual notes image. Please try again."
