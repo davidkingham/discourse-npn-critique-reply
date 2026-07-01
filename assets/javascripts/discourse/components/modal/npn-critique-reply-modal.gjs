@@ -9923,7 +9923,7 @@ export default class NpnCritiqueReplyModal extends Component {
             hidden via CSS. Layout-only; never touches the draft. }}
         <DButton
           class="btn-transparent toggle-fullscreen npn-critique-reply-modal__fullscreen-toggle"
-          @icon={{this.fullscreenIcon}}
+          @icon={{concat this.iconPrefix this.fullscreenIcon}}
           @action={{this.toggleFullscreen}}
           @translatedAriaLabel={{this.fullscreenLabel}}
           @translatedTitle={{this.fullscreenLabel}}
@@ -10670,7 +10670,7 @@ export default class NpnCritiqueReplyModal extends Component {
                           class="btn-flat npn-critique-reply-modal__transform-menu-item"
                           role="menuitem"
                           @action={{this.rotateImageCw}}
-                          @icon="rotate-right"
+                          @icon={{concat this.iconPrefix "rotate-right"}}
                           @label="npn_critique_reply.visual_notes.transform.rotate.rotate_right"
                           @title="npn_critique_reply.visual_notes.transform.rotate.rotate_right_title"
                           @disabled={{this._imageTransformApplying}}
@@ -10679,7 +10679,7 @@ export default class NpnCritiqueReplyModal extends Component {
                           class="btn-flat npn-critique-reply-modal__transform-menu-item"
                           role="menuitem"
                           @action={{this.rotateImageCcw}}
-                          @icon="rotate-left"
+                          @icon={{concat this.iconPrefix "rotate-left"}}
                           @label="npn_critique_reply.visual_notes.transform.rotate.rotate_left"
                           @title="npn_critique_reply.visual_notes.transform.rotate.rotate_left_title"
                           @disabled={{this._imageTransformApplying}}
@@ -10688,7 +10688,7 @@ export default class NpnCritiqueReplyModal extends Component {
                           class="btn-flat npn-critique-reply-modal__transform-menu-item npn-critique-reply-modal__transform-menu-reset"
                           role="menuitem"
                           @action={{this.resetImageTransform}}
-                          @icon="arrow-rotate-left"
+                          @icon={{concat this.iconPrefix "arrow-rotate-left"}}
                           @label="npn_critique_reply.visual_notes.transform.reset"
                           @title="npn_critique_reply.visual_notes.transform.reset_title"
                           @disabled={{or
@@ -10737,7 +10737,7 @@ export default class NpnCritiqueReplyModal extends Component {
                           class="btn-flat npn-critique-reply-modal__transform-menu-item"
                           role="menuitem"
                           @action={{this.flipImageHorizontal}}
-                          @icon="arrows-left-right"
+                          @icon={{concat this.iconPrefix "arrows-left-right"}}
                           @label="npn_critique_reply.visual_notes.transform.flip.flip_horizontal"
                           @title="npn_critique_reply.visual_notes.transform.flip.flip_horizontal_title"
                           @disabled={{this._imageTransformApplying}}
@@ -10746,7 +10746,7 @@ export default class NpnCritiqueReplyModal extends Component {
                           class="btn-flat npn-critique-reply-modal__transform-menu-item"
                           role="menuitem"
                           @action={{this.flipImageVertical}}
-                          @icon="arrows-up-down"
+                          @icon={{concat this.iconPrefix "arrows-up-down"}}
                           @label="npn_critique_reply.visual_notes.transform.flip.flip_vertical"
                           @title="npn_critique_reply.visual_notes.transform.flip.flip_vertical_title"
                           @disabled={{this._imageTransformApplying}}
@@ -10755,7 +10755,7 @@ export default class NpnCritiqueReplyModal extends Component {
                           class="btn-flat npn-critique-reply-modal__transform-menu-item npn-critique-reply-modal__transform-menu-reset"
                           role="menuitem"
                           @action={{this.resetImageTransform}}
-                          @icon="arrow-rotate-left"
+                          @icon={{concat this.iconPrefix "arrow-rotate-left"}}
                           @label="npn_critique_reply.visual_notes.transform.reset"
                           @title="npn_critique_reply.visual_notes.transform.reset_title"
                           @disabled={{or
