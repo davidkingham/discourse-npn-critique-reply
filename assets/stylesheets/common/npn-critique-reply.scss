@@ -2846,14 +2846,10 @@
   position: relative;
   flex: 0 0 auto;
   display: inline-flex;
-  // First wrap in the toolbar gets a small spacing break so the
-  // canvas-drawing tools (Notes through Relationship) read as one
-  // group and the image-transform tools (Rotate / Flip) as another.
-  // The break is just an extra gap on top of the toolbar's natural
-  // gap — it doesn't push the row to a new line.
-  &:first-of-type {
-    margin-left: 0.4em;
-  }
+  // The annotate-vs-transform grouping is now signalled by the
+  // `&__toolbar-separator` rule, which is symmetric. No extra margin on
+  // the first wrap — that made the space to the right of the divider
+  // wider than the space to its left.
 }
 
 .npn-critique-reply-modal__transform-menu {
