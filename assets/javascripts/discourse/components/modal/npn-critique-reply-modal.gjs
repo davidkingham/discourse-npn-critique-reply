@@ -3529,6 +3529,15 @@ export default class NpnCritiqueReplyModal extends Component {
       this.closePhotographersNotes();
       return false;
     }
+    // Preview is a full-view overlay ON TOP of the editing workspace, so
+    // X / Escape / click-outside should step BACK to the critique (same as
+    // the "Back to Edit" button), not tear the whole workspace down.
+    // Checked before visual-focus so Escape in Preview always exits Preview
+    // first, even if focus mode was left on underneath.
+    if (this.previewMode) {
+      this.exitPreview();
+      return false;
+    }
     if (this.visualFocusMode) {
       this.visualFocusMode = false;
       if (this.siteSettings.npn_critique_reply_debug_enabled) {
