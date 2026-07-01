@@ -10612,6 +10612,16 @@ export default class NpnCritiqueReplyModal extends Component {
                     @disabled={{this.isPosting}}
                   />
 
+                  {{! Divider between the two kinds of tool: everything to
+                      the left ADDS an annotation to the image; Rotate /
+                      Flip TRANSFORM the image to test an orientation. The
+                      thin rule makes that distinction readable at a glance. }}
+                  <span
+                    class="npn-critique-reply-modal__toolbar-separator"
+                    role="separator"
+                    aria-orientation="vertical"
+                  ></span>
+
                   {{! Rotate and Flip tools. Two labeled buttons that
                       visually match the other tool toggles (icon +
                       visible label, same height/padding). Unlike
@@ -10688,7 +10698,10 @@ export default class NpnCritiqueReplyModal extends Component {
                       id="npn-critique-reply-flip-trigger"
                       class="btn-default"
                       @action={{this.toggleFlipMenu}}
-                      @icon="arrows-left-right"
+                      {{! `right-left` (swap arrows) reads as "mirror /
+                          reverse orientation" and, unlike `arrows-left-right`,
+                          doesn't collide with the Relationship-arrow tool. }}
+                      @icon="right-left"
                       @label="npn_critique_reply.visual_notes.transform.flip.label"
                       @title="npn_critique_reply.visual_notes.transform.flip.title"
                       @disabled={{or this.isPosting this._imageTransformApplying}}

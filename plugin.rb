@@ -48,14 +48,16 @@ register_svg_icon "table-columns"
 # Rotate / Flip transform tools. The Rotate toolbar button uses
 # `rotate-right`; its menu items use `rotate-right`, `rotate-left`,
 # and `arrow-rotate-left` (Reset orientation). The Flip toolbar
-# button reuses `arrows-left-right` (already registered above) and
-# its menu adds `arrows-up-down` for vertical flip. None are in
-# Discourse core's default SVG sprite, so they must be registered
-# here for the toolbar icons to render.
+# button uses `right-left` (swap arrows) so it doesn't collide with
+# the Relationship-arrow tool's `arrows-left-right`; its menu uses
+# `arrows-left-right` for horizontal flip and `arrows-up-down` for
+# vertical. None are in Discourse core's default SVG sprite, so they
+# must be registered here for the toolbar icons to render.
 register_svg_icon "rotate-right"
 register_svg_icon "rotate-left"
 register_svg_icon "arrows-up-down"
 register_svg_icon "arrow-rotate-left"
+register_svg_icon "right-left"
 # "Inspect detail" zoom button on the reference image — opens the
 # full-resolution PhotoSwipe lightbox so critics can check sharpness.
 register_svg_icon "magnifying-glass-plus"

@@ -2789,6 +2789,21 @@
   z-index: 20;
 }
 
+// Divider between the annotation tools (Notes … Relationship, which ADD
+// marks to the image) and the image-transform tools (Rotate / Flip, which
+// TRANSFORM it to test an orientation). A thin full-height rule with a
+// little extra breathing room on each side — on top of the toolbar's 0.5em
+// gap — so the two groups read as distinct at a glance, in both the
+// labelled and icon-only widths. Non-shrinking so it survives the wrap.
+.npn-critique-reply-modal__toolbar-separator {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 1px;
+  min-height: 1.4em;
+  margin-inline: 0.35em;
+  background: var(--primary-low);
+}
+
 // Narrower toolbar: collapse the tool buttons to icon-only so the row
 // stays on one line. The label is only VISUALLY hidden (kept in the
 // accessibility tree), and every tool button already carries a @title
