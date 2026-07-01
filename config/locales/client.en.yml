@@ -115,6 +115,14 @@ en:
             other: "%{count} visual annotations"
           visual_notes_heading: "Visual Notes"
           image_notes_heading: "Image Notes"
+          # Accessible label for the small dot on the Overall Critique tab
+          # that shows whenever it holds written text.
+          overall_has_content: "Overall critique has content"
+          # One-time reassurance shown the first time adding a visual note
+          # auto-switches the view to Image Notes while an Overall Critique
+          # is already written — so critics don't think their writing was lost.
+          switch_hint: "Your overall critique is safe — it's still under the “Overall Critique” tab. This is just the notes for the mark you added; switch tabs anytime."
+          switch_hint_dismiss: "Got it"
         # Quiet hint sitting next to the Insert-link button above the
         # textarea — signals that the field behaves like the composer
         # for the parts that matter (links, mentions, markdown).

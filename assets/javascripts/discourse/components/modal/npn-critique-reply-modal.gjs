@@ -129,6 +129,14 @@ function parseIdList(value) {
 // "show all 6 prompts vs first 3."
 const STORAGE_KEY_MORE_IDEAS = "npn-critique-reply.more-ideas-expanded";
 
+// Per-user "seen once" flag for the reassurance hint shown the first time
+// adding a visual note auto-switches the writing context to Image Notes
+// (so critics don't think their Overall Critique was lost). Device-local
+// via readBool/writeBool; the current user's id is appended to the key so
+// separate accounts on a shared browser each see it once.
+const STORAGE_KEY_CONTEXT_HINT_SEEN =
+  "npn-critique-reply.context-switch-hint-seen";
+
 // Large-image view enum. Drives which image the left pane shows at
 // full size — the photographer's reference (with annotations) or the
 // critic's uploaded processing example (no annotations in v1).
@@ -385,6 +393,13 @@ export default class NpnCritiqueReplyModal extends Component {
   // image-note text would keep it available regardless via
   // `hasAnyImageNotes`).
   @tracked _imageNotesRevealed = false;
+
+  // One-time reassurance hint: shown the first time adding a visual note
+  // auto-switches the view from Overall Critique to Image Notes, so critics
+  // realize their written critique is safe under the other tab (a real user
+  // thought she'd lost hers). Only fires when there was Overall text to
+  // "lose" and the per-user seen-flag isn't set. See `_appendToImageNotes`.
+  @tracked _contextSwitchHintVisible = false;
 
   // Post Critique state. `isPosting` disables the action buttons + close
   // path while the request is in flight; `errorMessage` is shown inline
@@ -2305,6 +2320,13 @@ export default class NpnCritiqueReplyModal extends Component {
     return false;
   }
 
+  // True when the Overall Critique holds text. Drives the "has content" dot
+  // on the Overall tab so the critic can see at a glance their writing is
+  // still there after the view auto-switches to Image Notes.
+  get hasOverallContent() {
+    return (this.overallCritiqueText ?? "").trim().length > 0;
+  }
+
   // The Image Notes / Visual Notes tab. BOTH single- and multi-image
   // critiques open with only Overall Critique — the second context is
   // revealed once it's actually needed, so a plain written critique
@@ -2394,6 +2416,11 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     this.activeWritingContext = next;
+    // Clicking back to Overall Critique means the critic found their
+    // writing — retire the reassurance hint for good.
+    if (next === WRITING_CONTEXT_OVERALL && this._contextSwitchHintVisible) {
+      this._dismissContextSwitchHint();
+    }
     this.validationMessage = null;
     setTimeout(() => {
       if (this._destroyed) {
@@ -2401,6 +2428,22 @@ export default class NpnCritiqueReplyModal extends Component {
       }
       this._focusWritingSurface();
     }, 0);
+  }
+
+  // Per-user localStorage key for the "seen the reassurance hint" flag.
+  get _contextSwitchHintSeenKey() {
+    return `${STORAGE_KEY_CONTEXT_HINT_SEEN}.${this.currentUser?.id ?? "anon"}`;
+  }
+
+  // Hide the reassurance hint and remember it so it never shows again.
+  _dismissContextSwitchHint() {
+    this._contextSwitchHintVisible = false;
+    writeBool(this._contextSwitchHintSeenKey, true);
+  }
+
+  @action
+  dismissContextSwitchHint() {
+    this._dismissContextSwitchHint();
   }
 
   // ---- Reply text preparation -----------------------------------------
@@ -7771,6 +7814,15 @@ export default class NpnCritiqueReplyModal extends Component {
       this.activeWritingContext !== WRITING_CONTEXT_IMAGE;
     if (switchingContext) {
       this.activeWritingContext = WRITING_CONTEXT_IMAGE;
+      // The first time this auto-switch hides a written Overall Critique,
+      // surface a one-time reassurance that it's safe under the other tab
+      // (only when there's Overall text to "lose", and only once per user).
+      if (
+        this.hasOverallContent &&
+        !readBool(this._contextSwitchHintSeenKey, false)
+      ) {
+        this._contextSwitchHintVisible = true;
+      }
     }
     // Switching context rebuilds the rich editor (it's keyed on
     // `writingContextKey`), so an in-place insert on the OUTGOING editor's
@@ -11648,7 +11700,14 @@ export default class NpnCritiqueReplyModal extends Component {
                     }}"
                   disabled={{this.isPosting}}
                   {{on "click" (fn this.setWritingContext "overall")}}
-                >{{this.overallTabLabel}}</button>
+                >{{this.overallTabLabel}}{{#if this.hasOverallContent}}
+                    <span
+                      class="npn-critique-reply-modal__context-tab-dot"
+                      aria-label={{i18n
+                        "npn_critique_reply.modal.writing_context.overall_has_content"
+                      }}
+                    ></span>
+                  {{/if}}</button>
                 {{#if this.imageNotesTabAvailable}}
                   <button
                     type="button"
@@ -11676,6 +11735,30 @@ export default class NpnCritiqueReplyModal extends Component {
                     {{/if}}</button>
                 {{/if}}
               </div>
+
+              {{! One-time reassurance shown the first time adding a visual
+                  note auto-switches to Image Notes while an Overall Critique
+                  is written — so the critic sees their writing isn't lost,
+                  just under the other tab. Dismissible; won't return once
+                  seen (or once they click back to Overall Critique). }}
+              {{#if this._contextSwitchHintVisible}}
+                <div
+                  class="npn-critique-reply-modal__context-hint"
+                  role="status"
+                >
+                  <span class="npn-critique-reply-modal__context-hint-text">
+                    {{i18n
+                      "npn_critique_reply.modal.writing_context.switch_hint"
+                    }}
+                  </span>
+                  <DButton
+                    class="btn-flat btn-small npn-critique-reply-modal__context-hint-dismiss"
+                    @icon="xmark"
+                    @label="npn_critique_reply.modal.writing_context.switch_hint_dismiss"
+                    @action={{this.dismissContextSwitchHint}}
+                  />
+                </div>
+              {{/if}}
 
               {{! Photographer's Request — a compact row INSIDE the writing
                   panel (directly under the context switcher), not a

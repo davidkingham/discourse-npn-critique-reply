@@ -1750,6 +1750,47 @@
     font-weight: 700;
   }
 
+  // Small "has content" dot on the Overall Critique tab (shows whenever
+  // it holds written text) — the reassurance counterpart to the Image
+  // Notes count badge. Mirrors the image-picker pill dot.
+  &__context-tab-dot {
+    display: inline-block;
+    width: 0.5em;
+    height: 0.5em;
+    border-radius: 50%;
+    background: var(--tertiary);
+  }
+
+  // One-time reassurance banner shown directly beneath the context tabs
+  // when adding a note auto-switches to Image Notes. Accent-tinted so it
+  // reads as a friendly hint, tied visually to the tabs above it.
+  &__context-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5em;
+    margin: 0.5em 0 0;
+    padding: 0.5em 0.6em;
+    background: var(--tertiary-very-low);
+    border: 1px solid var(--tertiary-low);
+    border-radius: var(--d-border-radius, 4px);
+    font-size: var(--font-down-1);
+    color: var(--primary);
+  }
+
+  &__context-hint-text {
+    flex: 1 1 auto;
+    line-height: 1.35;
+  }
+
+  &__context-hint-dismiss {
+    flex: 0 0 auto;
+    margin: -0.15em -0.2em 0 0;
+
+    .d-icon {
+      margin: 0;
+    }
+  }
+
   // "Editing notes for Image 2 of 4" indicator under the heading.
   &__context-indicator {
     margin: 0;
