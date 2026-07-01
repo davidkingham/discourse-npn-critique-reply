@@ -660,15 +660,17 @@ export default class NpnCritiqueReplyModal extends Component {
   //
   //   mobileVisualToolsOpen        — controls the Visual tools panel
   //                                  (toolbar + secondary row). Defaults
-  //                                  to false; auto-set to true on
-  //                                  restore when annotations exist.
+  //                                  to true so the tools are visible on
+  //                                  mobile without a tap-to-expand; the
+  //                                  summary still collapses them if the
+  //                                  critic wants the writing area sooner.
   //   mobileProcessingExampleOpen  — controls the Processing Example
   //                                  panel at the very bottom of the
   //                                  modal. Defaults to false so the
   //                                  workspace lands quietly. Auto-set
   //                                  to true on restore when an upload
   //                                  exists.
-  @tracked mobileVisualToolsOpen = false;
+  @tracked mobileVisualToolsOpen = true;
   @tracked mobileProcessingExampleOpen = false;
 
   // -- Visual Focus Mode -----------------------------------------------
@@ -9814,9 +9816,10 @@ export default class NpnCritiqueReplyModal extends Component {
     this.processingExample = null;
     this.processingExampleError = null;
     this.largeImageView = LARGE_IMAGE_VIEW_REFERENCE;
-    // Collapse the mobile disclosures back to their fresh-modal
-    // defaults — there's nothing left to surface.
-    this.mobileVisualToolsOpen = false;
+    // Reset the mobile disclosures to their fresh-modal defaults: the
+    // Visual tools panel stays expanded (its default), the Processing
+    // Example collapses since there's nothing left to surface.
+    this.mobileVisualToolsOpen = true;
     this.mobileProcessingExampleOpen = false;
     this.draftRestoreNotice = null;
     this.draftStatus = DRAFT_STATUS.IDLE;
