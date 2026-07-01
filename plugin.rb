@@ -95,8 +95,6 @@ after_initialize do
       rotate-left
       arrow-rotate-left
       arrows-up-down
-      up-right-and-down-left-from-center
-      down-left-and-up-right-to-center
     ].each { |name| register_svg_icon "fal-#{name}" }
   end
 

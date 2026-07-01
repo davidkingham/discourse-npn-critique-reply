@@ -9923,7 +9923,11 @@ export default class NpnCritiqueReplyModal extends Component {
             hidden via CSS. Layout-only; never touches the draft. }}
         <DButton
           class="btn-transparent toggle-fullscreen npn-critique-reply-modal__fullscreen-toggle"
-          @icon={{concat this.iconPrefix this.fullscreenIcon}}
+          {{! NOT prefixed with iconPrefix: `fullscreenIcon` is a Discourse
+              CUSTOM icon (discourse-expand / discourse-compress), not a
+              FontAwesome one, so there's no `fal-` weight variant — a
+              prefix would point at a nonexistent symbol and render blank. }}
+          @icon={{this.fullscreenIcon}}
           @action={{this.toggleFullscreen}}
           @translatedAriaLabel={{this.fullscreenLabel}}
           @translatedTitle={{this.fullscreenLabel}}
