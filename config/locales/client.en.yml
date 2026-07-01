@@ -146,8 +146,9 @@ en:
         optional_processing_example_heading: "Optional Processing Example"
         optional_processing_example_helper: "Upload an edited example only when it helps show a possible direction."
         image_alt: "Image being critiqued"
-        # Inspect-detail zoom button overlaid on the reference image.
-        image_zoom: "Inspect detail"
+        # "View full size" control next to the Optional Visual Notes
+        # heading — opens the full-resolution image in the lightbox.
+        image_zoom: "View Full Size"
         image_zoom_title: "Open the full-resolution view — zoom and pan to check sharpness and detail"
         image_alt_with_title: "Image being critiqued: %{title}"
         image_alt_versioned: "%{label} image being critiqued"
@@ -557,8 +558,8 @@ en:
         crop_popover_placeholder: "Why this crop?"
         crop_ratio_label: "Aspect ratio"
         crop_ratio_free: "Free"
-        # Eye path / Visual Flow tool
-        eye_path: "Eye path"
+        # Eye Path / Visual Flow tool
+        eye_path: "Eye Path"
         eye_path_title: "Mark how your eye moves"
         eye_path_done: "Done with eye path"
         # Completion action shown in the Eye Path sub-tool row (the main
@@ -711,7 +712,7 @@ en:
         relationship_arrow_popover_placeholder: "How are these areas related?"
         # Popover that appears when the eye path crosses its second
         # point — gives the critic a chance to describe the flow.
-        eye_path_popover_title: "Eye path"
+        eye_path_popover_title: "Eye Path"
         eye_path_popover_dialog_label: "Add a note for the eye path"
         eye_path_popover_placeholder: "Describe how your eye moves..."
         # Inline note popover — anchored near the pin the user just placed.
