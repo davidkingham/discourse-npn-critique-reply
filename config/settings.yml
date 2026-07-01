@@ -20,6 +20,15 @@ plugins:
     default: false
     client: true
 
+  # Render the visual-notes toolbar icons in FontAwesome Pro LIGHT weight
+  # (fal-). Off by default so stock Discourse (which only ships solid)
+  # shows the normal icons. Turn on only when the FontAwesome Pro plugin
+  # is installed and providing fal- symbols; a rebuild is needed after
+  # toggling so the light variants get into the SVG sprite.
+  npn_critique_reply_fontawesome_pro_light_icons:
+    default: false
+    client: true
+
   # Gates the compact "Start a thoughtful critique" invitation panel
   # rendered above the post stream on eligible critique topics. Set
   # to false to turn off just the panel — the footer "Start a Critique"

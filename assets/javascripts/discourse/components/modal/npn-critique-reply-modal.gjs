@@ -1,6 +1,6 @@
 import { Textarea } from "@ember/component";
 import Component from "@glimmer/component";
-import { fn } from "@ember/helper";
+import { concat, fn } from "@ember/helper";
 import { on } from "@ember/modifier";
 import { action } from "@ember/object";
 import { getOwner } from "@ember/owner";
@@ -2257,6 +2257,18 @@ export default class NpnCritiqueReplyModal extends Component {
 
   get writingContextIsImage() {
     return this.activeWritingContext === WRITING_CONTEXT_IMAGE;
+  }
+
+  // Prefix for the visual-notes toolbar icon names. When the site opts into
+  // FontAwesome Pro light icons (and the fontawesome-pro plugin supplies the
+  // `fal-` symbols — see the matching registration in plugin.rb), every tool
+  // button renders in the light weight so the row matches a light-icon
+  // theme instead of a mix of light + solid. Empty string (the default)
+  // leaves the normal names untouched, so stock Discourse is unaffected.
+  get iconPrefix() {
+    return this.siteSettings.npn_critique_reply_fontawesome_pro_light_icons
+      ? "fal-"
+      : "";
   }
 
   // Notes text for a given image index — the active image reads the
@@ -10538,7 +10550,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   <DButton
                     class={{if this.noteMode "btn-primary" "btn-default"}}
                     @action={{this.toggleNoteMode}}
-                    @icon="plus"
+                    @icon={{concat this.iconPrefix "plus"}}
                     @label="npn_critique_reply.visual_notes.numbered_notes"
                     @title="npn_critique_reply.visual_notes.numbered_notes_title"
                     @ariaPressed={{this.noteMode}}
@@ -10547,7 +10559,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   <DButton
                     class={{if this.cropMode "btn-primary" "btn-default"}}
                     @action={{this.toggleCropMode}}
-                    @icon="crop-simple"
+                    @icon={{concat this.iconPrefix "crop-simple"}}
                     @label="npn_critique_reply.visual_notes.crop_suggestion"
                     @title="npn_critique_reply.visual_notes.crop_suggestion_title"
                     @ariaPressed={{this.cropMode}}
@@ -10561,7 +10573,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   <DButton
                     class={{if this.eyePathMode "btn-primary" "btn-default"}}
                     @action={{this.toggleEyePathMode}}
-                    @icon="route"
+                    @icon={{concat this.iconPrefix "route"}}
                     @label="npn_critique_reply.visual_notes.eye_path"
                     @title="npn_critique_reply.visual_notes.eye_path_title"
                     @ariaPressed={{this.eyePathMode}}
@@ -10579,7 +10591,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       "btn-default"
                     }}
                     @action={{this.toggleAttentionPullMode}}
-                    @icon="draw-polygon"
+                    @icon={{concat this.iconPrefix "draw-polygon"}}
                     @label="npn_critique_reply.visual_notes.area_note"
                     @title="npn_critique_reply.visual_notes.area_note_title"
                     @ariaPressed={{this.attentionPullMode}}
@@ -10592,7 +10604,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       "btn-default"
                     }}
                     @action={{this.toggleDirectionArrowMode}}
-                    @icon="arrow-right"
+                    @icon={{concat this.iconPrefix "arrow-right"}}
                     @label="npn_critique_reply.visual_notes.direction_arrow"
                     @title="npn_critique_reply.visual_notes.direction_arrow_title"
                     @ariaPressed={{this.directionArrowMode}}
@@ -10605,7 +10617,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       "btn-default"
                     }}
                     @action={{this.toggleRelationshipArrowMode}}
-                    @icon="arrows-left-right"
+                    @icon={{concat this.iconPrefix "arrows-left-right"}}
                     @label="npn_critique_reply.visual_notes.relationship_arrow"
                     @title="npn_critique_reply.visual_notes.relationship_arrow_title"
                     @ariaPressed={{this.relationshipArrowMode}}
@@ -10634,7 +10646,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       id="npn-critique-reply-rotate-trigger"
                       class="btn-default"
                       @action={{this.toggleRotateMenu}}
-                      @icon="rotate-right"
+                      @icon={{concat this.iconPrefix "rotate-right"}}
                       @label="npn_critique_reply.visual_notes.transform.rotate.label"
                       @title="npn_critique_reply.visual_notes.transform.rotate.title"
                       @disabled={{or this.isPosting this._imageTransformApplying}}
@@ -10701,7 +10713,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       {{! `right-left` (swap arrows) reads as "mirror /
                           reverse orientation" and, unlike `arrows-left-right`,
                           doesn't collide with the Relationship-arrow tool. }}
-                      @icon="right-left"
+                      @icon={{concat this.iconPrefix "right-left"}}
                       @label="npn_critique_reply.visual_notes.transform.flip.label"
                       @title="npn_critique_reply.visual_notes.transform.flip.title"
                       @disabled={{or this.isPosting this._imageTransformApplying}}

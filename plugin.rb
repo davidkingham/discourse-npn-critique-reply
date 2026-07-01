@@ -62,6 +62,11 @@ register_svg_icon "right-left"
 # full-resolution PhotoSwipe lightbox so critics can check sharpness.
 register_svg_icon "magnifying-glass-plus"
 
+# Optional FontAwesome Pro LIGHT variants of the visual-notes toolbar
+# icons are registered inside after_initialize (below), where the plugin's
+# own site settings are guaranteed to be registered — reading a plugin
+# setting at the top level here can run before that and blow up boot.
+
 module ::DiscourseNpnCritiqueReply
   PLUGIN_NAME = "discourse-npn-critique-reply"
   SERIALIZED_KEY = :npn_critique_reply
@@ -70,6 +75,26 @@ end
 require_relative "lib/discourse_npn_critique_reply/engine"
 
 after_initialize do
+  # Opt-in FontAwesome Pro LIGHT variants of the visual-notes toolbar icons.
+  # Pulled into the sprite only when the site enables the setting AND the
+  # discourse-fontawesome-pro plugin is supplying `fal-` symbols — otherwise
+  # these names don't exist and would render as missing icons. The client
+  # swaps each toolbar `@icon` to its `fal-` name via the same setting (see
+  # `iconPrefix` in the modal). Toolbar order: Notes, Crop, Eye Path, Area,
+  # Arrow, Relationship, Rotate, Flip.
+  if SiteSetting.npn_critique_reply_fontawesome_pro_light_icons
+    %w[
+      plus
+      crop-simple
+      route
+      draw-polygon
+      arrow-right
+      arrows-left-right
+      rotate-right
+      right-left
+    ].each { |name| register_svg_icon "fal-#{name}" }
+  end
+
   require_relative "lib/discourse_npn_critique_reply/topic_metadata_reader"
   require_relative "lib/discourse_npn_critique_reply/draft_normalizer"
   require_relative "lib/discourse_npn_critique_reply/draft_store"
