@@ -686,6 +686,15 @@ export default class NpnCritiqueReplyModal extends Component {
   // percent-based annotation. No explicit refit call needed.
   @tracked visualFocusMode = false;
 
+  // "Inspect detail" zoom lives inline with the Optional Visual Notes
+  // heading, but the trigger (lightbox + Escape guard) belongs to the
+  // image-reference component that owns the image and hidden anchor. The
+  // component reports its availability + bound trigger up via
+  // `@onZoomStateChange`; we stash them here so the header button can gate
+  // its visibility and fire the trigger.
+  @tracked _imageZoomAvailable = false;
+  _imageZoomOpen = null;
+
   // -- Area shape sub-mode (Draw Area vs Oval) -------------------------
   //
   // Draw Area is the primary mode — the user loosely outlines the
@@ -3450,6 +3459,20 @@ export default class NpnCritiqueReplyModal extends Component {
   @action
   toggleMobileProcessingExample() {
     this.mobileProcessingExampleOpen = !this.mobileProcessingExampleOpen;
+  }
+
+  // Receives the image-reference component's zoom availability + bound
+  // trigger (see `_imageZoomAvailable`). Called on the image's mount, on
+  // every image swap, and on teardown.
+  @action
+  onImageZoomStateChange(canZoom, openFn) {
+    this._imageZoomAvailable = !!canZoom;
+    this._imageZoomOpen = typeof openFn === "function" ? openFn : null;
+  }
+
+  @action
+  openImageZoom() {
+    this._imageZoomOpen?.();
   }
 
   @action
@@ -10115,6 +10138,7 @@ export default class NpnCritiqueReplyModal extends Component {
               {{else}}
               <NpnCritiqueImageReference
                 @imageUrl={{this.effectiveImageUrl}}
+                @onZoomStateChange={{this.onImageZoomStateChange}}
                 @alt={{this.imageAlt}}
                 @pins={{this.notes}}
                 @crop={{this.crop}}
@@ -10403,6 +10427,25 @@ export default class NpnCritiqueReplyModal extends Component {
                   class="npn-critique-reply-modal__optional-visual-notes"
                   aria-labelledby="npn-critique-reply-optional-visual-notes-heading"
                 >
+                {{! "Inspect detail" zoom control. Positioned top-right of
+                    this section so it sits inline with the heading in the
+                    normal layout without adding a row, and stays put in
+                    focus mode (where only the heading text is hidden). The
+                    trigger is owned by the image-reference component and
+                    reported up via @onZoomStateChange. }}
+                {{#if this._imageZoomAvailable}}
+                  <button
+                    type="button"
+                    class="npn-critique-reply-modal__zoom-button btn btn-default btn-small"
+                    title={{i18n "npn_critique_reply.modal.image_zoom_title"}}
+                    {{on "click" this.openImageZoom}}
+                  >
+                    {{dIcon "magnifying-glass-plus"}}
+                    <span class="npn-critique-reply-modal__zoom-button-label">
+                      {{i18n "npn_critique_reply.modal.image_zoom"}}
+                    </span>
+                  </button>
+                {{/if}}
                 <h3
                   id="npn-critique-reply-optional-visual-notes-heading"
                   class="npn-critique-reply-modal__optional-section-heading"

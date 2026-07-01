@@ -159,6 +159,22 @@ export default class NpnCritiqueImageReference extends Component {
   // `uppy-image-uploader` trigger: wire the hidden `a.lightbox` anchor,
   // then click it. PhotoSwipe renders its own top-layer overlay, so the
   // workspace modal + Konva stage are untouched underneath.
+  // Hand the zoom affordance up to the modal so it can render the
+  // "Inspect detail" button inline with the Optional Visual Notes heading
+  // (rather than overlaid on the image). We pass the current availability
+  // plus the bound trigger; the trigger keeps the Escape-guard + lightbox
+  // wiring here, in the component that owns the image + hidden anchor.
+  // Fires on mount and whenever `canZoom` flips (image load / swap).
+  @action
+  reportZoomState() {
+    this.args.onZoomStateChange?.(this.canZoom, this.openDetailLightbox);
+  }
+
+  @action
+  reportZoomTeardown() {
+    this.args.onZoomStateChange?.(false, null);
+  }
+
   @action
   async openDetailLightbox() {
     const anchor = document.querySelector(
@@ -723,6 +739,9 @@ export default class NpnCritiqueImageReference extends Component {
           @relationshipArrows
         }}
         {{willDestroy this.teardownKonva}}
+        {{didInsert this.reportZoomState}}
+        {{didUpdate this.reportZoomState this.canZoom}}
+        {{willDestroy this.reportZoomTeardown}}
       >
         <div class="npn-critique-image-reference__frame">
           <img
@@ -1281,29 +1300,6 @@ export default class NpnCritiqueImageReference extends Component {
             </div>
           {{/if}}
         </div>
-
-        {{! Inspect-detail control. Opens the full-resolution image in
-            Discourse's PhotoSwipe lightbox (fullscreen, zoom to 100%, pan)
-            so the critic can judge sharpness. Sits BELOW the image (not
-            overlaid on it — the corner button could hide annotations /
-            image content) in a right-aligned bar, and stays reachable in
-            both normal and Visual Focus mode because this component renders
-            in both. }}
-        {{#if this.canZoom}}
-          <div class="npn-critique-image-reference__actions">
-            <button
-              type="button"
-              class="npn-critique-image-reference__zoom-button btn btn-default btn-small"
-              title={{i18n "npn_critique_reply.modal.image_zoom_title"}}
-              {{on "click" this.openDetailLightbox}}
-            >
-              {{dIcon "magnifying-glass-plus"}}
-              <span class="npn-critique-image-reference__zoom-button-label">
-                {{i18n "npn_critique_reply.modal.image_zoom"}}
-              </span>
-            </button>
-          </div>
-        {{/if}}
 
         {{! All per-tool hints (crop included) live in the modal's
             secondary toolbar under Optional Visual Notes, right where the
