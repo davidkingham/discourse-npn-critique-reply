@@ -3455,10 +3455,18 @@ export async function createAnnotationStage({
         borderEnabled: false,
         // Hide the default square anchors. The visible affordance is
         // the bracket/bar decoration; the Transformer's anchors still
-        // own the hit areas, so we keep `anchorSize` large enough to
-        // cover those visuals (~24px). Transparent fill/stroke keeps
-        // the anchors hit-testable but invisible.
-        anchorSize: 24,
+        // own the hit areas. Transparent fill/stroke keeps them
+        // hit-testable but invisible.
+        //
+        // Sized generously (40px) because the stage canvas is exactly the
+        // image, so an anchor centered on a crop edge that's flush against
+        // the frame has its OUTER half off-canvas (un-hittable). A larger
+        // anchor keeps a comfortable on-canvas grab zone (~half the size)
+        // at that flush edge, so full-bleed / edge-aligned crops stay
+        // resizable without first nudging them off the edge. (Tiny crops
+        // near the 3% minimum already overlap their anchors regardless, so
+        // this doesn't introduce a new small-crop problem.)
+        anchorSize: 40,
         anchorStroke: "rgba(0,0,0,0)",
         anchorFill: "rgba(0,0,0,0)",
         anchorStrokeWidth: 0,
