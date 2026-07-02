@@ -3283,30 +3283,7 @@ export async function createAnnotationStage({
     // Transform (resize) handlers. Konva applies scaleX/scaleY during
     // transform; on end we bake the scale back into width/height so
     // the next interaction starts from scale 1.
-    cropRect.on("transformstart", () => {
-      // TEMP DEBUG (crop-resize sticking) — remove once diagnosed.
-      // eslint-disable-next-line no-console
-      console.info("[npn-crop-dbg] transformstart", {
-        anchor: cropTransformerRef?.getActiveAnchor?.(),
-        x: cropRect.x(),
-        y: cropRect.y(),
-        w: cropRect.width(),
-        h: cropRect.height(),
-      });
-    });
-    cropRect.on("transform", () => {
-      // TEMP DEBUG (crop-resize sticking) — remove once diagnosed.
-      // eslint-disable-next-line no-console
-      console.info("[npn-crop-dbg] transform", {
-        x: cropRect.x(),
-        y: cropRect.y(),
-        w: cropRect.width(),
-        h: cropRect.height(),
-        sx: cropRect.scaleX(),
-        sy: cropRect.scaleY(),
-      });
-      updateDimDuringInteraction();
-    });
+    cropRect.on("transform", () => updateDimDuringInteraction());
     cropRect.on("transformend", () => {
       const sx = cropRect.scaleX();
       const sy = cropRect.scaleY();
@@ -3314,14 +3291,6 @@ export async function createAnnotationStage({
       cropRect.scaleY(1);
       cropRect.width(Math.max(1, cropRect.width() * sx));
       cropRect.height(Math.max(1, cropRect.height() * sy));
-      // TEMP DEBUG (crop-resize sticking) — remove once diagnosed.
-      // eslint-disable-next-line no-console
-      console.info("[npn-crop-dbg] transformend", {
-        x: cropRect.x(),
-        y: cropRect.y(),
-        w: cropRect.width(),
-        h: cropRect.height(),
-      });
       emitCropUpdate();
     });
 
@@ -3529,32 +3498,50 @@ export async function createAnnotationStage({
           });
         },
         boundBoxFunc(oldBox, newBox) {
-          // TEMP DEBUG (crop-resize sticking) — remove once diagnosed.
-          // eslint-disable-next-line no-console
-          console.info("[npn-crop-dbg] boundBox", {
-            isRatioLocked,
-            sw,
-            sh,
-            old: { ...oldBox },
-            new: { ...newBox },
-          });
-          // Ratio-locked: reject an out-of-bounds box (clamping a single
-          // axis would break the locked aspect ratio); the crop just stops
-          // when a corner reaches the frame.
+          // Ratio-locked: a locked crop only exposes CORNER anchors, and
+          // Konva's keepRatio already hands us a box with the locked ratio.
+          // Rejecting an out-of-bounds box (the old behavior) made the crop
+          // "stick" the instant a corner met the frame — every drag frame
+          // grazed the boundary and got thrown out. Instead, scale the box
+          // down UNIFORMLY (ratio preserved) to fit inside the frame,
+          // anchored to the corner the drag isn't moving (the opposite
+          // corner stays put). It grows until the first edge reaches the
+          // frame, then holds there — responsive, never stuck.
           if (isRatioLocked) {
-            if (newBox.width < minW || newBox.height < minH) {
+            const eps = 0.5;
+            // The corner opposite the dragged one doesn't move between
+            // old and new box — that's our fixed anchor.
+            const leftFixed = Math.abs(newBox.x - oldBox.x) < eps;
+            const topFixed = Math.abs(newBox.y - oldBox.y) < eps;
+            const anchorX = leftFixed ? newBox.x : newBox.x + newBox.width;
+            const anchorY = topFixed ? newBox.y : newBox.y + newBox.height;
+            // Space available from the fixed edge toward the moving edge.
+            const availW = leftFixed ? sw - anchorX : anchorX;
+            const availH = topFixed ? sh - anchorY : anchorY;
+            if (availW <= 0 || availH <= 0) {
               return oldBox;
             }
-            if (newBox.x < 0 || newBox.y < 0) {
+            let width = newBox.width;
+            let height = newBox.height;
+            let scale = 1;
+            if (width > availW) {
+              scale = Math.min(scale, availW / width);
+            }
+            if (height > availH) {
+              scale = Math.min(scale, availH / height);
+            }
+            width *= scale;
+            height *= scale;
+            if (width < minW || height < minH) {
               return oldBox;
             }
-            if (
-              newBox.x + newBox.width > sw ||
-              newBox.y + newBox.height > sh
-            ) {
-              return oldBox;
-            }
-            return newBox;
+            return {
+              ...newBox,
+              x: leftFixed ? anchorX : anchorX - width,
+              y: topFixed ? anchorY : anchorY - height,
+              width,
+              height,
+            };
           }
           // Free ratio: CLAMP each edge to the frame instead of rejecting
           // the whole transform. Rejecting was why a crop whose edge sits on
