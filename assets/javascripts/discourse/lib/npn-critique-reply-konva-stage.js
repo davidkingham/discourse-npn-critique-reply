@@ -3498,19 +3498,53 @@ export async function createAnnotationStage({
           });
         },
         boundBoxFunc(oldBox, newBox) {
-          if (newBox.width < minW || newBox.height < minH) {
+          // Ratio-locked: reject an out-of-bounds box (clamping a single
+          // axis would break the locked aspect ratio); the crop just stops
+          // when a corner reaches the frame.
+          if (isRatioLocked) {
+            if (newBox.width < minW || newBox.height < minH) {
+              return oldBox;
+            }
+            if (newBox.x < 0 || newBox.y < 0) {
+              return oldBox;
+            }
+            if (
+              newBox.x + newBox.width > sw ||
+              newBox.y + newBox.height > sh
+            ) {
+              return oldBox;
+            }
+            return newBox;
+          }
+          // Free ratio: CLAMP each edge to the frame instead of rejecting
+          // the whole transform. Rejecting was why a crop whose edge sits on
+          // the frame boundary "stuck" — while an edge is flush, dragging
+          // keeps producing boundary-grazing boxes, every one of which was
+          // thrown out (return oldBox), so nothing moved until you pulled the
+          // crop off the edge into the interior. Clamping keeps the box valid
+          // and the resize responsive right at the edge: a handle dragged
+          // past the frame simply pins to it.
+          const box = { ...newBox };
+          if (box.x < 0) {
+            box.width += box.x;
+            box.x = 0;
+          }
+          if (box.y < 0) {
+            box.height += box.y;
+            box.y = 0;
+          }
+          if (box.x + box.width > sw) {
+            box.width = sw - box.x;
+          }
+          if (box.y + box.height > sh) {
+            box.height = sh - box.y;
+          }
+          // Only reject once the clamped box would be degenerate (below the
+          // minimum crop size) — otherwise apply the clamped box.
+          if (box.width < minW || box.height < minH) {
             return oldBox;
           }
-          if (newBox.x < 0 || newBox.y < 0) {
-            return oldBox;
-          }
-          if (
-            newBox.x + newBox.width > sw ||
-            newBox.y + newBox.height > sh
-          ) {
-            return oldBox;
-          }
-          return newBox;
+          return box;
         },
       });
       cropLayer.add(transformer);
