@@ -3457,19 +3457,46 @@ export async function createAnnotationStage({
         // the bracket/bar decoration; the Transformer's anchors still
         // own the hit areas. Transparent fill/stroke keeps them
         // hit-testable but invisible.
-        //
-        // Sized generously (40px) because the stage canvas is exactly the
-        // image, so an anchor centered on a crop edge that's flush against
-        // the frame has its OUTER half off-canvas (un-hittable). A larger
-        // anchor keeps a comfortable on-canvas grab zone (~half the size)
-        // at that flush edge, so full-bleed / edge-aligned crops stay
-        // resizable without first nudging them off the edge. (Tiny crops
-        // near the 3% minimum already overlap their anchors regardless, so
-        // this doesn't introduce a new small-crop problem.)
-        anchorSize: 40,
+        anchorSize: 24,
         anchorStroke: "rgba(0,0,0,0)",
         anchorFill: "rgba(0,0,0,0)",
         anchorStrokeWidth: 0,
+        // Extend each anchor's HIT region toward the crop interior. The
+        // stage canvas is exactly the image, so an anchor centered on a
+        // crop edge that sits flush against the frame has its outer half
+        // off-canvas (un-hittable) — leaving only a thin sliver to grab,
+        // which is why edge / full-bleed crops felt un-resizable until
+        // nudged off the edge. We enlarge only the HIT area inward (not
+        // position, size, or offset), so `getAbsolutePosition` — which
+        // Konva's resize math is relative to — is unchanged and the resize
+        // point stays exactly on the edge. Each handle grows toward the
+        // crop center: left→right, right→left, top→down, bottom→up.
+        anchorStyleFunc(anchor) {
+          const name = anchor.name();
+          const w = anchor.width();
+          const h = anchor.height();
+          const reach = 28; // px of extra grab area toward the interior
+          let x0 = 0;
+          let x1 = w;
+          let y0 = 0;
+          let y1 = h;
+          if (name.includes("left")) {
+            x1 = w + reach;
+          } else if (name.includes("right")) {
+            x0 = -reach;
+          }
+          if (name.includes("top")) {
+            y1 = h + reach;
+          } else if (name.includes("bottom")) {
+            y0 = -reach;
+          }
+          anchor.hitFunc(function (ctx) {
+            ctx.beginPath();
+            ctx.rect(x0, y0, x1 - x0, y1 - y0);
+            ctx.closePath();
+            ctx.fillStrokeShape(this);
+          });
+        },
         boundBoxFunc(oldBox, newBox) {
           if (newBox.width < minW || newBox.height < minH) {
             return oldBox;
