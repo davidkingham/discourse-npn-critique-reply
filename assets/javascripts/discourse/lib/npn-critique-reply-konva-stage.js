@@ -3283,7 +3283,30 @@ export async function createAnnotationStage({
     // Transform (resize) handlers. Konva applies scaleX/scaleY during
     // transform; on end we bake the scale back into width/height so
     // the next interaction starts from scale 1.
-    cropRect.on("transform", () => updateDimDuringInteraction());
+    cropRect.on("transformstart", () => {
+      // TEMP DEBUG (crop-resize sticking) — remove once diagnosed.
+      // eslint-disable-next-line no-console
+      console.info("[npn-crop-dbg] transformstart", {
+        anchor: cropTransformerRef?.getActiveAnchor?.(),
+        x: cropRect.x(),
+        y: cropRect.y(),
+        w: cropRect.width(),
+        h: cropRect.height(),
+      });
+    });
+    cropRect.on("transform", () => {
+      // TEMP DEBUG (crop-resize sticking) — remove once diagnosed.
+      // eslint-disable-next-line no-console
+      console.info("[npn-crop-dbg] transform", {
+        x: cropRect.x(),
+        y: cropRect.y(),
+        w: cropRect.width(),
+        h: cropRect.height(),
+        sx: cropRect.scaleX(),
+        sy: cropRect.scaleY(),
+      });
+      updateDimDuringInteraction();
+    });
     cropRect.on("transformend", () => {
       const sx = cropRect.scaleX();
       const sy = cropRect.scaleY();
@@ -3291,6 +3314,14 @@ export async function createAnnotationStage({
       cropRect.scaleY(1);
       cropRect.width(Math.max(1, cropRect.width() * sx));
       cropRect.height(Math.max(1, cropRect.height() * sy));
+      // TEMP DEBUG (crop-resize sticking) — remove once diagnosed.
+      // eslint-disable-next-line no-console
+      console.info("[npn-crop-dbg] transformend", {
+        x: cropRect.x(),
+        y: cropRect.y(),
+        w: cropRect.width(),
+        h: cropRect.height(),
+      });
       emitCropUpdate();
     });
 
@@ -3498,6 +3529,15 @@ export async function createAnnotationStage({
           });
         },
         boundBoxFunc(oldBox, newBox) {
+          // TEMP DEBUG (crop-resize sticking) — remove once diagnosed.
+          // eslint-disable-next-line no-console
+          console.info("[npn-crop-dbg] boundBox", {
+            isRatioLocked,
+            sw,
+            sh,
+            old: { ...oldBox },
+            new: { ...newBox },
+          });
           // Ratio-locked: reject an out-of-bounds box (clamping a single
           // axis would break the locked aspect ratio); the crop just stops
           // when a corner reaches the frame.
