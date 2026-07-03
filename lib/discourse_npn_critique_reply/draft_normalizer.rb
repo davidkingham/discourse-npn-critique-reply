@@ -256,10 +256,17 @@ module DiscourseNpnCritiqueReply
       str.length > MAX_CRITIQUE_TEXT_LENGTH ? str[0, MAX_CRITIQUE_TEXT_LENGTH] : str
     end
 
+    # Short single-line fields (annotation notes/labels, version keys). Capped
+    # so a crafted payload can't inflate the stored custom field — which is
+    # reserialized to every viewer on every topic-page load — with megabyte
+    # strings. Long-form critique prose uses normalize_text (50k) instead.
+    MAX_STRING_LENGTH = 2000
+
     def normalize_string(value)
       return nil if value.nil?
       str = value.to_s.strip
-      str.empty? ? nil : str
+      return nil if str.empty?
+      str.length > MAX_STRING_LENGTH ? str[0, MAX_STRING_LENGTH] : str
     end
 
     def normalize_ui(value)

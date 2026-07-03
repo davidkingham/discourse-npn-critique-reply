@@ -105,13 +105,23 @@ module DiscourseNpnCritiqueReply
         raise Discourse::InvalidAccess
       end
 
+      # PostRevisor#revise! performs no permission checks of its own — core
+      # normally gates edits in PostsController via guardian.ensure_can_edit!.
+      # Enforce it here too so staff-locked posts, archived topics, silenced
+      # users, and deleted posts can't be edited through this endpoint.
+      guardian.ensure_can_edit!(post)
+
       revisor = PostRevisor.new(post)
       success = revisor.revise!(current_user, raw: raw)
 
-      unless success
-        # Failure path returns BEFORE we touch the visual-notes
-        # custom field so a 422 leaves the post (raw + custom field)
-        # completely unchanged.
+      # revise! returns false BOTH on a genuine failure (which populates
+      # post.errors) AND on a no-op edit where the raw is byte-identical
+      # (empty errors). Only the former is an error; a no-op must still fall
+      # through so a metadata-only change (e.g. annotations edited but the
+      # rendered raw unchanged) is reconciled instead of being lost behind a
+      # spurious 422. This return happens BEFORE we touch the visual-notes
+      # custom field so a real failure leaves the post completely unchanged.
+      if !success && post.errors.present?
         render_json_error post.errors.full_messages.join(". ").presence ||
           I18n.t("npn_critique_reply.errors.create_failed"), status: 422
         return

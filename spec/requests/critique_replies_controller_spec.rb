@@ -812,6 +812,19 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
         expect(stored["annotations"].map { |a| a["number"] }).to contain_exactly(1, 2)
       end
 
+      it "treats a byte-identical raw as a no-op and still syncs metadata (no 422)" do
+        # revise! returns false when the raw is unchanged. That must not be
+        # reported as a failure — the metadata still needs to reconcile.
+        identical_raw = critique_reply.raw
+        put_update(critique_reply.id, raw: identical_raw, visual_notes: updated_visual_notes)
+
+        expect(response.status).to eq(200)
+        expect(response.parsed_body["success"]).to eq(true)
+
+        stored = Post.find(critique_reply.id).custom_fields["npn_visual_notes"]
+        expect(stored["annotations"].length).to eq(2)
+      end
+
       it "rejects updates when the post has no existing npn_visual_notes" do
         plain_reply = Fabricate(:post, topic: critique_topic, user: author)
         put_update(plain_reply.id)
@@ -824,6 +837,31 @@ describe DiscourseNpnCritiqueReply::CritiqueRepliesController do
         other_post.save_custom_fields
         put_update(other_post.id)
         expect(response.status).to eq(403)
+      end
+
+      # PostRevisor#revise! performs no permission checks, so the endpoint
+      # must enforce guardian.ensure_can_edit! itself. Without it, an author
+      # could edit through core restrictions (staff lock, archived topic,
+      # deleted post) that would block the normal composer.
+      it "rejects updates when a moderator has locked the post" do
+        critique_reply.update!(locked_by_id: Discourse.system_user.id)
+        put_update(critique_reply.id)
+        expect(response.status).to eq(403)
+        expect(Post.find(critique_reply.id).raw).not_to eq(updated_raw)
+      end
+
+      it "rejects updates when the topic is archived" do
+        critique_topic.update!(archived: true)
+        put_update(critique_reply.id)
+        expect(response.status).to eq(403)
+        expect(Post.find(critique_reply.id).raw).not_to eq(updated_raw)
+      end
+
+      it "rejects updates when the author is silenced" do
+        author.update!(silenced_till: 1.day.from_now)
+        put_update(critique_reply.id)
+        expect(response.status).to eq(403)
+        expect(Post.find(critique_reply.id).raw).not_to eq(updated_raw)
       end
 
       it "rejects empty raw" do
