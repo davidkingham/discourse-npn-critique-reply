@@ -1666,6 +1666,30 @@ export default class NpnCritiqueReplyModal extends Component {
       : i18n("npn_critique_reply.modal.request_heading");
   }
 
+  // The photographer's first name only (first token of their full name),
+  // for the friendlier "View Mike's Notes" button. Derived from the full
+  // name specifically — null when only a username is available, so the
+  // button falls back to the generic "View Photographer's Notes" rather
+  // than showing a bare username.
+  get photographerFirstName() {
+    const name = this.topic?.details?.created_by?.name?.trim();
+    if (!name) {
+      return null;
+    }
+    return name.split(/\s+/)[0];
+  }
+
+  // Label for the notes disclosure button: "View {First}'s Notes" when the
+  // OP's first name is known, else the generic "View Photographer's Notes".
+  get photographersNotesViewLabel() {
+    const name = this.photographerFirstName;
+    return name
+      ? i18n("npn_critique_reply.modal.photographers_notes.view_named", {
+          name,
+        })
+      : i18n("npn_critique_reply.modal.photographers_notes.view");
+  }
+
   // Set by callers that open the modal to EDIT an existing critique
   // reply (rather than create a new one). When present the modal:
   //   • restores annotations from `editingPost.npn_visual_notes`
@@ -11871,9 +11895,9 @@ export default class NpnCritiqueReplyModal extends Component {
                     {{on "click" this.togglePhotographersNotes}}
                   >
                     {{dIcon "far-file-lines"}}
-                    <span class="d-button-label">{{i18n
-                        "npn_critique_reply.modal.photographers_notes.view"
-                      }}</span>
+                    <span
+                      class="d-button-label"
+                    >{{this.photographersNotesViewLabel}}</span>
                   </button>
                 </div>
               </section>

@@ -71,6 +71,9 @@ en:
           # Trigger button (under the Photographer's Request) that opens
           # the notes overlay panel.
           view: "View Photographer’s Notes"
+          # Same trigger button personalized with the OP's first name (falls
+          # back to the generic "view" above) — e.g. "View Mike’s Notes".
+          view_named: "View %{name}’s Notes"
           close: "Close photographer’s notes"
           hint: "View the photographer’s description, questions, and details."
           loading: "Loading the photographer’s post…"
