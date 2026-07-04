@@ -68,6 +68,9 @@ en:
         # leaving the workspace. Lazy-loaded on first expand.
         photographers_notes:
           title: "Photographer’s Notes"
+          # Panel title personalized with the OP's first name (falls back to
+          # the generic "title" above) — e.g. "Mike’s Notes".
+          title_named: "%{name}’s Notes"
           # Trigger button (under the Photographer's Request) that opens
           # the notes overlay panel.
           view: "View Photographer’s Notes"

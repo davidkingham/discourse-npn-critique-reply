@@ -1728,6 +1728,18 @@ export default class NpnCritiqueReplyModal extends Component {
       : i18n("npn_critique_reply.modal.photographers_notes.view");
   }
 
+  // Title of the notes overlay panel: "{First}'s Notes" when the OP's first
+  // name is known, else the generic "Photographer's Notes" — mirrors the
+  // View-notes trigger so the panel it opens carries the same name.
+  get photographersNotesTitle() {
+    const name = this.photographerFirstName;
+    return name
+      ? i18n("npn_critique_reply.modal.photographers_notes.title_named", {
+          name,
+        })
+      : i18n("npn_critique_reply.modal.photographers_notes.title");
+  }
+
   // Set by callers that open the modal to EDIT an existing critique
   // reply (rather than create a new one). When present the modal:
   //   • restores annotations from `editingPost.npn_visual_notes`
@@ -12356,7 +12368,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   id="npn-critique-reply-notes-panel-title"
                   class="npn-critique-reply-modal__notes-panel-title"
                 >
-                  {{i18n "npn_critique_reply.modal.photographers_notes.title"}}
+                  {{this.photographersNotesTitle}}
                 </h3>
                 <DButton
                   class="btn-flat npn-critique-reply-modal__notes-panel-close"
