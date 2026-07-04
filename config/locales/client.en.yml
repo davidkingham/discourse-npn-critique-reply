@@ -58,6 +58,10 @@ en:
         scroll_more_below: "Show more content below"
         scroll_more_below_label: "More below"
         request_heading: "Photographer’s request"
+        # Same heading personalized with the topic OP's full name (falls
+        # back to username, then the generic heading above) — e.g.
+        # "Jane Doe’s request". CSS uppercases it in the panel.
+        request_heading_named: "%{name}’s request"
         # Collapsed-by-default disclosure between Photographer's Request
         # and Questions to Consider. Surfaces the cooked OP content so
         # critics can refer back to what the photographer wrote without

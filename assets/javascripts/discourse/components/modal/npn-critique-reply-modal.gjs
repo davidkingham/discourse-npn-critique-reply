@@ -1643,6 +1643,29 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.args.model?.topic ?? null;
   }
 
+  // The photographer (topic OP) display name for the request heading.
+  // Prefer their full name (`details.created_by.name`), falling back to
+  // username, then null when neither is available (e.g. `details` not
+  // loaded) so the heading can use its generic "Photographer's request".
+  get photographerName() {
+    const createdBy = this.topic?.details?.created_by;
+    const name = createdBy?.name?.trim();
+    if (name) {
+      return name;
+    }
+    const username = createdBy?.username?.trim();
+    return username || null;
+  }
+
+  // Heading above the request pills: "{Photographer}'s request" using the
+  // OP's full name when known, else the generic "Photographer's request".
+  get requestHeading() {
+    const name = this.photographerName;
+    return name
+      ? i18n("npn_critique_reply.modal.request_heading_named", { name })
+      : i18n("npn_critique_reply.modal.request_heading");
+  }
+
   // Set by callers that open the modal to EDIT an existing critique
   // reply (rather than create a new one). When present the modal:
   //   • restores annotations from `editingPost.npn_visual_notes`
@@ -11775,7 +11798,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   id="npn-critique-reply-request-heading"
                   class="npn-critique-reply-modal__request-heading"
                 >
-                  {{i18n "npn_critique_reply.modal.request_heading"}}
+                  {{this.requestHeading}}
                 </h3>
 
                 {{! One row under the heading: request pills aligned left,
