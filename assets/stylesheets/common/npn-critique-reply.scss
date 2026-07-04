@@ -4029,3 +4029,17 @@
     scrollbar-gutter: auto !important;
   }
 }
+
+// User card above the workspace modal.
+//
+// The request block shows the photographer's avatar (see __request-avatar),
+// which opens Discourse's native user card. That card is a float-kit menu
+// whose default z-index (z("dropdown")/z("usercard"), ~300–500) sits BELOW
+// an open modal (~999+), so a card triggered from inside the workspace
+// renders hidden behind it. Raise it above the modal while any modal is
+// open. Scoped to `html.modal-open` so normal (non-modal) user-card
+// stacking is untouched; user cards are transient (dismissed on
+// outside-click), so sitting above the modal is safe.
+html.modal-open .fk-d-menu[data-identifier="usercard"] {
+  z-index: 1700;
+}
