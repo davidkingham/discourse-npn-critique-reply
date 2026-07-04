@@ -1666,11 +1666,33 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.topic?.details?.created_by ?? null;
   }
 
-  // Profile URL for the avatar link (subfolder-safe). data-user-card
-  // opens the hover/click user card; this href is the fallback navigation.
+  // Profile URL for the avatar link (subfolder-safe). Used as the href
+  // fallback; the click handler below opens the user card in-place.
   get photographerPath() {
     const username = this.photographer?.username;
     return username ? getURL(`/u/${username}`) : null;
+  }
+
+  // Open the native user card for the photographer. Discourse's user-card
+  // click delegation is bound to #main-outlet (and a few containers) but
+  // never the DModal's portal, so a bare `data-user-card` click never
+  // reaches it from inside the workspace. Trigger the same appEvent the
+  // topic header (also outside #main-outlet) uses to open the card, and
+  // preventDefault the href so we stay in the workspace instead of routing
+  // to the profile page.
+  @action
+  showPhotographerCard(event) {
+    const username = this.photographer?.username;
+    if (!username) {
+      return;
+    }
+    this.appEvents.trigger(
+      "topic-header:trigger-user-card",
+      username,
+      event.target,
+      event
+    );
+    event.preventDefault();
   }
 
   // Heading above the request pills: "{Photographer}'s request" using the
@@ -11844,6 +11866,7 @@ export default class NpnCritiqueReplyModal extends Component {
                     data-user-card={{this.photographer.username}}
                     class="npn-critique-reply-modal__request-avatar"
                     aria-label={{this.photographerName}}
+                    {{on "click" this.showPhotographerCard}}
                   >
                     {{dAvatar this.photographer imageSize="large"}}
                   </a>
