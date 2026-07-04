@@ -1680,6 +1680,23 @@
     margin: 0; // override the section-heading default — label sits next to its input
   }
 
+  // Bulletproof visually-hidden utility — present for screen readers but
+  // never visible or in-flow. Used for the editor's <label> after the
+  // visible "Your Critique" heading was removed (the active tab shows the
+  // context visually; this keeps an accessible name for the field).
+  &__sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   // Critique editor header: the "Your Critique" heading on the left, the
   // icon-only formatting + link controls on the right, on one line. Wraps
   // gracefully (controls drop below the heading) only when space is tight.

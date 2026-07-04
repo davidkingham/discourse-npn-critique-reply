@@ -11866,109 +11866,75 @@ export default class NpnCritiqueReplyModal extends Component {
                 </div>
               </section>
 
-              {{! Writing-context switcher. One textarea serves both the
-                  overall critique and the selected image's notes; this
-                  segmented control (ARIA tablist) flips between them. Sits
-                  right above the editor (just under the Photographer's
-                  Request) so the active writing target is next to where you
-                  type. The Image/Visual Notes tab stays hidden on
+              {{! Writing-context switcher + editor controls on one row,
+                  directly above the editor: the Your Overall Critique / Your
+                  Visual Notes tabs on the left, the formatting + insert-link
+                  icons on the right. This row replaces the old "Your
+                  Critique" heading, which was redundant once the tab labels
+                  became explicit. The Image/Visual Notes tab stays hidden on
                   single-image critiques until there's something to put
-                  there. }}
-              <div
-                class="npn-critique-reply-modal__context-switcher"
-                role="tablist"
-                aria-label={{i18n
-                  "npn_critique_reply.modal.writing_context.switcher_label"
-                }}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  id="npn-critique-reply-context-overall"
-                  aria-controls="npn-critique-reply-textarea"
-                  aria-selected={{if
-                    (eq this.activeWritingContext "overall")
-                    "true"
-                    "false"
+                  there. The editor's accessible name is carried by a
+                  visually-hidden <label> below (see writingPanelHeading). }}
+              <div class="npn-critique-reply-modal__editor-header">
+                <div
+                  class="npn-critique-reply-modal__context-switcher"
+                  role="tablist"
+                  aria-label={{i18n
+                    "npn_critique_reply.modal.writing_context.switcher_label"
                   }}
-                  class="npn-critique-reply-modal__context-tab
-                    {{if
-                      (eq this.activeWritingContext 'overall')
-                      'is-active'
-                    }}"
-                  disabled={{this.isPosting}}
-                  {{on "click" (fn this.setWritingContext "overall")}}
-                >{{this.overallTabLabel}}{{#if this.hasOverallContent}}
-                    <span
-                      class="npn-critique-reply-modal__context-tab-dot"
-                      aria-label={{i18n
-                        "npn_critique_reply.modal.writing_context.overall_has_content"
-                      }}
-                    ></span>
-                  {{/if}}</button>
-                {{#if this.imageNotesTabAvailable}}
+                >
                   <button
                     type="button"
                     role="tab"
-                    id="npn-critique-reply-context-image"
+                    id="npn-critique-reply-context-overall"
                     aria-controls="npn-critique-reply-textarea"
                     aria-selected={{if
-                      (eq this.activeWritingContext "image")
+                      (eq this.activeWritingContext "overall")
                       "true"
                       "false"
                     }}
                     class="npn-critique-reply-modal__context-tab
                       {{if
-                        (eq this.activeWritingContext 'image')
+                        (eq this.activeWritingContext 'overall')
                         'is-active'
                       }}"
                     disabled={{this.isPosting}}
-                    {{on "click" (fn this.setWritingContext "image")}}
-                  >{{this.imageNotesTabLabel}}{{#if this.activeImageMarkCount}}
+                    {{on "click" (fn this.setWritingContext "overall")}}
+                  >{{this.overallTabLabel}}{{#if this.hasOverallContent}}
                       <span
-                        class="npn-critique-reply-modal__context-tab-count"
-                        title={{this.imageNotesCountLabel}}
-                        aria-label={{this.imageNotesCountLabel}}
-                      >{{this.activeImageMarkCount}}</span>
+                        class="npn-critique-reply-modal__context-tab-dot"
+                        aria-label={{i18n
+                          "npn_critique_reply.modal.writing_context.overall_has_content"
+                        }}
+                      ></span>
                     {{/if}}</button>
-                {{/if}}
-              </div>
-
-              {{! One-time reassurance shown the first time adding a visual
-                  note auto-switches to Image Notes while an Overall Critique
-                  is written — so the critic sees their writing isn't lost,
-                  just under the other tab. Dismissible; won't return once
-                  seen (or once they click back to Overall Critique). }}
-              {{#if this._contextSwitchHintVisible}}
-                <div
-                  class="npn-critique-reply-modal__context-hint"
-                  role="status"
-                >
-                  <span class="npn-critique-reply-modal__context-hint-text">
-                    {{i18n
-                      "npn_critique_reply.modal.writing_context.switch_hint"
-                    }}
-                  </span>
-                  <DButton
-                    class="btn-flat btn-small npn-critique-reply-modal__context-hint-dismiss"
-                    @icon="xmark"
-                    @label="npn_critique_reply.modal.writing_context.switch_hint_dismiss"
-                    @action={{this.dismissContextSwitchHint}}
-                  />
+                  {{#if this.imageNotesTabAvailable}}
+                    <button
+                      type="button"
+                      role="tab"
+                      id="npn-critique-reply-context-image"
+                      aria-controls="npn-critique-reply-textarea"
+                      aria-selected={{if
+                        (eq this.activeWritingContext "image")
+                        "true"
+                        "false"
+                      }}
+                      class="npn-critique-reply-modal__context-tab
+                        {{if
+                          (eq this.activeWritingContext 'image')
+                          'is-active'
+                        }}"
+                      disabled={{this.isPosting}}
+                      {{on "click" (fn this.setWritingContext "image")}}
+                    >{{this.imageNotesTabLabel}}{{#if this.activeImageMarkCount}}
+                        <span
+                          class="npn-critique-reply-modal__context-tab-count"
+                          title={{this.imageNotesCountLabel}}
+                          aria-label={{this.imageNotesCountLabel}}
+                        >{{this.activeImageMarkCount}}</span>
+                      {{/if}}</button>
+                  {{/if}}
                 </div>
-              {{/if}}
-
-              {{! Critique editor header — the "Your Critique" heading on
-                  the left, the icon-only formatting + link controls on the
-                  right, on one line. The controls hide while the inline
-                  link form is open (it takes their place below). }}
-              <div class="npn-critique-reply-modal__editor-header">
-                <label
-                  for="npn-critique-reply-textarea"
-                  class="npn-critique-reply-modal__textarea-label"
-                >
-                  {{this.writingPanelHeading}}
-                </label>
 
                 {{#unless this.linkFormOpen}}
                   <div
@@ -12023,6 +11989,30 @@ export default class NpnCritiqueReplyModal extends Component {
                   </div>
                 {{/unless}}
               </div>
+
+              {{! One-time reassurance shown the first time adding a visual
+                  note auto-switches to Image Notes while an Overall Critique
+                  is written — so the critic sees their writing isn't lost,
+                  just under the other tab. Dismissible; won't return once
+                  seen (or once they click back to Overall Critique). }}
+              {{#if this._contextSwitchHintVisible}}
+                <div
+                  class="npn-critique-reply-modal__context-hint"
+                  role="status"
+                >
+                  <span class="npn-critique-reply-modal__context-hint-text">
+                    {{i18n
+                      "npn_critique_reply.modal.writing_context.switch_hint"
+                    }}
+                  </span>
+                  <DButton
+                    class="btn-flat btn-small npn-critique-reply-modal__context-hint-dismiss"
+                    @icon="xmark"
+                    @label="npn_critique_reply.modal.writing_context.switch_hint_dismiss"
+                    @action={{this.dismissContextSwitchHint}}
+                  />
+                </div>
+              {{/if}}
 
               {{#if this.imageNotesContextLabel}}
                 <p
@@ -12160,6 +12150,16 @@ export default class NpnCritiqueReplyModal extends Component {
                   </p>
                 </form>
               {{/if}}
+
+              {{! Visually-hidden label preserving the editor's accessible
+                  name now that the visible "Your Critique" heading is gone
+                  (the active tab shows the context visually). Targets either
+                  editor branch — both carry id "npn-critique-reply-textarea".
+                  }}
+              <label
+                for="npn-critique-reply-textarea"
+                class="npn-critique-reply-modal__sr-only"
+              >{{this.writingPanelHeading}}</label>
 
               {{#if this.richEditorEnabled}}
                 {{! EXPERIMENTAL rich (WYSIWYG) editor. The value stays

@@ -110,9 +110,9 @@ en:
         # Notes); the heading + helper copy track the active context.
         writing_context:
           switcher_label: "Choose what you're writing"
-          overall: "Overall Critique"
-          visual_notes: "Visual Notes"
-          image_notes: "Image Notes"
+          overall: "Your Overall Critique"
+          visual_notes: "Your Visual Notes"
+          image_notes: "Your Image Notes"
           editing_image: "Writing notes for Image %{current} of %{total}."
           # Tooltip + accessible label for the numeric badge on the Image
           # Notes tab. Counting rule: visual annotations on the currently
