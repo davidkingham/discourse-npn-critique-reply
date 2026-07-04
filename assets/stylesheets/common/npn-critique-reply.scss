@@ -1266,11 +1266,34 @@
   &__request {
     margin: 0;
     padding: 0;
-    // Heading on its own line, then a single pills + notes-button row
-    // (see __request-bar). Tight gap so the block reads as one unit.
-    display: flex;
-    flex-direction: column;
-    gap: 0.3em;
+    // Photographer (OP) avatar on the left, spanning both rows; the heading
+    // sits above the pills + notes-button row on the right. Grid keeps the
+    // avatar vertically centered across the two-row block. When there's no
+    // photographer the avatar column collapses (column-gap is 0; the avatar
+    // carries its own right margin) so nothing shifts.
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "avatar heading"
+      "avatar bar";
+    align-items: center;
+    column-gap: 0;
+    row-gap: 0.3em;
+  }
+
+  // Clickable OP avatar. `data-user-card` opens the native user card; the
+  // link href is the profile fallback. Spans both grid rows, centered.
+  &__request-avatar {
+    grid-area: avatar;
+    align-self: center;
+    display: inline-flex;
+    margin-right: 0.7em;
+
+    img.avatar {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+    }
   }
 
   // The row under the heading: request pills aligned left, the "View
@@ -1280,6 +1303,7 @@
   // its own line and — because it has NO margin-left:auto — falls back to
   // the left (start) edge rather than sitting awkwardly on the right.
   &__request-bar {
+    grid-area: bar;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -1439,6 +1463,7 @@
 
   &__request-heading {
     @extend %npn-critique-section-heading;
+    grid-area: heading;
     margin: 0;
     // On its own line above the pills/notes row; keep it from splitting
     // mid-heading.

@@ -16,8 +16,9 @@ import DEditor from "discourse/ui-kit/d-editor";
 import DModal from "discourse/ui-kit/d-modal";
 import { ajax } from "discourse/lib/ajax";
 import dAutocomplete from "discourse/ui-kit/modifiers/d-autocomplete";
+import dAvatar from "discourse/ui-kit/helpers/d-avatar";
 import dIcon from "discourse/ui-kit/helpers/d-icon";
-import { getURLWithCDN } from "discourse/lib/get-url";
+import getURL, { getURLWithCDN } from "discourse/lib/get-url";
 import { cook } from "discourse/lib/text";
 import DiscourseURL from "discourse/lib/url";
 import TextareaTextManipulation, {
@@ -1655,6 +1656,21 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     const username = createdBy?.username?.trim();
     return username || null;
+  }
+
+  // The photographer (topic OP) user object for the request avatar —
+  // carries username + avatar_template so the `dAvatar` helper and the
+  // `data-user-card` trigger work exactly like a native Discourse avatar.
+  // Null when `details` isn't loaded, so the avatar is simply omitted.
+  get photographer() {
+    return this.topic?.details?.created_by ?? null;
+  }
+
+  // Profile URL for the avatar link (subfolder-safe). data-user-card
+  // opens the hover/click user card; this href is the fallback navigation.
+  get photographerPath() {
+    const username = this.photographer?.username;
+    return username ? getURL(`/u/${username}`) : null;
   }
 
   // Heading above the request pills: "{Photographer}'s request" using the
@@ -11818,6 +11834,20 @@ export default class NpnCritiqueReplyModal extends Component {
                 class="npn-critique-reply-modal__request"
                 aria-labelledby="npn-critique-reply-request-heading"
               >
+                {{! Photographer (OP) avatar — sits to the left, spanning
+                    the heading + request pills via CSS grid. Native
+                    Discourse avatar: `data-user-card` opens the user card
+                    on click, and the link falls back to their profile. }}
+                {{#if this.photographer}}
+                  <a
+                    href={{this.photographerPath}}
+                    data-user-card={{this.photographer.username}}
+                    class="npn-critique-reply-modal__request-avatar"
+                    aria-label={{this.photographerName}}
+                  >
+                    {{dAvatar this.photographer imageSize="large"}}
+                  </a>
+                {{/if}}
                 <h3
                   id="npn-critique-reply-request-heading"
                   class="npn-critique-reply-modal__request-heading"
