@@ -3868,7 +3868,12 @@ export default class NpnCritiqueReplyModal extends Component {
     ];
     return ORDER.map(([key, labelKey]) => ({
       key,
-      labelKey,
+      // Resolve the heading here (plain string) rather than with a nested
+      // {{i18n (concat …)}} in the template, which Glimmer rejects in an
+      // {{#each}} content position.
+      label: i18n(
+        `npn_critique_reply.modal.structured_notes.${labelKey}`
+      ),
       raw: this._topicAttr(`npn_${key}`),
     })).filter((s) => (s.raw ?? "").trim().length > 0);
   }
@@ -3932,14 +3937,28 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     const fields = this.structuredNotesFields;
-    const cooked = await Promise.all(
-      fields.map(async (s) => ({
-        labelKey: s.labelKey,
-        html: await this._cookField(s.raw),
-      }))
+    const parts = await Promise.all(
+      fields.map(async (s) => {
+        const cooked = await this._cookField(s.raw);
+        const heading = (s.label ?? "").replace(
+          /[&<>"]/g,
+          (ch) =>
+            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch])
+        );
+        return (
+          `<section class="npn-critique-reply-modal__notes-section">` +
+          `<h3 class="npn-critique-reply-modal__notes-section-heading">${heading}</h3>` +
+          `${cooked?.toString?.() ?? ""}</section>`
+        );
+      })
     );
     if (!this._destroyed) {
-      this._structuredNotesCooked = cooked;
+      // Assemble ONE this-rooted SafeString. Strict-mode Glimmer renders
+      // {{this.x}} SafeStrings fine (like opCookedSafe / the pin), whereas a
+      // block-param {{section.html}} in an {{#each}} throws ("Expected a
+      // dynamic component definition"). The cooked bodies are already
+      // sanitized by `cook`; headings are escaped above.
+      this._structuredNotesCooked = htmlSafe(parts.join(""));
     }
   }
 
@@ -12566,21 +12585,7 @@ export default class NpnCritiqueReplyModal extends Component {
                     {{didInsert this.setupPhotographersNotes}}
                     {{willDestroy this.teardownPhotographersNotes}}
                   >
-                    {{#each this._structuredNotesCooked as |section|}}
-                      <section
-                        class="npn-critique-reply-modal__notes-section"
-                      >
-                        <h3
-                          class="npn-critique-reply-modal__notes-section-heading"
-                        >{{i18n
-                            (concat
-                              "npn_critique_reply.modal.structured_notes."
-                              section.labelKey
-                            )
-                          }}</h3>
-                        {{section.html}}
-                      </section>
-                    {{/each}}
+                    {{this._structuredNotesCooked}}
                   </div>
                 {{else if this.hasStructuredNotes}}
                   {{! Structured sections are being cooked (client-side);
