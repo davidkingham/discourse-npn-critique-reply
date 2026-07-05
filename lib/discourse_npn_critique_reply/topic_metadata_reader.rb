@@ -12,9 +12,18 @@ module DiscourseNpnCritiqueReply
   #   * Critique request (submissions plugin, current):
   #     npn_critique_style, npn_feedback_focus, weekly-challenge fields
   #   * Critique request (future):
-  #     npn_critique_type, npn_requested_feedback_areas,
-  #     npn_specific_critique_questions, npn_visual_examples_allowed,
+  #     npn_critique_type, npn_visual_examples_allowed,
   #     npn_image_reworks_allowed, npn_project_id, npn_image_count
+  #
+  # NOTE: the photographer's freeform "feedback requested" prose is NOT read
+  # here — it is never written to a topic custom field (see topic_metadata.rb
+  # in the submissions plugin: freeform text is deliberately not shadowed
+  # into custom fields). The critique workspace reads it, and the other
+  # structured narrative fields, LIVE from the submission row via the
+  # discourse-npn-submissions topic_view serializer (npn_feedback_requested,
+  # npn_about_this_image, …). The earlier `npn_requested_feedback_areas` /
+  # `npn_specific_critique_questions` reads were removed as a dead parallel
+  # path once that serializer became the single source.
   #   * Image versions (submissions + revised-critique-image):
   #     original primary upload + URL, full upload-id list, count,
   #     revision images JSON, latest-revision pointer fields
@@ -39,8 +48,6 @@ module DiscourseNpnCritiqueReply
 
     # --- Submission request keys (future/richer schema) ------------------
     CRITIQUE_TYPE_KEY = "npn_critique_type"
-    REQUESTED_FEEDBACK_AREAS_KEY = "npn_requested_feedback_areas"
-    SPECIFIC_CRITIQUE_QUESTIONS_KEY = "npn_specific_critique_questions"
     VISUAL_EXAMPLES_ALLOWED_KEY = "npn_visual_examples_allowed"
     IMAGE_REWORKS_ALLOWED_KEY = "npn_image_reworks_allowed"
     # Per-topic opt-in/out for processing examples. Written by the
@@ -94,9 +101,6 @@ module DiscourseNpnCritiqueReply
         feedback_focus: normalize_string(fields[FEEDBACK_FOCUS_KEY]),
         # Future/richer request fields -------------------------------------
         critique_type: normalize_string(fields[CRITIQUE_TYPE_KEY]),
-        requested_feedback_areas: normalize_array(fields[REQUESTED_FEEDBACK_AREAS_KEY]),
-        specific_critique_questions:
-          normalize_array(fields[SPECIFIC_CRITIQUE_QUESTIONS_KEY]),
         visual_examples_allowed: normalize_boolean(fields[VISUAL_EXAMPLES_ALLOWED_KEY]),
         image_reworks_allowed: normalize_boolean(fields[IMAGE_REWORKS_ALLOWED_KEY]),
         # Backward-compatible: missing field → allowed (true). Only an

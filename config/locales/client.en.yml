@@ -83,6 +83,23 @@ en:
           failed: "Couldn’t load the photographer’s post. You can close and reopen the original topic in a new tab if needed."
           quote: "Quote"
           quote_aria: "Quote selected text"
+        # Pinned "Feedback Requested" ask shown above the critique editor,
+        # sourced from the submission row. Clamped with a show more/less
+        # toggle.
+        pinned_feedback_label: "Feedback requested"
+        pinned_feedback_show_more: "Show more"
+        pinned_feedback_show_less: "Show less"
+        # Section headings for the Photographer's Notes panel when it is
+        # built from the submission's structured fields. Keyed by the
+        # heading id (see structuredNotesFields in the modal).
+        structured_notes:
+          feedback_requested: "Feedback Requested"
+          questions_for_viewers: "Questions for Viewers"
+          about_this_image: "About This Image"
+          why_this_image: "Why This Image?"
+          express_or_explore: "What I’m Trying to Express or Explore"
+          technical_details: "Technical Details"
+          feedback_after: "Feedback Requested"
         critique_style: "Style"
         feedback_focus: "Focus"
         weekly_challenge: "Weekly Challenge"

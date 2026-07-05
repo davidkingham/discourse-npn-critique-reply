@@ -128,8 +128,6 @@ after_initialize do
   # values correctly when the siblings aren't loaded. Re-registering an
   # already-known type is a no-op in production.
   register_topic_custom_field_type("npn_revision_images", :json)
-  register_topic_custom_field_type("npn_requested_feedback_areas", :json)
-  register_topic_custom_field_type("npn_specific_critique_questions", :json)
 
   # Single topic view: expose a compact, normalized critique-reply metadata
   # object built from custom fields written by the discourse-npn-submissions

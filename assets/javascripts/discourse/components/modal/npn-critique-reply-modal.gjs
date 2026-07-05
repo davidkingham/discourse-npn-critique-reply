@@ -770,6 +770,19 @@ export default class NpnCritiqueReplyModal extends Component {
   @tracked _opCookedHtml = null;
   @tracked _opCookedError = false;
   _opCookedFetched = false;
+
+  // Structured request/narrative fields sourced from the submission row
+  // (exposed on topic_view by discourse-npn-submissions). Cooked client-
+  // side for display. `_pinnedFeedbackCooked` = the pinned "Feedback
+  // Requested" ask above the editor; `_structuredNotesCooked` = the
+  // ordered [{labelKey, html}] sections for the notes panel (built from
+  // the row instead of the cooked OP body). Null until cooked; the panel
+  // falls back to the cooked OP body when there is no submission row.
+  @tracked _pinnedFeedbackCooked = null;
+  @tracked _pinnedFeedbackOverflows = false;
+  @tracked _pinnedFeedbackExpanded = false;
+  @tracked _structuredNotesCooked = null;
+  _pinnedFeedbackEl = null;
   // Attribution data from /posts/:id.json — populated alongside
   // `_opCookedHtml`. Used to build the `[quote="user, post:N, topic:T"]`
   // attribution line; falls back to the unattributed `[quote]` form
@@ -3807,6 +3820,129 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.draftsEnabled && !this.previewMode;
   }
 
+  // ---- Structured request fields (from the submission row) --------------
+  //
+  // discourse-npn-submissions exposes the photographer's structured answers
+  // on topic_view (npn_feedback_requested, npn_about_this_image, …), sourced
+  // live from the submission row. We pin the ask above the editor and build
+  // the notes panel from these sections; when no row exists (pre-plugin /
+  // imported topics) all are absent and we fall back to the cooked OP body.
+
+  // Read a topic_view serializer attribute robustly across Ember model /
+  // plain-object shapes (mirrors the initializer's `topic.get?.(x) ?? x`).
+  _topicAttr(name) {
+    const t = this.topic;
+    if (!t) {
+      return undefined;
+    }
+    return t.get?.(name) ?? t[name];
+  }
+
+  // The pinned "Feedback Requested" ask (raw markdown), or null. Present for
+  // standard & in-depth submissions (required); reaction style has no
+  // feedback_requested — its ask is questions_for_viewers, shown in the
+  // notes panel — so reaction submissions simply get no pin.
+  get pinnedFeedbackRaw() {
+    const raw = this._topicAttr("npn_feedback_requested");
+    return (raw ?? "").trim().length > 0 ? raw : null;
+  }
+
+  // Ordered structured sections present on the submission row, for the
+  // notes panel. The ask (Feedback Requested / Questions for Viewers) leads,
+  // then About, in-depth extras, Technical. Empty when there is no
+  // submission row → the panel falls back to the cooked OP body.
+  get structuredNotesFields() {
+    const t = this.topic;
+    if (!t) {
+      return [];
+    }
+    // [topic serializer attr suffix, i18n label key]
+    const ORDER = [
+      ["feedback_requested", "feedback_requested"],
+      ["questions_for_viewers", "questions_for_viewers"],
+      ["about_this_image", "about_this_image"],
+      ["creative_intent", "why_this_image"],
+      ["creative_direction", "express_or_explore"],
+      ["technical_details", "technical_details"],
+      ["feedback_after", "feedback_after"],
+    ];
+    return ORDER.map(([key, labelKey]) => ({
+      key,
+      labelKey,
+      raw: this._topicAttr(`npn_${key}`),
+    })).filter((s) => (s.raw ?? "").trim().length > 0);
+  }
+
+  get hasStructuredNotes() {
+    return this.structuredNotesFields.length > 0;
+  }
+
+  // Cook one raw-markdown field through Discourse's standard pipeline
+  // (markdown-it + sanitize) → SafeString. Never throws: a failed cook
+  // yields empty so one bad field can't blank the pin/panel.
+  async _cookField(raw) {
+    const trimmed = (raw ?? "").trim();
+    if (!trimmed) {
+      return htmlSafe("");
+    }
+    try {
+      const cooked = await cook(trimmed);
+      return htmlSafe(cooked?.toString?.() ?? String(cooked ?? ""));
+    } catch (e) {
+      this._recordError("structured_field_cook", e, null, "warn");
+      return htmlSafe("");
+    }
+  }
+
+  // didInsert on the pinned-feedback body: cook the ask once, then measure
+  // whether the clamped text overflows (→ whether to show a Show more/less
+  // toggle).
+  @action
+  async setupPinnedFeedback(element) {
+    this._pinnedFeedbackEl = element;
+    if (this._pinnedFeedbackCooked == null && this.pinnedFeedbackRaw) {
+      this._pinnedFeedbackCooked = await this._cookField(
+        this.pinnedFeedbackRaw
+      );
+    }
+    next(() => this._measurePinnedOverflow());
+  }
+
+  _measurePinnedOverflow() {
+    const el = this._pinnedFeedbackEl;
+    if (!el || this._destroyed) {
+      return;
+    }
+    // Measured while clamped (CSS line-clamp): scrollHeight past the clamped
+    // clientHeight means there's more than fits. Sticky once true so the
+    // toggle stays available to collapse again after expanding.
+    if (el.scrollHeight > el.clientHeight + 1) {
+      this._pinnedFeedbackOverflows = true;
+    }
+  }
+
+  @action
+  togglePinnedFeedback() {
+    this._pinnedFeedbackExpanded = !this._pinnedFeedbackExpanded;
+  }
+
+  // Cook the ordered structured sections for the notes panel (once).
+  async _cookStructuredNotes() {
+    if (this._structuredNotesCooked != null) {
+      return;
+    }
+    const fields = this.structuredNotesFields;
+    const cooked = await Promise.all(
+      fields.map(async (s) => ({
+        labelKey: s.labelKey,
+        html: await this._cookField(s.raw),
+      }))
+    );
+    if (!this._destroyed) {
+      this._structuredNotesCooked = cooked;
+    }
+  }
+
   // ---- Photographer's Notes lazy-load -----------------------------------
 
   get opCookedSafe() {
@@ -3829,7 +3965,11 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     this.photographersNotesOpen = true;
-    if (!this._opCookedFetched && !this._opCookedLoading) {
+    // Prefer the structured sections from the submission row; only fetch +
+    // show the cooked OP body when there's no row (pre-plugin / imported).
+    if (this.hasStructuredNotes) {
+      this._cookStructuredNotes();
+    } else if (!this._opCookedFetched && !this._opCookedLoading) {
       this._loadOpCooked();
     }
   }
@@ -11878,6 +12018,42 @@ export default class NpnCritiqueReplyModal extends Component {
                 </div>
               </section>
 
+              {{! Pinned "Feedback Requested" — the photographer's ask,
+                  sourced from the submission row (npn_feedback_requested) and
+                  kept visible above the editor to guide the critique. Clamped
+                  to a few lines with a Show more/less toggle; omitted
+                  entirely when there's no ask (reaction-style submissions,
+                  or non-form / pre-plugin topics with no row). The full ask
+                  also appears in the Photographer's Notes panel — the pin is
+                  a working reference, the panel the full document. }}
+              {{#if this.pinnedFeedbackRaw}}
+                <div class="npn-critique-reply-modal__pinned-request">
+                  <span
+                    class="npn-critique-reply-modal__pinned-request-label"
+                  >{{i18n
+                      "npn_critique_reply.modal.pinned_feedback_label"
+                    }}</span>
+                  <div
+                    class="npn-critique-reply-modal__pinned-request-body cooked
+                      {{if this._pinnedFeedbackExpanded '' '--clamped'}}"
+                    {{didInsert this.setupPinnedFeedback}}
+                  >
+                    {{this._pinnedFeedbackCooked}}
+                  </div>
+                  {{#if this._pinnedFeedbackOverflows}}
+                    <button
+                      type="button"
+                      class="btn-flat btn-small npn-critique-reply-modal__pinned-request-toggle"
+                      {{on "click" this.togglePinnedFeedback}}
+                    >{{if
+                        this._pinnedFeedbackExpanded
+                        (i18n "npn_critique_reply.modal.pinned_feedback_show_less")
+                        (i18n "npn_critique_reply.modal.pinned_feedback_show_more")
+                      }}</button>
+                  {{/if}}
+                </div>
+              {{/if}}
+
               {{! Writing-context switcher + editor controls on one row,
                   directly above the editor: the Your Overall Critique / Your
                   Visual Notes tabs on the left, the formatting + insert-link
@@ -12379,7 +12555,45 @@ export default class NpnCritiqueReplyModal extends Component {
                 />
               </div>
               <div class="npn-critique-reply-modal__notes-panel-body">
-                {{#if this._opCookedLoading}}
+                {{#if this._structuredNotesCooked}}
+                  {{! Built from the submission row's structured fields (the
+                      ask first), cooked through Discourse's pipeline. One
+                      shared .cooked container so the Quote-selection listener
+                      spans all sections. Falls back to the cooked OP body
+                      below when there is no submission row. }}
+                  <div
+                    class="npn-critique-reply-modal__photographers-notes-body cooked"
+                    {{didInsert this.setupPhotographersNotes}}
+                    {{willDestroy this.teardownPhotographersNotes}}
+                  >
+                    {{#each this._structuredNotesCooked as |section|}}
+                      <section
+                        class="npn-critique-reply-modal__notes-section"
+                      >
+                        <h3
+                          class="npn-critique-reply-modal__notes-section-heading"
+                        >{{i18n
+                            (concat
+                              "npn_critique_reply.modal.structured_notes."
+                              section.labelKey
+                            )
+                          }}</h3>
+                        {{section.html}}
+                      </section>
+                    {{/each}}
+                  </div>
+                {{else if this.hasStructuredNotes}}
+                  {{! Structured sections are being cooked (client-side);
+                      brief, but avoid a flash of empty panel. }}
+                  <p
+                    class="npn-critique-reply-modal__photographers-notes-status"
+                    aria-live="polite"
+                  >
+                    {{i18n
+                      "npn_critique_reply.modal.photographers_notes.loading"
+                    }}
+                  </p>
+                {{else if this._opCookedLoading}}
                   <p
                     class="npn-critique-reply-modal__photographers-notes-status"
                     aria-live="polite"

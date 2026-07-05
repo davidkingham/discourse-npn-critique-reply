@@ -38,7 +38,6 @@ describe TopicViewSerializer do
       )
       # Future-schema fields stay defaulted until upstream writes them.
       expect(data[:critique_type]).to be_nil
-      expect(data[:requested_feedback_areas]).to eq([])
       expect(data[:visual_examples_allowed]).to eq(false)
     end
 
@@ -67,13 +66,11 @@ describe TopicViewSerializer do
       )
     end
 
-    it "exposes the future schema (critique_type, areas, questions, booleans)" do
+    it "exposes the future schema (critique_type, booleans)" do
       topic.upsert_custom_fields(
         "npn_submission_schema_version" => 2,
         "npn_submission_type" => "image_critique",
         "npn_critique_type" => "artistic_expressive",
-        "npn_requested_feedback_areas" => %w[composition processing],
-        "npn_specific_critique_questions" => ["Does the darker treatment support the mood?"],
         "npn_visual_examples_allowed" => true,
         "npn_image_reworks_allowed" => false,
         "npn_image_count" => 1,
@@ -83,8 +80,6 @@ describe TopicViewSerializer do
       expect(data).to include(
         submission_type: "image_critique",
         critique_type: "artistic_expressive",
-        requested_feedback_areas: %w[composition processing],
-        specific_critique_questions: ["Does the darker treatment support the mood?"],
         visual_examples_allowed: true,
         image_reworks_allowed: false,
         schema_version: 2,

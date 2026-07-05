@@ -1312,6 +1312,59 @@
     row-gap: 0.4em;
   }
 
+  // Pinned "Feedback Requested" ask above the editor. Lightweight — a
+  // subtle left accent, not a boxed callout, so it guides the critique
+  // without competing with the writing surface.
+  &__pinned-request {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2em;
+    padding-left: 0.7em;
+    border-left: 2px solid var(--tertiary);
+  }
+
+  &__pinned-request-label {
+    @extend %npn-critique-section-heading;
+    margin: 0;
+  }
+
+  &__pinned-request-body {
+    width: 100%;
+    font-size: var(--font-down-1);
+    line-height: 1.4;
+    color: var(--primary);
+
+    // Tighten the cooked prose so it reads as an inline reference rather
+    // than a full post body.
+    > * {
+      margin-top: 0;
+      margin-bottom: 0.4em;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+
+    // Clamp to a few lines until expanded (see setupPinnedFeedback /
+    // togglePinnedFeedback). The full text is never truncated in the data.
+    &.--clamped {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  }
+
+  &__pinned-request-toggle.btn {
+    align-self: flex-start;
+    padding: 0;
+    min-height: 0;
+    font-size: var(--font-down-1);
+    color: var(--tertiary);
+  }
+
   // -- Photographer's Notes (overlay panel) -------------------------------
   //
   // The photographer's own description / questions / context. Formerly an
@@ -1409,6 +1462,22 @@
         margin-bottom: 0;
       }
     }
+  }
+
+  // Structured-fields rendering of the notes panel (one <section> per
+  // field, the ask first). Sections after the first get a hairline
+  // separator so the document reads as distinct parts.
+  &__notes-section {
+    & + & {
+      margin-top: 0.9em;
+      padding-top: 0.9em;
+      border-top: 1px solid var(--primary-low);
+    }
+  }
+
+  &__notes-section-heading {
+    @extend %npn-critique-section-heading;
+    margin: 0 0 0.35em;
   }
 
   &__photographers-notes-status {
