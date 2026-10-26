@@ -16,6 +16,10 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  # claude-code-action authenticates via OIDC, and reading the failed run's
+  # logs needs actions:read (an explicit permissions block drops it).
+  id-token: write
+  actions: read
 
 jobs:
   fix:
