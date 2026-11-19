@@ -9,6 +9,7 @@ import willDestroy from "@ember/render-modifiers/modifiers/will-destroy";
 import { next } from "@ember/runloop";
 import { service } from "@ember/service";
 import { htmlSafe } from "@ember/template";
+import { resolveAllShortUrls } from "pretty-text/upload-short-url";
 import { tracked } from "@glimmer/tracking";
 import UserAutocompleteResults from "discourse/components/user-autocomplete-results";
 import DButton from "discourse/ui-kit/d-button";
@@ -334,6 +335,14 @@ export default class NpnCritiqueReplyModal extends Component {
   //                      so a re-focus of the URL input doesn't lose
   //                      the textarea's selection range
   @tracked linkFormOpen = false;
+
+  // Suggest-a-Sequence (project critiques). The builder lives in
+  // discourse-npn-submissions and is rendered INLINE here, like the link
+  // form, because opening another modal would replace this workspace.
+  // `_sequencePreservedSelection` mirrors `_linkPreservedSelection`.
+  @tracked sequenceBuilderOpen = false;
+  @tracked sequenceBuilderInitial = null;
+  _sequencePreservedSelection = null;
   @tracked linkFormUrl = "";
   @tracked linkFormText = "";
 
@@ -1313,6 +1322,93 @@ export default class NpnCritiqueReplyModal extends Component {
     // Return focus to the writing surface so keyboard users land back on
     // it after dismissing the helper.
     this._focusWritingSurface();
+  }
+
+  // ---- Suggest a sequence ------------------------------------------------
+
+  // discourse-npn-submissions' builder service, or null when that plugin
+  // isn't installed (then no button is shown).
+  get _sequenceBuilderService() {
+    return getOwner(this).lookup("service:npn-sequence-builder") ?? null;
+  }
+
+  // The project's numbered images; null unless this is an image-method
+  // project topic and the builder is available.
+  get sequenceImages() {
+    return this._sequenceBuilderService?.imagesFor(this.topic) ?? null;
+  }
+
+  get SequenceBuilder() {
+    return this._sequenceBuilderService?.component ?? null;
+  }
+
+  @action
+  openSequenceBuilder() {
+    if (!this.sequenceImages) {
+      return;
+    }
+    this.linkFormOpen = false;
+    let selected = "";
+    if (this.#textarea) {
+      this._sequencePreservedSelection = {
+        start: this.#textarea.selectionStart,
+        end: this.#textarea.selectionEnd,
+      };
+    } else {
+      this._sequencePreservedSelection = null;
+    }
+    try {
+      selected = this.#textManipulation?.getSelected()?.value ?? "";
+    } catch {
+      selected = "";
+    }
+    // Selecting an existing [npn-sequence] block first reopens it.
+    this.sequenceBuilderInitial =
+      this._sequenceBuilderService.initialFor(selected);
+    this.sequenceBuilderOpen = true;
+  }
+
+  @action
+  closeSequenceBuilder() {
+    this.sequenceBuilderOpen = false;
+    this.sequenceBuilderInitial = null;
+    this._sequencePreservedSelection = null;
+    this._focusWritingSurface();
+  }
+
+  @action
+  insertSequence(markup) {
+    const editing = !!this.sequenceBuilderInitial;
+    if (this.#textarea && this._sequencePreservedSelection) {
+      try {
+        this.#textarea.focus();
+        this.#textarea.setSelectionRange(
+          this._sequencePreservedSelection.start,
+          this._sequencePreservedSelection.end
+        );
+      } catch {
+        // Fall through to the textarea's current selection.
+      }
+    }
+    try {
+      const tm = this.#textManipulation;
+      if (tm) {
+        // Replacing a selected sequence keeps it in place; a fresh insert
+        // goes in as its own block (in the rich editor addText keeps only
+        // inline content, which would glue it to the previous paragraph).
+        if (editing) {
+          tm.addText(tm.getSelected(), markup);
+        } else {
+          tm.insertBlock(markup);
+        }
+        if (!this.#usingDEditor) {
+          this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      }
+    } catch (e) {
+      this._recordError("insert_sequence", e, null, "warn");
+    }
+    this.closeSequenceBuilder();
   }
 
   @action
@@ -8388,6 +8484,14 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     const div = document.createElement("div");
     div.innerHTML = cooked?.toString?.() ?? String(cooked ?? "");
+    // Turn `upload://` image links (e.g. a Suggested-sequence contact sheet)
+    // into real URLs BEFORE serializing — the cooker leaves a transparent
+    // placeholder that Discourse normally swaps in on render.
+    try {
+      await resolveAllShortUrls(ajax, this.siteSettings, div);
+    } catch (e) {
+      this._recordError("preview_short_urls", e, null, "warn");
+    }
     decorateAnnotationTokens(div, annotationLabelToBadgeSuffix);
     return htmlSafe(div.innerHTML);
   }
@@ -12143,7 +12247,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   {{/if}}
                 </div>
 
-                {{#unless this.linkFormOpen}}
+                {{#unless (or this.linkFormOpen this.sequenceBuilderOpen)}}
                   <div
                     class="npn-critique-reply-modal__toolbar"
                     role="toolbar"
@@ -12172,6 +12276,16 @@ export default class NpnCritiqueReplyModal extends Component {
                           class="btn-flat btn-small npn-critique-reply-modal__toolbar-button npn-critique-reply-modal__toolbar-icon npn-critique-reply-modal__format-toggle
                             {{if this.critiqueToolbarOpen '--active'}}"
                         />
+                        {{#if this.sequenceImages}}
+                          <DButton
+                            @icon="film"
+                            @title="npn_submissions.sequence.toolbar_button"
+                            @ariaLabel="npn_submissions.sequence.toolbar_button"
+                            @action={{this.openSequenceBuilder}}
+                            @disabled={{this.isPosting}}
+                            class="btn-flat btn-small npn-critique-reply-modal__toolbar-button npn-critique-reply-modal__toolbar-icon npn-critique-reply-modal__sequence-button"
+                          />
+                        {{/if}}
                         <DButton
                           @icon="link"
                           @title="npn_critique_reply.modal.toolbar.insert_link"
@@ -12185,6 +12299,15 @@ export default class NpnCritiqueReplyModal extends Component {
                       <span class="npn-critique-reply-modal__toolbar-hint">
                         {{i18n "npn_critique_reply.modal.markdown_supported"}}
                       </span>
+                      {{#if this.sequenceImages}}
+                        <DButton
+                          @icon="film"
+                          @label="npn_submissions.sequence.toolbar_button"
+                          @action={{this.openSequenceBuilder}}
+                          @disabled={{this.isPosting}}
+                          class="btn-flat btn-small npn-critique-reply-modal__toolbar-button npn-critique-reply-modal__sequence-button"
+                        />
+                      {{/if}}
                       <DButton
                         @icon="link"
                         @label="npn_critique_reply.modal.toolbar.insert_link"
@@ -12300,6 +12423,16 @@ export default class NpnCritiqueReplyModal extends Component {
                   service swaps the active modal instead of stacking,
                   which would dismiss the critique workspace if we used
                   DModal here. }}
+              {{#if this.sequenceBuilderOpen}}
+                <div class="npn-critique-reply-modal__sequence-panel">
+                  <this.SequenceBuilder
+                    @images={{this.sequenceImages}}
+                    @initial={{this.sequenceBuilderInitial}}
+                    @onInsert={{this.insertSequence}}
+                    @onCancel={{this.closeSequenceBuilder}}
+                  />
+                </div>
+              {{/if}}
               {{#if this.linkFormOpen}}
                 <form
                   class="npn-critique-reply-modal__link-form"
