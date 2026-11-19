@@ -56,6 +56,18 @@ export default class NpnProjectWall extends Component {
     return i18n(`npn_submissions.form.project.intents.${key}`);
   }
 
+  get hintKey() {
+    return this.args.openImagesLarge
+      ? "npn_critique_reply.project_wall.hint_view_only"
+      : "npn_critique_reply.project_wall.hint";
+  }
+
+  get openImageTitleKey() {
+    return this.args.openImagesLarge
+      ? "npn_critique_reply.project_wall.view_large"
+      : "npn_critique_reply.project_wall.open_image";
+  }
+
   get editRequested() {
     return this.requested.has("edit");
   }
@@ -187,7 +199,7 @@ export default class NpnProjectWall extends Component {
         class="npn-project-wall__hint
           {{if this.individualRequested '--emphasized'}}"
       >
-        {{i18n "npn_critique_reply.project_wall.hint"}}
+        {{i18n this.hintKey}}
       </p>
 
       <div class="npn-project-wall__tiles">
@@ -202,7 +214,7 @@ export default class NpnProjectWall extends Component {
             <button
               type="button"
               class="npn-project-wall__image-button"
-              title={{i18n "npn_critique_reply.project_wall.open_image"}}
+              title={{i18n this.openImageTitleKey}}
               {{on "click" (fn @onOpenImage tile.image.number)}}
             >
               <img src={{tile.src}} alt={{tile.label}} loading="lazy" />

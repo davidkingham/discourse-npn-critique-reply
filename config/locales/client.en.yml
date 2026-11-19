@@ -7,6 +7,7 @@ en:
         asked_for: "Photographer asked for:"
         presentation_goal: "Presentation goal:"
         hint: "Click an image to open it with the visual tools. Optionally, tag any images (not all) to suggest an edit."
+        hint_view_only: "Click an image to view it larger. Optionally, tag any images (not all) to suggest an edit."
         open_image: "Open this image with the visual tools"
         view_large: "View larger"
         alternates: "Alternates"

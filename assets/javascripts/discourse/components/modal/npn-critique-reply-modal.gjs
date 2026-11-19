@@ -1435,15 +1435,30 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // True for an image-method project critique when the project tools
   // (discourse-npn-submissions) are available.
+  // Also true for older project topics with no submission record: the
+  // submissions plugin reads their images from the first post (tag
+  // fallback) and marks them `source: "post"`.
   get isProjectCritique() {
+    const images = this.sequenceImages;
     return (
-      this.metadata?.submission_type === "project_critique" &&
-      !!this.sequenceImages
+      !!images &&
+      (this.metadata?.submission_type === "project_critique" ||
+        images.source === "post")
     );
   }
 
+  // Images read from the post have no per-image entries in the workspace's
+  // submission image list, so they can't open in the single-image view;
+  // they open larger instead, and the wall is the only left-pane view.
+  get projectImagesFromPost() {
+    return this.sequenceImages?.source === "post";
+  }
+
   get showProjectWall() {
-    return this.isProjectCritique && this.projectView === PROJECT_VIEW_WALL;
+    return (
+      this.isProjectCritique &&
+      (this.projectView === PROJECT_VIEW_WALL || this.projectImagesFromPost)
+    );
   }
 
   get showBackToProject() {
@@ -1475,6 +1490,10 @@ export default class NpnCritiqueReplyModal extends Component {
   openProjectImage(number) {
     const index = parseInt(number, 10) - 1;
     if (!Number.isInteger(index) || index < 0) {
+      return;
+    }
+    if (this.projectImagesFromPost) {
+      this.viewProject(index);
       return;
     }
     this.projectView = PROJECT_VIEW_FOCUS;
@@ -2159,7 +2178,7 @@ export default class NpnCritiqueReplyModal extends Component {
   // Compute the whole class string here and bind once.
   get modalClassNames() {
     const parts = ["npn-critique-reply-modal", "--workspace"];
-    if (!this.hasImage) {
+    if (!this.hasImage && !this.isProjectCritique) {
       parts.push("npn-critique-reply-modal--no-image");
     }
     if (this.visualFocusMode) {
@@ -10708,7 +10727,7 @@ export default class NpnCritiqueReplyModal extends Component {
               the (sticky) image. With the wrapper, the left and
               right panes each get overflow:auto and scroll
               independently. }}
-          {{#if this.hasImage}}
+          {{#if (or this.hasImage this.isProjectCritique)}}
             <div
               class="npn-critique-reply-modal__left-pane"
               {{didInsert this.setupLeftPane}}
@@ -10729,6 +10748,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   @onClearTags={{this.clearProjectEditTags}}
                   @onAddEdit={{this.addProjectEdit}}
                   @onSuggestSequence={{this.openSequenceBuilder}}
+                  @openImagesLarge={{this.projectImagesFromPost}}
                 />
               {{else}}
               {{#if this.showBackToProject}}

@@ -44,7 +44,9 @@ export function isCritiqueEligible({ topic, siteSettings, currentUser } = {}) {
   if (enabledCategoryIds.length === 0) {
     // Empty list → only topics whose serializer surfaced
     // `npn_critique_reply` metadata count as critique topics.
-    if (!topic.npn_critique_reply) {
+    // Older project topics without submission metadata still qualify when
+    // the submissions plugin exposes their project images (tag fallback).
+    if (!topic.npn_critique_reply && !topic.npn_project_images) {
       return false;
     }
   } else if (!enabledCategoryIds.includes(topic.category_id)) {
