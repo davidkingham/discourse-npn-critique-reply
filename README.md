@@ -47,6 +47,10 @@ top. From the wall a critic can:
   contact-sheet image into the overall critique (re-adding replaces it).
 - **Suggest a sequence**: the inline sequence builder.
 
+Older project topics without a submission record also get the workspace and
+the wall when the submissions plugin exposes their images (its tag fallback);
+there, images open larger rather than in the single-image view.
+
 The wall/open-image view and the tags are saved with the draft
 (`project_view`, `project_edit_tags`; see `DraftNormalizer`). Writing stays
 long-form; the tools only drop images into the text.
