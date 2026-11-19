@@ -51,6 +51,61 @@ describe DiscourseNpnCritiqueReply::DraftNormalizer do
     )
   end
 
+  it "keeps a valid suggest-a-hang work in progress" do
+    out =
+      normalize(
+        "project_suggestion" => {
+          "label" => "Option A\nmore",
+          "order" => %w[9 8 a1 9 bogus 0],
+          "ranks" => {
+            "9" => "strongest",
+            "8" => "cut",
+            "3" => "keep",
+            "a1" => "keep"
+          },
+          "hang" => {
+            "layout" => "lead",
+            "wall" => "charcoal",
+            "mat" => "nope",
+            "mat_width" => 3,
+            "frame" => "wood",
+            "sizes" => {
+              "42" => 36,
+              "43" => 17,
+              "x" => 20
+            }
+          }
+        }
+      )
+    expect(out["project_suggestion"]).to eq(
+      "label" => "Option A more",
+      "order" => %w[9 8 A1],
+      "ranks" => {
+        "9" => "strongest",
+        "A1" => "keep"
+      },
+      "hang" => {
+        "layout" => "lead",
+        "wall" => "charcoal",
+        "frame" => "wood",
+        "mat_width" => 3,
+        "sizes" => {
+          "42" => 36
+        }
+      }
+    )
+  end
+
+  it "drops an empty or malformed suggestion" do
+    expect(normalize({})["project_suggestion"]).to be_nil
+    expect(
+      normalize("project_suggestion" => { "order" => [] })["project_suggestion"]
+    ).to be_nil
+    expect(
+      normalize("project_suggestion" => "x")["project_suggestion"]
+    ).to be_nil
+  end
+
   it "keeps a valid project view and defaults to the wall" do
     expect(normalize("project_view" => "focus")["project_view"]).to eq("focus")
     expect(normalize("project_view" => "sideways")["project_view"]).to eq(

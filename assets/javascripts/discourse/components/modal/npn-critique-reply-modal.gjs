@@ -159,12 +159,6 @@ const WRITING_CONTEXT_IMAGE = "image";
 
 const PROJECT_VIEW_WALL = "wall";
 const PROJECT_VIEW_FOCUS = "focus";
-// A suggested-edit image already in the critique (alt text written by
-// discourse-npn-submissions' npn-project-edit.js). Adding the edit again
-// replaces it rather than stacking a second one.
-const PROJECT_EDIT_IMAGE_REGEXP = /!\[Suggested edit:[^\]]*\]\([^)]*\)/;
-// Captures that image's summary ("strongest 4; keep 1, 3") from its alt text.
-const PROJECT_EDIT_SUMMARY_REGEXP = /!\[Suggested edit: ([^\]|]*)/;
 
 // Pull the numeric suffix off an id like "attention_pull_3" → 3. Used
 // only during draft restore so newly-created markers don't collide
@@ -270,9 +264,7 @@ function cloneEyePathsForSnapshot(paths) {
   }
   return paths.map((p) => ({
     ...p,
-    points: Array.isArray(p.points)
-      ? p.points.map((pt) => ({ ...pt }))
-      : [],
+    points: Array.isArray(p.points) ? p.points.map((pt) => ({ ...pt })) : [],
   }));
 }
 
@@ -296,7 +288,6 @@ function countSnapshotAnnotations(snapshot) {
 function snapshotHasAnnotations(snapshot) {
   return countSnapshotAnnotations(snapshot) > 0;
 }
-
 
 export default class NpnCritiqueReplyModal extends Component {
   @service siteSettings;
@@ -354,13 +345,13 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // Project critiques: the left pane shows the whole project ("wall") by
   // default; opening one image ("focus") shows the familiar single-image view
-  // with the visual tools. `projectEditTags` is the critic's keep/cut tagging
-  // keyed by project number ({ "4": "keep", "A1": "bring_in" }); both are
-  // saved with the draft.
+  // with the visual tools. `projectSuggestion` is the critic's "Suggest a
+  // hang" work in progress ({ label, order, ranks, hang }); both are saved
+  // with the draft. `_legacyEditTags` holds keep/cut tags from a draft saved
+  // before "Suggest a hang" replaced them; they seed the tool once.
   @tracked projectView = PROJECT_VIEW_WALL;
-  @tracked projectEditTags = {};
-  @tracked projectEditBusy = false;
-  @tracked projectEditError = null;
+  @tracked projectSuggestion = null;
+  _legacyEditTags = null;
   @tracked sequenceBuilderInitial = null;
   _sequencePreservedSelection = null;
   @tracked linkFormUrl = "";
@@ -1075,10 +1066,7 @@ export default class NpnCritiqueReplyModal extends Component {
       this._windowErrorHandler = null;
     }
     if (this._pluginErrorBusHandler) {
-      window.removeEventListener(
-        NPN_ERROR_EVENT,
-        this._pluginErrorBusHandler
-      );
+      window.removeEventListener(NPN_ERROR_EVENT, this._pluginErrorBusHandler);
       this._pluginErrorBusHandler = null;
     }
   }
@@ -1126,7 +1114,9 @@ export default class NpnCritiqueReplyModal extends Component {
       typeof thing === "string"
         ? thing
         : `${thing?.message ?? ""}\n${thing?.stack ?? ""}`;
-    return text.includes("npn-critique-reply") || text.includes("npn_critique_reply");
+    return (
+      text.includes("npn-critique-reply") || text.includes("npn_critique_reply")
+    );
   }
 
   // -- Textarea wiring: @mention autocomplete + Insert link helper -------
@@ -1382,9 +1372,11 @@ export default class NpnCritiqueReplyModal extends Component {
     } catch {
       selected = "";
     }
-    // Selecting an existing [npn-sequence] block first reopens it.
-    this.sequenceBuilderInitial =
-      this._sequenceBuilderService.initialFor(selected);
+    // Selecting a suggestion image first reopens it for editing.
+    this.sequenceBuilderInitial = this._sequenceBuilderService.initialFor(
+      selected,
+      this.sequenceImages
+    );
     this.sequenceBuilderOpen = true;
   }
 
@@ -1396,10 +1388,18 @@ export default class NpnCritiqueReplyModal extends Component {
     this._focusWritingSurface();
   }
 
+  // Puts a suggestion into the critique: replacing the selected one when
+  // the tool was reopened from a selection, else replacing one with the same
+  // label already in the overall critique, else as its own block.
   @action
-  insertSequence(markup) {
+  async insertSequence(markup, label = "") {
     const editing = !!this.sequenceBuilderInitial;
-    if (this.#textarea && this._sequencePreservedSelection) {
+    const builder = this._sequenceBuilderService;
+    if (!editing && this.activeWritingContext !== WRITING_CONTEXT_OVERALL) {
+      this.setWritingContext(WRITING_CONTEXT_OVERALL);
+      await new Promise((resolve) => next(resolve));
+    }
+    if (editing && this.#textarea && this._sequencePreservedSelection) {
       try {
         this.#textarea.focus();
         this.#textarea.setSelectionRange(
@@ -1413,12 +1413,16 @@ export default class NpnCritiqueReplyModal extends Component {
     try {
       const tm = this.#textManipulation;
       if (tm) {
-        // Replacing a selected sequence keeps it in place; a fresh insert
-        // goes in as its own block (in the rich editor addText keeps only
-        // inline content, which would glue it to the previous paragraph).
+        const existing = editing
+          ? null
+          : builder?.findSuggestion?.(this.overallCritiqueText ?? "", label);
         if (editing) {
           tm.addText(tm.getSelected(), markup);
+        } else if (existing) {
+          tm.replaceText(existing, markup);
         } else {
+          // Its own block (in the rich editor addText keeps only inline
+          // content, which would glue it to the previous paragraph).
           tm.insertBlock(markup);
         }
         if (!this.#usingDEditor) {
@@ -1429,6 +1433,47 @@ export default class NpnCritiqueReplyModal extends Component {
       this._recordError("insert_sequence", e, null, "warn");
     }
     this.closeSequenceBuilder();
+  }
+
+  // The tool's saved work in progress; a draft from before "Suggest a
+  // hang" brings its keep/cut tags in as the starting point.
+  get projectSuggestionState() {
+    if (this.projectSuggestion) {
+      return this.projectSuggestion;
+    }
+    const tags = this._legacyEditTags;
+    const images = this.sequenceImages;
+    if (!tags || !images) {
+      return null;
+    }
+    const order = [
+      ...(images.originals ?? [])
+        .map((image) => image.number)
+        .filter((n) => tags[n] !== "cut"),
+      ...(images.alternates ?? [])
+        .map((image) => image.number)
+        .filter((n) => tags[n] === "bring_in"),
+    ];
+    const ranks = Object.fromEntries(
+      Object.entries(tags).filter(([, tag]) =>
+        ["strongest", "keep", "unsure"].includes(tag)
+      )
+    );
+    return { label: "", order, ranks, hang: null };
+  }
+
+  get suggestLabel() {
+    return (
+      this._sequenceBuilderService?.buttonLabelFor?.(this.sequenceImages) ??
+      "npn_critique_reply.project_wall.suggest"
+    );
+  }
+
+  @action
+  setProjectSuggestion(state) {
+    this.projectSuggestion = state;
+    this._legacyEditTags = null;
+    this._scheduleProjectDraftSave();
   }
 
   // ---- Project critique: wall, open image, suggested edit ---------------
@@ -1465,16 +1510,8 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.isProjectCritique && this.projectView === PROJECT_VIEW_FOCUS;
   }
 
-  get projectTagDefs() {
-    return this._sequenceBuilderService?.editTags ?? [];
-  }
-
-  get projectHasEditImage() {
-    return PROJECT_EDIT_IMAGE_REGEXP.test(this.overallCritiqueText ?? "");
-  }
-
-  get hasProjectEditTags() {
-    return Object.keys(this.projectEditTags ?? {}).length > 0;
+  get hasProjectSuggestion() {
+    return !!this.projectSuggestion || !!this._legacyEditTags;
   }
 
   _scheduleProjectDraftSave() {
@@ -1523,138 +1560,6 @@ export default class NpnCritiqueReplyModal extends Component {
       this.sequenceImages?.alternates ?? [],
       index
     );
-  }
-
-  // Tapping the active tag clears it; tapping another replaces it.
-  @action
-  setProjectEditTag(number, tag) {
-    const updated = { ...(this.projectEditTags ?? {}) };
-    if (updated[number] === tag) {
-      delete updated[number];
-    } else {
-      updated[number] = tag;
-    }
-    this.projectEditTags = updated;
-    this.projectEditError = null;
-    this._scheduleProjectDraftSave();
-  }
-
-  @action
-  clearProjectEditTags() {
-    this.projectEditTags = {};
-    this.projectEditError = null;
-    this._scheduleProjectDraftSave();
-  }
-
-  // Makes sure the posted critique carries the critic's keep/cut tags: if
-  // images are tagged and the overall critique has no edit image, one is
-  // generated and appended; if it has one that no longer matches the tags,
-  // it's regenerated in place. Runs before Preview and Post, so tagging alone
-  // is enough — "Add edit to critique" is only for placing it mid-text.
-  // Returns false (and shows an error) if the image couldn't be made.
-  async _syncProjectEditIntoText() {
-    const builder = this._sequenceBuilderService;
-    if (!this.isProjectCritique || !this.hasProjectEditTags || !builder) {
-      return true;
-    }
-    const text = this.overallCritiqueText ?? "";
-    const summary = builder.editSummaryFor({
-      images: this.sequenceImages,
-      tags: this.projectEditTags,
-    });
-    const existing = PROJECT_EDIT_IMAGE_REGEXP.exec(text);
-    const existingSummary = PROJECT_EDIT_SUMMARY_REGEXP.exec(text)?.[1];
-    if (existing && existingSummary?.trim() === summary) {
-      return true;
-    }
-
-    this.projectEditBusy = true;
-    let markup;
-    try {
-      markup = await builder.buildEditImage({
-        images: this.sequenceImages,
-        tags: this.projectEditTags,
-      });
-    } catch (e) {
-      this._recordError("project_edit_sync", e, null, "warn");
-      if (!this.isDestroying && !this.isDestroyed) {
-        this.projectEditBusy = false;
-        this.errorMessage = i18n(
-          "npn_critique_reply.project_wall.edit_failed_post"
-        );
-      }
-      return false;
-    } finally {
-      if (!this.isDestroying && !this.isDestroyed) {
-        this.projectEditBusy = false;
-      }
-    }
-
-    // The editor is bound to the tracked text (and re-renders on change), so
-    // updating it here updates what the critic sees too.
-    this.overallCritiqueText = existing
-      ? text.replace(existing[0], markup)
-      : text.trim()
-        ? `${text.trimEnd()}\n\n${markup}`
-        : markup;
-    this._scheduleProjectDraftSave();
-    return true;
-  }
-
-  // Draws the tags as one grouped contact sheet, uploads it, and puts it in
-  // the OVERALL critique: replacing an earlier suggested-edit image if there
-  // is one, otherwise as its own block at the cursor.
-  @action
-  async addProjectEdit() {
-    const builder = this._sequenceBuilderService;
-    if (!builder || this.projectEditBusy || !this.hasProjectEditTags) {
-      return;
-    }
-    this.projectEditBusy = true;
-    this.projectEditError = null;
-    let markup;
-    try {
-      markup = await builder.buildEditImage({
-        images: this.sequenceImages,
-        tags: this.projectEditTags,
-      });
-    } catch (e) {
-      this._recordError("project_edit", e, null, "warn");
-      if (!this.isDestroying && !this.isDestroyed) {
-        this.projectEditError = i18n(
-          "npn_critique_reply.project_wall.edit_failed"
-        );
-        this.projectEditBusy = false;
-      }
-      return;
-    }
-    this.projectEditBusy = false;
-
-    if (this.activeWritingContext !== WRITING_CONTEXT_OVERALL) {
-      this.setWritingContext(WRITING_CONTEXT_OVERALL);
-      await new Promise((resolve) => next(resolve));
-    }
-    try {
-      const tm = this.#textManipulation;
-      if (!tm) {
-        return;
-      }
-      const existing = PROJECT_EDIT_IMAGE_REGEXP.exec(
-        this.overallCritiqueText ?? ""
-      );
-      if (existing) {
-        tm.replaceText(existing[0], markup, {
-          regex: PROJECT_EDIT_IMAGE_REGEXP,
-        });
-      } else {
-        tm.insertBlock(markup);
-      }
-      if (!this.#usingDEditor) {
-        this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-    } catch (e) {
-      this._recordError("insert_project_edit", e, null, "warn");
-    }
   }
 
   @action
@@ -1934,8 +1839,7 @@ export default class NpnCritiqueReplyModal extends Component {
     // A non-ProseMirror surface is active (plain textarea, or DEditor's
     // markdown sub-mode) → focus it and drop the caret at the end.
     const textarea =
-      this.#textarea ||
-      document.getElementById("npn-critique-reply-textarea");
+      this.#textarea || document.getElementById("npn-critique-reply-textarea");
     if (tm && textarea) {
       try {
         textarea.focus();
@@ -2147,7 +2051,6 @@ export default class NpnCritiqueReplyModal extends Component {
   get canPreview() {
     return (
       this.hasUnsavedText ||
-      (this.isProjectCritique && this.hasProjectEditTags) ||
       this.hasAnyImageAnnotations ||
       this.hasProcessingExample
     );
@@ -2284,8 +2187,7 @@ export default class NpnCritiqueReplyModal extends Component {
     const onMove = (moveEvent) => {
       // The grippie sits at the panel's top edge; dragging up grows the
       // panel. Height = distance from the pointer to the viewport bottom.
-      const clientY =
-        moveEvent.touches?.[0]?.clientY ?? moveEvent.clientY ?? 0;
+      const clientY = moveEvent.touches?.[0]?.clientY ?? moveEvent.clientY ?? 0;
       const next = this._clampDockedHeight(window.innerHeight - clientY);
       this._dockedHeightPx = next;
     };
@@ -2515,7 +2417,6 @@ export default class NpnCritiqueReplyModal extends Component {
     return this._legacyImageUrl;
   }
 
-
   get hasImage() {
     return !!this.effectiveImageUrl;
   }
@@ -2568,9 +2469,7 @@ export default class NpnCritiqueReplyModal extends Component {
     // reference behind the scenes; this caption tracks what the
     // user is looking at.
     if (this.viewingProcessingExample) {
-      return i18n(
-        "npn_critique_reply.modal.showing_processing_example"
-      );
+      return i18n("npn_critique_reply.modal.showing_processing_example");
     }
     const v = this.selectedVersion;
     if (!v) {
@@ -2609,9 +2508,7 @@ export default class NpnCritiqueReplyModal extends Component {
 
   get largeImageAlt() {
     if (this.viewingProcessingExample) {
-      return i18n(
-        "npn_critique_reply.modal.processing_example.large_alt"
-      );
+      return i18n("npn_critique_reply.modal.processing_example.large_alt");
     }
     return this.imageAlt;
   }
@@ -2902,9 +2799,7 @@ export default class NpnCritiqueReplyModal extends Component {
   // ---- Reply text preparation -----------------------------------------
 
   get hasUnsavedText() {
-    return (
-      this.overallCritiqueText.trim().length > 0 || this.hasAnyImageNotes
-    );
+    return this.overallCritiqueText.trim().length > 0 || this.hasAnyImageNotes;
   }
 
   // Sync path — used when there's no headed visual-notes / example
@@ -2966,7 +2861,7 @@ export default class NpnCritiqueReplyModal extends Component {
       this.hasAnyImageAnnotations ||
       this.hasProcessingExample ||
       this.hasImageTransform ||
-      this.hasProjectEditTags
+      this.hasProjectSuggestion
     );
   }
 
@@ -3136,9 +3031,8 @@ export default class NpnCritiqueReplyModal extends Component {
       return null;
     }
     return (
-      this.attentionPulls.find(
-        (p) => p.id === this.selectedAttentionPullId
-      ) ?? null
+      this.attentionPulls.find((p) => p.id === this.selectedAttentionPullId) ??
+      null
     );
   }
 
@@ -3217,9 +3111,7 @@ export default class NpnCritiqueReplyModal extends Component {
     if (!this.selectedEyePathId) {
       return null;
     }
-    return (
-      this.eyePaths.find((p) => p.id === this.selectedEyePathId) ?? null
-    );
+    return this.eyePaths.find((p) => p.id === this.selectedEyePathId) ?? null;
   }
 
   // The path the toolbar/popover should reference: prefer the
@@ -3812,10 +3704,9 @@ export default class NpnCritiqueReplyModal extends Component {
     if (index === 0) {
       const v = this.selectedVersion;
       if (v?.kind === "revision" && v.label) {
-        return i18n(
-          "npn_critique_reply.modal.visual_notes_heading_revision",
-          { label: v.label }
-        );
+        return i18n("npn_critique_reply.modal.visual_notes_heading_revision", {
+          label: v.label,
+        });
       }
     }
     if (multiImage) {
@@ -4133,9 +4024,7 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.draftStatus === DRAFT_STATUS.ERROR) {
       // Save failed — do NOT minimize (no false "saved"). Surface the
       // error inline; the critic can retry Minimize or close manually.
-      this.errorMessage = i18n(
-        "npn_critique_reply.modal.minimize.save_failed"
-      );
+      this.errorMessage = i18n("npn_critique_reply.modal.minimize.save_failed");
       return;
     }
 
@@ -4215,9 +4104,7 @@ export default class NpnCritiqueReplyModal extends Component {
       // Resolve the heading here (plain string) rather than with a nested
       // {{i18n (concat …)}} in the template, which Glimmer rejects in an
       // {{#each}} content position.
-      label: i18n(
-        `npn_critique_reply.modal.structured_notes.${labelKey}`
-      ),
+      label: i18n(`npn_critique_reply.modal.structured_notes.${labelKey}`),
       raw: this._topicAttr(`npn_${key}`),
     })).filter((s) => (s.raw ?? "").trim().length > 0);
   }
@@ -4287,7 +4174,7 @@ export default class NpnCritiqueReplyModal extends Component {
         const heading = (s.label ?? "").replace(
           /[&<>"]/g,
           (ch) =>
-            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch])
+            ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]
         );
         return (
           `<section class="npn-critique-reply-modal__notes-section">` +
@@ -4770,8 +4657,10 @@ export default class NpnCritiqueReplyModal extends Component {
     }
     // Closest .npn-critique-reply-modal__quote-button — the button
     // itself fires the insert; don't dismiss before its click runs.
-    if (target instanceof Element &&
-        target.closest(".npn-critique-reply-modal__quote-button")) {
+    if (
+      target instanceof Element &&
+      target.closest(".npn-critique-reply-modal__quote-button")
+    ) {
       return;
     }
     this._quoteButtonPosition = null;
@@ -5102,16 +4991,11 @@ export default class NpnCritiqueReplyModal extends Component {
       // gap where the photo used to be. Walk the body and drop any
       // node whose normalized text content is empty AND has no
       // remaining element children.
-      doc.body
-        .querySelectorAll("p, div, figure")
-        .forEach((el) => {
-          if (
-            el.textContent.trim() === "" &&
-            el.children.length === 0
-          ) {
-            el.remove();
-          }
-        });
+      doc.body.querySelectorAll("p, div, figure").forEach((el) => {
+        if (el.textContent.trim() === "" && el.children.length === 0) {
+          el.remove();
+        }
+      });
       return doc.body.innerHTML;
     } catch (_e) {
       // If parsing fails for any reason, fall back to the original
@@ -5241,10 +5125,7 @@ export default class NpnCritiqueReplyModal extends Component {
         uploadId: upload?.upload_id ?? null,
         url: upload?.url ?? null,
         shortUrl: upload?.short_url ?? null,
-        filename:
-          upload?.original_filename ??
-          file.name ??
-          filename,
+        filename: upload?.original_filename ?? file.name ?? filename,
       };
       // Auto-switch the large image area to the freshly uploaded
       // example so the critic can immediately evaluate / write about
@@ -5558,9 +5439,7 @@ export default class NpnCritiqueReplyModal extends Component {
         return;
       }
       this._rotateMenuOutsideHandler = (event) => {
-        const root = document.getElementById(
-          "npn-critique-reply-rotate-menu"
-        );
+        const root = document.getElementById("npn-critique-reply-rotate-menu");
         const trigger = document.getElementById(
           "npn-critique-reply-rotate-trigger"
         );
@@ -6098,9 +5977,7 @@ export default class NpnCritiqueReplyModal extends Component {
 
   @action
   toggleDirectionArrowMode() {
-    this._setVisualMode(
-      this.directionArrowMode ? null : "direction_arrow"
-    );
+    this._setVisualMode(this.directionArrowMode ? null : "direction_arrow");
   }
 
   @action
@@ -6180,10 +6057,7 @@ export default class NpnCritiqueReplyModal extends Component {
       this.pendingCropPopover = null;
       this.pendingCropPopoverText = "";
     }
-    if (
-      this.pendingDirectionArrowPopover &&
-      mode !== "direction_arrow"
-    ) {
+    if (this.pendingDirectionArrowPopover && mode !== "direction_arrow") {
       // Implicit Skip — keep the arrow but unlabeled (no [D#]).
       const { id } = this.pendingDirectionArrowPopover;
       this.directionArrows = this.directionArrows.map((a) =>
@@ -6192,10 +6066,7 @@ export default class NpnCritiqueReplyModal extends Component {
       this.pendingDirectionArrowPopover = null;
       this.pendingDirectionArrowPopoverText = "";
     }
-    if (
-      this.pendingRelationshipArrowPopover &&
-      mode !== "relationship_arrow"
-    ) {
+    if (this.pendingRelationshipArrowPopover && mode !== "relationship_arrow") {
       // Implicit Skip — keep the arrow but unlabeled (no [R#]).
       const { id } = this.pendingRelationshipArrowPopover;
       this.relationshipArrows = this.relationshipArrows.map((a) =>
@@ -6434,15 +6305,7 @@ export default class NpnCritiqueReplyModal extends Component {
   // landscape pairs grouped together (2:3 ↔ 3:2, 4:5 ↔ 5:4),
   // ending with wide. Keys must match ASPECT_RATIO_VALUES in the
   // Konva stage.
-  cropRatioOptions = [
-    "free",
-    "1:1",
-    "2:3",
-    "3:2",
-    "4:5",
-    "5:4",
-    "16:9",
-  ];
+  cropRatioOptions = ["free", "1:1", "2:3", "3:2", "4:5", "5:4", "16:9"];
 
   @action
   setCropAspectRatio(ratio) {
@@ -6832,8 +6695,7 @@ export default class NpnCritiqueReplyModal extends Component {
     // (active session = null), which preserves the user's expectation
     // that selection ≠ extension.
     this._activeEyePathId = null;
-    this.selectedEyePathId =
-      this.selectedEyePathId === pathId ? null : pathId;
+    this.selectedEyePathId = this.selectedEyePathId === pathId ? null : pathId;
     if (this.siteSettings.npn_critique_reply_debug_enabled) {
       // eslint-disable-next-line no-console
       console.info("[npn-critique-reply] select-eye-path", {
@@ -7520,8 +7382,8 @@ export default class NpnCritiqueReplyModal extends Component {
       this.selectedStrongAreaId = null;
       this.selectedDirectionArrowId = null;
       this.selectedRelationshipArrowId = null;
-    this.selectedDirectionArrowId = null;
-    this.selectedRelationshipArrowId = null;
+      this.selectedDirectionArrowId = null;
+      this.selectedRelationshipArrowId = null;
     } else {
       this.selectedStrongAreaId = id;
     }
@@ -7555,8 +7417,8 @@ export default class NpnCritiqueReplyModal extends Component {
       this.selectedStrongAreaId = null;
       this.selectedDirectionArrowId = null;
       this.selectedRelationshipArrowId = null;
-    this.selectedDirectionArrowId = null;
-    this.selectedRelationshipArrowId = null;
+      this.selectedDirectionArrowId = null;
+      this.selectedRelationshipArrowId = null;
     }
     if (this.retracingStrongAreaId === id) {
       this.retracingStrongAreaId = null;
@@ -8236,9 +8098,7 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.selectedPinNumber == null) {
       return null;
     }
-    return (
-      this.notes.find((p) => p.number === this.selectedPinNumber) ?? null
-    );
+    return this.notes.find((p) => p.number === this.selectedPinNumber) ?? null;
   }
 
   @action
@@ -8526,12 +8386,6 @@ export default class NpnCritiqueReplyModal extends Component {
     this.visualNotesFailureContext = null;
 
     this.previewBuilding = true;
-    // Project critiques: put the keep/cut tags into the text first so the
-    // preview shows exactly what will post.
-    if (!(await this._syncProjectEditIntoText())) {
-      this.previewBuilding = false;
-      return;
-    }
     // Snapshot the active image so the preview iterates a consistent
     // per-image picture (the active edits aren't yet in cold storage) —
     // both annotations and notes text.
@@ -8646,8 +8500,7 @@ export default class NpnCritiqueReplyModal extends Component {
       visualNotesImages,
       visualNotesError,
       processingExampleUrl: this.processingExample?.url ?? null,
-      processingExampleFilename:
-        this.processingExample?.filename ?? null,
+      processingExampleFilename: this.processingExample?.filename ?? null,
       // textBody is the OVERALL critique (raw, drives the empty-state
       // gate); textBodyHtml is its cooked + re-badged HTML for display.
       textBody,
@@ -8777,17 +8630,6 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   async _doPostCritique({ skipVisualNotes }) {
-    // Project critiques: tagged images are posted as the edit image even if
-    // the critic never pressed "Add edit to critique" (and a stale one is
-    // refreshed). Tags alone are enough to post.
-    if (this.isProjectCritique && this.hasProjectEditTags) {
-      this.isPosting = true;
-      const synced = await this._syncProjectEditIntoText();
-      this.isPosting = false;
-      if (!synced || this._destroyed) {
-        return;
-      }
-    }
     if (!this.hasUnsavedText) {
       this.validationMessage = i18n(
         "npn_critique_reply.modal.validation_empty"
@@ -9101,8 +8943,7 @@ export default class NpnCritiqueReplyModal extends Component {
       extra: extra ?? null,
       browser: this._collectBrowserInfo(),
       pluginCommit:
-        (this.siteSettings?.npn_critique_reply_plugin_version ?? null) ||
-        null,
+        (this.siteSettings?.npn_critique_reply_plugin_version ?? null) || null,
     };
   }
 
@@ -9129,9 +8970,7 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     const body =
-      "```json\n" +
-      JSON.stringify(this._lastFailureReport, null, 2) +
-      "\n```";
+      "```json\n" + JSON.stringify(this._lastFailureReport, null, 2) + "\n```";
     let copied = false;
     if (navigator.clipboard?.writeText) {
       try {
@@ -9162,9 +9001,7 @@ export default class NpnCritiqueReplyModal extends Component {
       this.toasts.success({
         duration: "short",
         data: {
-          message: i18n(
-            "npn_critique_reply.modal.diagnostic_copied"
-          ),
+          message: i18n("npn_critique_reply.modal.diagnostic_copied"),
         },
       });
     } else {
@@ -9178,9 +9015,7 @@ export default class NpnCritiqueReplyModal extends Component {
       this.toasts.error?.({
         duration: "short",
         data: {
-          message: i18n(
-            "npn_critique_reply.modal.diagnostic_copy_failed"
-          ),
+          message: i18n("npn_critique_reply.modal.diagnostic_copy_failed"),
         },
       });
     }
@@ -9213,8 +9048,7 @@ export default class NpnCritiqueReplyModal extends Component {
     if (!hasContent) {
       return this._doEditInComposer({ skipVisualNotes: false });
     }
-    const hasVisuals =
-      this.hasAnyImageAnnotations || this.hasProcessingExample;
+    const hasVisuals = this.hasAnyImageAnnotations || this.hasProcessingExample;
     const messageKey = hasVisuals
       ? "npn_critique_reply.modal.edit_in_composer_confirm_message_with_visuals"
       : "npn_critique_reply.modal.edit_in_composer_confirm_message_text_only";
@@ -9415,9 +9249,7 @@ export default class NpnCritiqueReplyModal extends Component {
     if (this.isEditing) {
       return false;
     }
-    return (
-      this.siteSettings.npn_critique_reply_server_drafts_enabled !== false
-    );
+    return this.siteSettings.npn_critique_reply_server_drafts_enabled !== false;
   }
 
   // Stable identity that changes whenever any field worth saving
@@ -9511,7 +9343,11 @@ export default class NpnCritiqueReplyModal extends Component {
 
   get draftImageVersionOutdatedMessage() {
     const notice = this.draftRestoreNotice;
-    if (notice && typeof notice === "object" && notice.kind === "image_version_outdated") {
+    if (
+      notice &&
+      typeof notice === "object" &&
+      notice.kind === "image_version_outdated"
+    ) {
       return i18n("npn_critique_reply.modal.drafts.image_version_outdated", {
         label: notice.label,
       });
@@ -9713,9 +9549,8 @@ export default class NpnCritiqueReplyModal extends Component {
       image_transform: this._imageTransformForIndex(0),
       // Per-image transform map for multi-image drafts. Keys are
       // stringified image indices; identity entries are omitted.
-      image_transforms_by_image: this._collectImageTransformsByImage(
-        orderedIndices
-      ),
+      image_transforms_by_image:
+        this._collectImageTransformsByImage(orderedIndices),
       // Processing example draft entry — flat shape matching
       // ProcessingExampleNormalizer.normalize_for_draft on the
       // server. Null when no example is attached; restored on
@@ -9738,9 +9573,11 @@ export default class NpnCritiqueReplyModal extends Component {
       // path falls back to the auto-switch default if the view
       // doesn't match the current state.
       large_image_view: this.largeImageView,
-      // Project critiques: left-pane view and keep/cut tags.
+      // Project critiques: left-pane view and the Suggest-a-hang work in
+      // progress (legacy keep/cut tags are carried until the tool is used).
       project_view: this.projectView,
-      project_edit_tags: this.projectEditTags ?? {},
+      project_edit_tags: this._legacyEditTags ?? {},
+      project_suggestion: this.projectSuggestion,
       // `prompts_expanded` is reused on the wire as the "More ideas
       // expanded" boolean — same field name (so the Ruby DraftNormalizer
       // UI_ALLOWED_KEYS whitelist doesn't need to change) but the new
@@ -9797,8 +9634,7 @@ export default class NpnCritiqueReplyModal extends Component {
     // tell overall text from image notes). Older posts (v1 / no
     // payload) fall back to parsing the raw body into the OVERALL
     // context — legacy critiques never had separate image notes.
-    const usesStructuredText =
-      payload && Number(payload.schema_version) >= 2;
+    const usesStructuredText = payload && Number(payload.schema_version) >= 2;
 
     if (usesStructuredText) {
       this.overallCritiqueText =
@@ -9922,12 +9758,7 @@ export default class NpnCritiqueReplyModal extends Component {
       // Soft failure — leave the textarea empty. We deliberately
       // don't throw a modal banner because the user can still type
       // new content.
-      this._recordError(
-        "edit_load_post_raw",
-        e,
-        { postId: post.id },
-        "warn"
-      );
+      this._recordError("edit_load_post_raw", e, { postId: post.id }, "warn");
     }
   }
 
@@ -9975,7 +9806,10 @@ export default class NpnCritiqueReplyModal extends Component {
       }
       out.push(line);
     }
-    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    return out
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
 
   // `_restoringDraft` first so the didUpdate autosave hook ignores
@@ -10109,7 +9943,12 @@ export default class NpnCritiqueReplyModal extends Component {
         draft.project_view === PROJECT_VIEW_FOCUS
           ? PROJECT_VIEW_FOCUS
           : PROJECT_VIEW_WALL;
-      this.projectEditTags = { ...(draft.project_edit_tags ?? {}) };
+      this.projectSuggestion = draft.project_suggestion ?? null;
+      const legacyTags = draft.project_edit_tags ?? {};
+      this._legacyEditTags =
+        !this.projectSuggestion && Object.keys(legacyTags).length
+          ? { ...legacyTags }
+          : null;
 
       const savedView = draft.large_image_view;
       if (savedView && LARGE_IMAGE_VIEWS.includes(savedView)) {
@@ -10145,7 +9984,10 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   _restoreAnnotations(annotations, versionKey) {
-    const snapshot = this._buildSnapshotFromAnnotations(annotations, versionKey);
+    const snapshot = this._buildSnapshotFromAnnotations(
+      annotations,
+      versionKey
+    );
     this._restoreAnnotationsFromSnapshot(snapshot);
     this._bumpIdCountersFromSnapshot(snapshot);
     if (snapshot.crop?.aspectRatio) {
@@ -10303,8 +10145,13 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     const entries = new Map();
-    if (draft.image_transforms_by_image && typeof draft.image_transforms_by_image === "object") {
-      for (const [key, value] of Object.entries(draft.image_transforms_by_image)) {
+    if (
+      draft.image_transforms_by_image &&
+      typeof draft.image_transforms_by_image === "object"
+    ) {
+      for (const [key, value] of Object.entries(
+        draft.image_transforms_by_image
+      )) {
         const idx = Number.parseInt(key, 10);
         if (!Number.isInteger(idx) || idx < 0) {
           continue;
@@ -10356,10 +10203,11 @@ export default class NpnCritiqueReplyModal extends Component {
       } catch (e) {
         if (this.siteSettings.npn_critique_reply_debug_enabled) {
           // eslint-disable-next-line no-console
-          console.warn(
-            "[npn-critique-reply] restore-image-transform failed",
-            { imageIndex, transform, error: e }
-          );
+          console.warn("[npn-critique-reply] restore-image-transform failed", {
+            imageIndex,
+            transform,
+            error: e,
+          });
         }
       }
     }
@@ -10526,8 +10374,8 @@ export default class NpnCritiqueReplyModal extends Component {
     this.processingExampleError = null;
     this.largeImageView = LARGE_IMAGE_VIEW_REFERENCE;
     this.projectView = PROJECT_VIEW_WALL;
-    this.projectEditTags = {};
-    this.projectEditError = null;
+    this.projectSuggestion = null;
+    this._legacyEditTags = null;
     // Reset the mobile disclosures to their fresh-modal defaults: the
     // Visual tools panel stays expanded (its default), the Processing
     // Example collapses since there's nothing left to surface.
@@ -10677,8 +10525,7 @@ export default class NpnCritiqueReplyModal extends Component {
         {{#if this._quoteButtonPosition}}
           <button
             type="button"
-            class="btn btn-default btn-icon-text
-              npn-critique-reply-modal__quote-button"
+            class="btn btn-default btn-icon-text npn-critique-reply-modal__quote-button"
             style="position: fixed; top: {{this._quoteButtonPosition.top}}px;
               left: {{this._quoteButtonPosition.left}}px;"
             aria-label={{i18n
@@ -10700,8 +10547,7 @@ export default class NpnCritiqueReplyModal extends Component {
 
         {{#if this.draftImageVersionMissingMessage}}
           <div
-            class="npn-critique-reply-modal__draft-notice
-              npn-critique-reply-modal__draft-notice--image-missing"
+            class="npn-critique-reply-modal__draft-notice npn-critique-reply-modal__draft-notice--image-missing"
             role="status"
           >
             {{this.draftImageVersionMissingMessage}}
@@ -10709,8 +10555,7 @@ export default class NpnCritiqueReplyModal extends Component {
         {{/if}}
         {{#if this.draftImageVersionOutdatedMessage}}
           <div
-            class="npn-critique-reply-modal__draft-notice
-              npn-critique-reply-modal__draft-notice--image-outdated"
+            class="npn-critique-reply-modal__draft-notice npn-critique-reply-modal__draft-notice--image-outdated"
             role="status"
           >
             {{this.draftImageVersionOutdatedMessage}}
@@ -10732,436 +10577,443 @@ export default class NpnCritiqueReplyModal extends Component {
               class="npn-critique-reply-modal__left-pane"
               {{didInsert this.setupLeftPane}}
             >
-              {{#if this.showProjectWall}}
+              {{#if this.sequenceBuilderOpen}}
+                {{! Suggest a hang works on the project, so it takes the
+                project's place in the left pane while it's open; the
+                critique text stays in view on the right. }}
+                <div class="npn-critique-reply-modal__suggest-pane">
+                  <this.SequenceBuilder
+                    @images={{this.sequenceImages}}
+                    @initial={{this.sequenceBuilderInitial}}
+                    @state={{this.projectSuggestionState}}
+                    @onStateChange={{this.setProjectSuggestion}}
+                    @onInsert={{this.insertSequence}}
+                    @onCancel={{this.closeSequenceBuilder}}
+                  />
+                </div>
+              {{else if this.showProjectWall}}
                 <NpnProjectWall
                   @images={{this.sequenceImages}}
-                  @tags={{this.projectEditTags}}
-                  @tagDefs={{this.projectTagDefs}}
                   @disabled={{this.isPosting}}
-                  @editBusy={{this.projectEditBusy}}
-                  @editError={{this.projectEditError}}
-                  @hasEditImage={{this.projectHasEditImage}}
+                  @suggestLabel={{this.suggestLabel}}
                   @onOpenImage={{this.openProjectImage}}
                   @onView={{this.viewProject}}
                   @onViewAlternate={{this.viewProjectAlternate}}
-                  @onSetTag={{this.setProjectEditTag}}
-                  @onClearTags={{this.clearProjectEditTags}}
-                  @onAddEdit={{this.addProjectEdit}}
                   @onSuggestSequence={{this.openSequenceBuilder}}
                   @openImagesLarge={{this.projectImagesFromPost}}
                 />
               {{else}}
-              {{#if this.showBackToProject}}
-                <div class="npn-critique-reply-modal__back-to-project">
-                  <DButton
-                    @action={{this.backToProject}}
-                    @icon="arrow-left"
-                    @label="npn_critique_reply.project_wall.back"
-                    class="btn-flat btn-small"
-                  />
-                </div>
-              {{/if}}
-              <aside
-                class="npn-critique-reply-modal__image-col"
-                aria-labelledby="npn-critique-reply-image-heading"
-              >
-              {{! Header row: section heading on the left, Larger
+                {{#if this.showBackToProject}}
+                  <div class="npn-critique-reply-modal__back-to-project">
+                    <DButton
+                      @action={{this.backToProject}}
+                      @icon="arrow-left"
+                      @label="npn_critique_reply.project_wall.back"
+                      class="btn-flat btn-small"
+                    />
+                  </div>
+                {{/if}}
+                <aside
+                  class="npn-critique-reply-modal__image-col"
+                  aria-labelledby="npn-critique-reply-image-heading"
+                >
+                  {{! Header row: section heading on the left, Larger
                   Image / Return to Writing toggle on the right.
                   The toggle is the entry point for Visual Focus
                   Mode (see `visualFocusMode` tracked state). When
                   active, the modal modifier class hides the write
                   pane and lets the image-col fill the modal. }}
-              <div class="npn-critique-reply-modal__image-col-header">
-                <h3
-                  id="npn-critique-reply-image-heading"
-                  class="npn-critique-reply-modal__image-heading"
-                >
-                  {{i18n "npn_critique_reply.modal.reference_image"}}
-                </h3>
+                  <div class="npn-critique-reply-modal__image-col-header">
+                    <h3
+                      id="npn-critique-reply-image-heading"
+                      class="npn-critique-reply-modal__image-heading"
+                    >
+                      {{i18n "npn_critique_reply.modal.reference_image"}}
+                    </h3>
 
-                <div
-                  class="npn-critique-reply-modal__image-col-header-actions"
-                >
-                  {{! Processing Example used to live here as a
+                    <div
+                      class="npn-critique-reply-modal__image-col-header-actions"
+                    >
+                      {{! Processing Example used to live here as a
                       quick-access popover. Moved out of the header
                       so the only action exposed up here is "Larger
                       Image" — Processing Example is reached via
                       the inline link near "Showing X" status and
                       via the Optional Processing Example section
                       lower in the pane. }}
-                  {{! "Larger Image" entry only. Exiting Larger Image
+                      {{! "Larger Image" entry only. Exiting Larger Image
                       is handled by the "Return to Critique" button in
                       the modal header (next to Minimize), so we don't
                       duplicate a return control down here in focus
                       mode. }}
-                  {{#unless this.visualFocusMode}}
-                    <DButton
-                      class="btn-flat btn-small npn-critique-reply-modal__visual-focus-toggle"
-                      @action={{this.toggleVisualFocusMode}}
-                      @icon="table-columns"
-                      @label="npn_critique_reply.modal.visual_focus.enter"
-                      @title="npn_critique_reply.modal.visual_focus.enter_title"
-                      aria-pressed="false"
-                    />
-                  {{/unless}}
-                </div>
-              </div>
+                      {{#unless this.visualFocusMode}}
+                        <DButton
+                          class="btn-flat btn-small npn-critique-reply-modal__visual-focus-toggle"
+                          @action={{this.toggleVisualFocusMode}}
+                          @icon="table-columns"
+                          @label="npn_critique_reply.modal.visual_focus.enter"
+                          @title="npn_critique_reply.modal.visual_focus.enter_title"
+                          aria-pressed="false"
+                        />
+                      {{/unless}}
+                    </div>
+                  </div>
 
-              {{! Multi-image picker sits ABOVE the image so the
+                  {{! Multi-image picker sits ABOVE the image so the
                   Image 1 / Image 2 / … pills stay put as the critic
                   flips through images. Image heights vary by aspect
                   ratio, so a picker below the image would shift on
                   every switch. Hidden for 0/1-image (legacy)
                   submissions; switching uses the same
                   confirm-clear-annotations flow as version switching. }}
-              {{#if this.hasMultipleSubmissionImages}}
-                <div
-                  class="npn-critique-reply-modal__image-picker"
-                  role="group"
-                  aria-label={{i18n
-                    "npn_critique_reply.modal.image_picker.label"
-                  }}
-                >
-                  <button
-                    type="button"
-                    class="npn-critique-reply-modal__image-picker-nav"
-                    aria-label={{i18n
-                      "npn_critique_reply.modal.image_picker.previous"
-                    }}
-                    disabled={{this.isOnFirstSubmissionImage}}
-                    {{on "click" this.selectPreviousImage}}
-                  >{{dIcon "chevron-left"}}</button>
-                  {{#each this.submissionImageNav as |img|}}
-                    <button
-                      type="button"
-                      class="npn-critique-reply-modal__image-picker-pill
-                        {{if
-                          (eq img.index this.selectedImageIndex)
-                          'is-selected'
-                        }}
-                        {{if img.hasActivity 'has-activity'}}"
-                      aria-pressed={{if
-                        (eq img.index this.selectedImageIndex)
-                        "true"
-                        "false"
+                  {{#if this.hasMultipleSubmissionImages}}
+                    <div
+                      class="npn-critique-reply-modal__image-picker"
+                      role="group"
+                      aria-label={{i18n
+                        "npn_critique_reply.modal.image_picker.label"
                       }}
-                      aria-label={{img.ariaLabel}}
-                      {{on "click" (fn this.selectImage img.index)}}
-                    >{{img.label}}{{#if img.hasActivity}}
-                        <span
-                          class="npn-critique-reply-modal__image-picker-pill-dot"
-                          aria-hidden="true"
-                        ></span>
-                      {{/if}}</button>
-                  {{/each}}
-                  <button
-                    type="button"
-                    class="npn-critique-reply-modal__image-picker-nav"
-                    aria-label={{i18n
-                      "npn_critique_reply.modal.image_picker.next"
-                    }}
-                    disabled={{this.isOnLastSubmissionImage}}
-                    {{on "click" this.selectNextImage}}
-                  >{{dIcon "chevron-right"}}</button>
-                </div>
-              {{/if}}
+                    >
+                      <button
+                        type="button"
+                        class="npn-critique-reply-modal__image-picker-nav"
+                        aria-label={{i18n
+                          "npn_critique_reply.modal.image_picker.previous"
+                        }}
+                        disabled={{this.isOnFirstSubmissionImage}}
+                        {{on "click" this.selectPreviousImage}}
+                      >{{dIcon "chevron-left"}}</button>
+                      {{#each this.submissionImageNav as |img|}}
+                        <button
+                          type="button"
+                          class="npn-critique-reply-modal__image-picker-pill
+                            {{if
+                              (eq img.index this.selectedImageIndex)
+                              'is-selected'
+                            }}
+                            {{if img.hasActivity 'has-activity'}}"
+                          aria-pressed={{if
+                            (eq img.index this.selectedImageIndex)
+                            "true"
+                            "false"
+                          }}
+                          aria-label={{img.ariaLabel}}
+                          {{on "click" (fn this.selectImage img.index)}}
+                        >{{img.label}}{{#if img.hasActivity}}
+                            <span
+                              class="npn-critique-reply-modal__image-picker-pill-dot"
+                              aria-hidden="true"
+                            ></span>
+                          {{/if}}</button>
+                      {{/each}}
+                      <button
+                        type="button"
+                        class="npn-critique-reply-modal__image-picker-nav"
+                        aria-label={{i18n
+                          "npn_critique_reply.modal.image_picker.next"
+                        }}
+                        disabled={{this.isOnLastSubmissionImage}}
+                        {{on "click" this.selectNextImage}}
+                      >{{dIcon "chevron-right"}}</button>
+                    </div>
+                  {{/if}}
 
-              {{! Image sits under the picker — the primary visual
+                  {{! Image sits under the picker — the primary visual
                   element. Version selector + large-image-view toggle
                   (the "Showing X" status) sit below the image; the
                   visual tools come further down under the Optional
                   Visual Notes section header. }}
-              {{#if this.viewingProcessingExample}}
-                {{! The alt text on the <img> already carries the
+                  {{#if this.viewingProcessingExample}}
+                    {{! The alt text on the <img> already carries the
                     accessible name; no separate figcaption needed. }}
-                <div
-                  class="npn-critique-reply-modal__processing-example-large"
-                >
-                  <img
-                    class="npn-critique-reply-modal__processing-example-large-img"
-                    src={{this.processingExample.url}}
-                    alt={{this.largeImageAlt}}
-                  />
-                </div>
-              {{else}}
-              <NpnCritiqueImageReference
-                @imageUrl={{this.effectiveImageUrl}}
-                @onZoomStateChange={{this.onImageZoomStateChange}}
-                @alt={{this.imageAlt}}
-                @pins={{this.notes}}
-                @crop={{this.crop}}
-                @visualMode={{this.visualMode}}
-                @areaShapeMode={{this.areaShapeMode}}
-                @eyePathInteractionMode={{this.eyePathInteractionMode}}
-                @selectedNumber={{this.selectedPinNumber}}
-                @cropSelected={{this.cropSelected}}
-                @onImageClick={{this.addPin}}
-                @onPinSelect={{this.selectPin}}
-                @onMovePin={{this.movePin}}
-                @pinMoveEnabled={{this.pinMoveEnabled}}
-                @onAddCrop={{this.addCrop}}
-                @onSelectCrop={{this.selectCrop}}
-                @onUpdateCrop={{this.updateCrop}}
-                @pendingCropPopover={{this.pendingCropPopover}}
-                @pendingCropPopoverText={{this.pendingCropPopoverText}}
-                @onPendingCropPopoverInput={{this.updatePendingCropPopoverText}}
-                @onConfirmPendingCropPopover={{this.confirmPendingCropPopover}}
-                @onCancelPendingCropPopover={{this.cancelPendingCropPopover}}
-                @onRedrawPendingCropPopover={{this.redrawPendingCropPopover}}
-                @pendingCropPopoverCanConfirm={{this.pendingCropPopoverCanConfirm}}
-                @eyePaths={{this.eyePaths}}
-                @selectedEyePathId={{this.selectedEyePathId}}
-                @eyePathCreating={{this.eyePathCreating}}
-                @onAddEyePathPoint={{this.addEyePathPoint}}
-                @onCommitEyePath={{this.commitEyePath}}
-                @onSelectEyePath={{this.selectEyePath}}
-                @onMoveEyePathPoint={{this.moveEyePathPoint}}
-                @attentionPulls={{this.attentionPulls}}
-                @selectedAttentionPullId={{this.selectedAttentionPullId}}
-                @attentionPullEditEnabled={{this.attentionPullEditEnabled}}
-                @retracingAttentionPullId={{this.retracingAttentionPullId}}
-                @onAddAttentionPull={{this.addAttentionPull}}
-                @onAddAttentionPullPath={{this.addAttentionPullPath}}
-                @onRetraceAttentionPullPath={{this.retraceAttentionPullPath}}
-                @onMoveAttentionPullPoint={{this.moveAttentionPullPoint}}
-                @onSelectAttentionPull={{this.selectAttentionPull}}
-                @onUpdateAttentionPull={{this.updateAttentionPull}}
-                @pendingAttentionPullPopover={{this.pendingAttentionPullPopover}}
-                @pendingAttentionPullPopoverText={{this.pendingAttentionPullPopoverText}}
-                @onPendingAttentionPullPopoverInput={{this.updatePendingAttentionPullPopoverText}}
-                @onConfirmPendingAttentionPullPopover={{this.confirmPendingAttentionPullPopover}}
-                @onCancelPendingAttentionPullPopover={{this.cancelPendingAttentionPullPopover}}
-                @onRedrawPendingAttentionPullPopover={{this.redrawPendingAttentionPullPopover}}
-                @pendingAttentionPullPopoverCanConfirm={{this.pendingAttentionPullPopoverCanConfirm}}
-                @strongAreas={{this.strongAreas}}
-                @selectedStrongAreaId={{this.selectedStrongAreaId}}
-                @strongAreaEditEnabled={{this.strongAreaEditEnabled}}
-                @retracingStrongAreaId={{this.retracingStrongAreaId}}
-                @onAddStrongArea={{this.addStrongArea}}
-                @onAddStrongAreaPath={{this.addStrongAreaPath}}
-                @onRetraceStrongAreaPath={{this.retraceStrongAreaPath}}
-                @onMoveStrongAreaPoint={{this.moveStrongAreaPoint}}
-                @onSelectStrongArea={{this.selectStrongArea}}
-                @onUpdateStrongArea={{this.updateStrongArea}}
-                @pendingStrongAreaPopover={{this.pendingStrongAreaPopover}}
-                @pendingStrongAreaPopoverText={{this.pendingStrongAreaPopoverText}}
-                @onPendingStrongAreaPopoverInput={{this.updatePendingStrongAreaPopoverText}}
-                @onConfirmPendingStrongAreaPopover={{this.confirmPendingStrongAreaPopover}}
-                @onCancelPendingStrongAreaPopover={{this.cancelPendingStrongAreaPopover}}
-                @onRedrawPendingStrongAreaPopover={{this.redrawPendingStrongAreaPopover}}
-                @pendingStrongAreaPopoverCanConfirm={{this.pendingStrongAreaPopoverCanConfirm}}
-                @pendingEyePathPopover={{this.pendingEyePathPopover}}
-                @pendingEyePathPopoverText={{this.pendingEyePathPopoverText}}
-                @onPendingEyePathPopoverInput={{this.updatePendingEyePathPopoverText}}
-                @onConfirmPendingEyePathPopover={{this.confirmPendingEyePathPopover}}
-                @onCancelPendingEyePathPopover={{this.cancelPendingEyePathPopover}}
-                @onSkipPendingEyePathPopover={{this.skipPendingEyePathPopover}}
-                @onRedrawPendingEyePathPopover={{this.redrawPendingEyePathPopover}}
-                @pendingEyePathPopoverCanConfirm={{this.pendingEyePathPopoverCanConfirm}}
-                @directionArrows={{this.directionArrows}}
-                @selectedDirectionArrowId={{this.selectedDirectionArrowId}}
-                @onAddDirectionArrow={{this.addDirectionArrow}}
-                @onSelectDirectionArrow={{this.selectDirectionArrow}}
-                @onUpdateDirectionArrow={{this.updateDirectionArrow}}
-                @pendingDirectionArrowPopover={{this.pendingDirectionArrowPopover}}
-                @pendingDirectionArrowPopoverText={{this.pendingDirectionArrowPopoverText}}
-                @onPendingDirectionArrowPopoverInput={{this.updatePendingDirectionArrowPopoverText}}
-                @onConfirmPendingDirectionArrowPopover={{this.confirmPendingDirectionArrowPopover}}
-                @onCancelPendingDirectionArrowPopover={{this.cancelPendingDirectionArrowPopover}}
-                @onSkipPendingDirectionArrowPopover={{this.skipPendingDirectionArrowPopover}}
-                @pendingDirectionArrowPopoverCanConfirm={{this.pendingDirectionArrowPopoverCanConfirm}}
-                @relationshipArrows={{this.relationshipArrows}}
-                @selectedRelationshipArrowId={{this.selectedRelationshipArrowId}}
-                @onAddRelationshipArrow={{this.addRelationshipArrow}}
-                @onSelectRelationshipArrow={{this.selectRelationshipArrow}}
-                @onUpdateRelationshipArrow={{this.updateRelationshipArrow}}
-                @pendingRelationshipArrowPopover={{this.pendingRelationshipArrowPopover}}
-                @pendingRelationshipArrowPopoverText={{this.pendingRelationshipArrowPopoverText}}
-                @onPendingRelationshipArrowPopoverInput={{this.updatePendingRelationshipArrowPopoverText}}
-                @onConfirmPendingRelationshipArrowPopover={{this.confirmPendingRelationshipArrowPopover}}
-                @onCancelPendingRelationshipArrowPopover={{this.cancelPendingRelationshipArrowPopover}}
-                @onSkipPendingRelationshipArrowPopover={{this.skipPendingRelationshipArrowPopover}}
-                @pendingRelationshipArrowPopoverCanConfirm={{this.pendingRelationshipArrowPopoverCanConfirm}}
-                @cropAspectRatio={{this.cropAspectRatio}}
-                @pendingPin={{this.pendingPin}}
-                @pendingPinNoteText={{this.pendingPinNoteText}}
-                @onPendingNoteInput={{this.updatePendingPinNoteText}}
-                @onConfirmPendingNote={{this.confirmPendingPinNote}}
-                @onCancelPendingNote={{this.cancelPendingPinNote}}
-                @onRedrawPendingNote={{this.redrawPendingPinNote}}
-                @pendingPinNoteCanConfirm={{this.pendingPinNoteCanConfirm}}
-              />
-              {{/if}}
+                    <div
+                      class="npn-critique-reply-modal__processing-example-large"
+                    >
+                      <img
+                        class="npn-critique-reply-modal__processing-example-large-img"
+                        src={{this.processingExample.url}}
+                        alt={{this.largeImageAlt}}
+                      />
+                    </div>
+                  {{else}}
+                    <NpnCritiqueImageReference
+                      @imageUrl={{this.effectiveImageUrl}}
+                      @onZoomStateChange={{this.onImageZoomStateChange}}
+                      @alt={{this.imageAlt}}
+                      @pins={{this.notes}}
+                      @crop={{this.crop}}
+                      @visualMode={{this.visualMode}}
+                      @areaShapeMode={{this.areaShapeMode}}
+                      @eyePathInteractionMode={{this.eyePathInteractionMode}}
+                      @selectedNumber={{this.selectedPinNumber}}
+                      @cropSelected={{this.cropSelected}}
+                      @onImageClick={{this.addPin}}
+                      @onPinSelect={{this.selectPin}}
+                      @onMovePin={{this.movePin}}
+                      @pinMoveEnabled={{this.pinMoveEnabled}}
+                      @onAddCrop={{this.addCrop}}
+                      @onSelectCrop={{this.selectCrop}}
+                      @onUpdateCrop={{this.updateCrop}}
+                      @pendingCropPopover={{this.pendingCropPopover}}
+                      @pendingCropPopoverText={{this.pendingCropPopoverText}}
+                      @onPendingCropPopoverInput={{this.updatePendingCropPopoverText}}
+                      @onConfirmPendingCropPopover={{this.confirmPendingCropPopover}}
+                      @onCancelPendingCropPopover={{this.cancelPendingCropPopover}}
+                      @onRedrawPendingCropPopover={{this.redrawPendingCropPopover}}
+                      @pendingCropPopoverCanConfirm={{this.pendingCropPopoverCanConfirm}}
+                      @eyePaths={{this.eyePaths}}
+                      @selectedEyePathId={{this.selectedEyePathId}}
+                      @eyePathCreating={{this.eyePathCreating}}
+                      @onAddEyePathPoint={{this.addEyePathPoint}}
+                      @onCommitEyePath={{this.commitEyePath}}
+                      @onSelectEyePath={{this.selectEyePath}}
+                      @onMoveEyePathPoint={{this.moveEyePathPoint}}
+                      @attentionPulls={{this.attentionPulls}}
+                      @selectedAttentionPullId={{this.selectedAttentionPullId}}
+                      @attentionPullEditEnabled={{this.attentionPullEditEnabled}}
+                      @retracingAttentionPullId={{this.retracingAttentionPullId}}
+                      @onAddAttentionPull={{this.addAttentionPull}}
+                      @onAddAttentionPullPath={{this.addAttentionPullPath}}
+                      @onRetraceAttentionPullPath={{this.retraceAttentionPullPath}}
+                      @onMoveAttentionPullPoint={{this.moveAttentionPullPoint}}
+                      @onSelectAttentionPull={{this.selectAttentionPull}}
+                      @onUpdateAttentionPull={{this.updateAttentionPull}}
+                      @pendingAttentionPullPopover={{this.pendingAttentionPullPopover}}
+                      @pendingAttentionPullPopoverText={{this.pendingAttentionPullPopoverText}}
+                      @onPendingAttentionPullPopoverInput={{this.updatePendingAttentionPullPopoverText}}
+                      @onConfirmPendingAttentionPullPopover={{this.confirmPendingAttentionPullPopover}}
+                      @onCancelPendingAttentionPullPopover={{this.cancelPendingAttentionPullPopover}}
+                      @onRedrawPendingAttentionPullPopover={{this.redrawPendingAttentionPullPopover}}
+                      @pendingAttentionPullPopoverCanConfirm={{this.pendingAttentionPullPopoverCanConfirm}}
+                      @strongAreas={{this.strongAreas}}
+                      @selectedStrongAreaId={{this.selectedStrongAreaId}}
+                      @strongAreaEditEnabled={{this.strongAreaEditEnabled}}
+                      @retracingStrongAreaId={{this.retracingStrongAreaId}}
+                      @onAddStrongArea={{this.addStrongArea}}
+                      @onAddStrongAreaPath={{this.addStrongAreaPath}}
+                      @onRetraceStrongAreaPath={{this.retraceStrongAreaPath}}
+                      @onMoveStrongAreaPoint={{this.moveStrongAreaPoint}}
+                      @onSelectStrongArea={{this.selectStrongArea}}
+                      @onUpdateStrongArea={{this.updateStrongArea}}
+                      @pendingStrongAreaPopover={{this.pendingStrongAreaPopover}}
+                      @pendingStrongAreaPopoverText={{this.pendingStrongAreaPopoverText}}
+                      @onPendingStrongAreaPopoverInput={{this.updatePendingStrongAreaPopoverText}}
+                      @onConfirmPendingStrongAreaPopover={{this.confirmPendingStrongAreaPopover}}
+                      @onCancelPendingStrongAreaPopover={{this.cancelPendingStrongAreaPopover}}
+                      @onRedrawPendingStrongAreaPopover={{this.redrawPendingStrongAreaPopover}}
+                      @pendingStrongAreaPopoverCanConfirm={{this.pendingStrongAreaPopoverCanConfirm}}
+                      @pendingEyePathPopover={{this.pendingEyePathPopover}}
+                      @pendingEyePathPopoverText={{this.pendingEyePathPopoverText}}
+                      @onPendingEyePathPopoverInput={{this.updatePendingEyePathPopoverText}}
+                      @onConfirmPendingEyePathPopover={{this.confirmPendingEyePathPopover}}
+                      @onCancelPendingEyePathPopover={{this.cancelPendingEyePathPopover}}
+                      @onSkipPendingEyePathPopover={{this.skipPendingEyePathPopover}}
+                      @onRedrawPendingEyePathPopover={{this.redrawPendingEyePathPopover}}
+                      @pendingEyePathPopoverCanConfirm={{this.pendingEyePathPopoverCanConfirm}}
+                      @directionArrows={{this.directionArrows}}
+                      @selectedDirectionArrowId={{this.selectedDirectionArrowId}}
+                      @onAddDirectionArrow={{this.addDirectionArrow}}
+                      @onSelectDirectionArrow={{this.selectDirectionArrow}}
+                      @onUpdateDirectionArrow={{this.updateDirectionArrow}}
+                      @pendingDirectionArrowPopover={{this.pendingDirectionArrowPopover}}
+                      @pendingDirectionArrowPopoverText={{this.pendingDirectionArrowPopoverText}}
+                      @onPendingDirectionArrowPopoverInput={{this.updatePendingDirectionArrowPopoverText}}
+                      @onConfirmPendingDirectionArrowPopover={{this.confirmPendingDirectionArrowPopover}}
+                      @onCancelPendingDirectionArrowPopover={{this.cancelPendingDirectionArrowPopover}}
+                      @onSkipPendingDirectionArrowPopover={{this.skipPendingDirectionArrowPopover}}
+                      @pendingDirectionArrowPopoverCanConfirm={{this.pendingDirectionArrowPopoverCanConfirm}}
+                      @relationshipArrows={{this.relationshipArrows}}
+                      @selectedRelationshipArrowId={{this.selectedRelationshipArrowId}}
+                      @onAddRelationshipArrow={{this.addRelationshipArrow}}
+                      @onSelectRelationshipArrow={{this.selectRelationshipArrow}}
+                      @onUpdateRelationshipArrow={{this.updateRelationshipArrow}}
+                      @pendingRelationshipArrowPopover={{this.pendingRelationshipArrowPopover}}
+                      @pendingRelationshipArrowPopoverText={{this.pendingRelationshipArrowPopoverText}}
+                      @onPendingRelationshipArrowPopoverInput={{this.updatePendingRelationshipArrowPopoverText}}
+                      @onConfirmPendingRelationshipArrowPopover={{this.confirmPendingRelationshipArrowPopover}}
+                      @onCancelPendingRelationshipArrowPopover={{this.cancelPendingRelationshipArrowPopover}}
+                      @onSkipPendingRelationshipArrowPopover={{this.skipPendingRelationshipArrowPopover}}
+                      @pendingRelationshipArrowPopoverCanConfirm={{this.pendingRelationshipArrowPopoverCanConfirm}}
+                      @cropAspectRatio={{this.cropAspectRatio}}
+                      @pendingPin={{this.pendingPin}}
+                      @pendingPinNoteText={{this.pendingPinNoteText}}
+                      @onPendingNoteInput={{this.updatePendingPinNoteText}}
+                      @onConfirmPendingNote={{this.confirmPendingPinNote}}
+                      @onCancelPendingNote={{this.cancelPendingPinNote}}
+                      @onRedrawPendingNote={{this.redrawPendingPinNote}}
+                      @pendingPinNoteCanConfirm={{this.pendingPinNoteCanConfirm}}
+                    />
+                  {{/if}}
 
-              {{! Version (revision) selector. Revisions only apply to
+                  {{! Version (revision) selector. Revisions only apply to
                   the primary submission image, so this hides once the
                   critic switches to a non-primary image. }}
-              {{#if this.versionSelectorAvailable}}
-                <div
-                  class="npn-critique-reply-modal__version-selector"
-                  role="group"
-                  aria-label={{i18n
-                    "npn_critique_reply.modal.version_selector_label"
-                  }}
-                >
-                  {{#each this.versions as |v|}}
-                    <button
-                      type="button"
-                      class="npn-critique-reply-modal__version-button
-                        {{if (eq v.key this.selectedVersionKey) 'is-selected'}}"
-                      aria-pressed={{if
-                        (eq v.key this.selectedVersionKey)
-                        "true"
-                        "false"
+                  {{#if this.versionSelectorAvailable}}
+                    <div
+                      class="npn-critique-reply-modal__version-selector"
+                      role="group"
+                      aria-label={{i18n
+                        "npn_critique_reply.modal.version_selector_label"
                       }}
-                      {{on "click" (fn this.selectVersion v.key)}}
                     >
-                      {{#if (eq v.key this.selectedVersionKey)}}
-                        <span
-                          class="npn-critique-reply-modal__version-check"
-                          aria-hidden="true"
+                      {{#each this.versions as |v|}}
+                        <button
+                          type="button"
+                          class="npn-critique-reply-modal__version-button
+                            {{if
+                              (eq v.key this.selectedVersionKey)
+                              'is-selected'
+                            }}"
+                          aria-pressed={{if
+                            (eq v.key this.selectedVersionKey)
+                            "true"
+                            "false"
+                          }}
+                          {{on "click" (fn this.selectVersion v.key)}}
                         >
-                          {{dIcon "check"}}
-                        </span>
-                      {{/if}}
-                      <span
-                        class="npn-critique-reply-modal__version-label"
-                      >{{v.label}}</span>
-                    </button>
-                  {{/each}}
-                </div>
-              {{/if}}
+                          {{#if (eq v.key this.selectedVersionKey)}}
+                            <span
+                              class="npn-critique-reply-modal__version-check"
+                              aria-hidden="true"
+                            >
+                              {{dIcon "check"}}
+                            </span>
+                          {{/if}}
+                          <span
+                            class="npn-critique-reply-modal__version-label"
+                          >{{v.label}}</span>
+                        </button>
+                      {{/each}}
+                    </div>
+                  {{/if}}
 
-              {{! Large-image view toggle. Surfaces only once a
+                  {{! Large-image view toggle. Surfaces only once a
                   processing example exists — before upload there's
                   nothing to switch to. Implemented as a pill-button
                   group matching the version selector visually so the
                   two "what image am I looking at" affordances feel
                   related. Uses aria-pressed so screen readers
                   announce the active view. }}
-              {{#if this.hasProcessingExample}}
-                <div
-                  class="npn-critique-reply-modal__large-image-view"
-                  role="group"
-                  aria-label={{i18n
-                    "npn_critique_reply.modal.large_image_view.label"
-                  }}
-                >
-                  <button
-                    type="button"
-                    class="npn-critique-reply-modal__large-image-view-button
-                      {{if this.viewingReference 'is-selected'}}"
-                    aria-pressed={{if this.viewingReference "true" "false"}}
-                    {{on
-                      "click"
-                      (fn this.setLargeImageView "reference")
-                    }}
-                  >
-                    {{#if this.viewingReference}}
-                      <span
-                        class="npn-critique-reply-modal__large-image-view-check"
-                        aria-hidden="true"
-                      >
-                        {{dIcon "check"}}
-                      </span>
-                    {{/if}}
-                    <span
-                      class="npn-critique-reply-modal__large-image-view-label"
-                    >
-                      {{i18n
-                        "npn_critique_reply.modal.large_image_view.reference"
+                  {{#if this.hasProcessingExample}}
+                    <div
+                      class="npn-critique-reply-modal__large-image-view"
+                      role="group"
+                      aria-label={{i18n
+                        "npn_critique_reply.modal.large_image_view.label"
                       }}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    class="npn-critique-reply-modal__large-image-view-button
-                      {{if this.viewingProcessingExample 'is-selected'}}"
-                    aria-pressed={{if
-                      this.viewingProcessingExample
-                      "true"
-                      "false"
-                    }}
-                    {{on
-                      "click"
-                      (fn this.setLargeImageView "processing_example")
-                    }}
-                  >
-                    {{#if this.viewingProcessingExample}}
-                      <span
-                        class="npn-critique-reply-modal__large-image-view-check"
-                        aria-hidden="true"
-                      >
-                        {{dIcon "check"}}
-                      </span>
-                    {{/if}}
-                    <span
-                      class="npn-critique-reply-modal__large-image-view-label"
                     >
-                      {{i18n
-                        "npn_critique_reply.modal.large_image_view.processing_example"
-                      }}
-                    </span>
-                  </button>
+                      <button
+                        type="button"
+                        class="npn-critique-reply-modal__large-image-view-button
+                          {{if this.viewingReference 'is-selected'}}"
+                        aria-pressed={{if this.viewingReference "true" "false"}}
+                        {{on "click" (fn this.setLargeImageView "reference")}}
+                      >
+                        {{#if this.viewingReference}}
+                          <span
+                            class="npn-critique-reply-modal__large-image-view-check"
+                            aria-hidden="true"
+                          >
+                            {{dIcon "check"}}
+                          </span>
+                        {{/if}}
+                        <span
+                          class="npn-critique-reply-modal__large-image-view-label"
+                        >
+                          {{i18n
+                            "npn_critique_reply.modal.large_image_view.reference"
+                          }}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        class="npn-critique-reply-modal__large-image-view-button
+                          {{if this.viewingProcessingExample 'is-selected'}}"
+                        aria-pressed={{if
+                          this.viewingProcessingExample
+                          "true"
+                          "false"
+                        }}
+                        {{on
+                          "click"
+                          (fn this.setLargeImageView "processing_example")
+                        }}
+                      >
+                        {{#if this.viewingProcessingExample}}
+                          <span
+                            class="npn-critique-reply-modal__large-image-view-check"
+                            aria-hidden="true"
+                          >
+                            {{dIcon "check"}}
+                          </span>
+                        {{/if}}
+                        <span
+                          class="npn-critique-reply-modal__large-image-view-label"
+                        >
+                          {{i18n
+                            "npn_critique_reply.modal.large_image_view.processing_example"
+                          }}
+                        </span>
+                      </button>
 
-                  {{! Replace / Remove anchored to the view-toggle row so
+                      {{! Replace / Remove anchored to the view-toggle row so
                       they're always visible without scrolling or
                       opening the popover. Acts on the same Processing
                       Example as the popover and the below-image
                       section. }}
-                  <div
-                    class="npn-critique-reply-modal__large-image-view-actions"
-                  >
-                    <DButton
-                      class="btn-flat btn-small"
-                      @action={{this.triggerProcessingExampleFilePicker}}
-                      @icon="rotate"
-                      @label="npn_critique_reply.modal.processing_example.replace"
-                      @disabled={{this.processingExampleUploading}}
-                    />
-                    <DButton
-                      class="btn-flat btn-small"
-                      @action={{this.removeProcessingExample}}
-                      @icon="trash-can"
-                      @label="npn_critique_reply.modal.processing_example.remove"
-                      @disabled={{this.processingExampleUploading}}
-                    />
-                  </div>
-                </div>
-              {{/if}}
+                      <div
+                        class="npn-critique-reply-modal__large-image-view-actions"
+                      >
+                        <DButton
+                          class="btn-flat btn-small"
+                          @action={{this.triggerProcessingExampleFilePicker}}
+                          @icon="rotate"
+                          @label="npn_critique_reply.modal.processing_example.replace"
+                          @disabled={{this.processingExampleUploading}}
+                        />
+                        <DButton
+                          class="btn-flat btn-small"
+                          @action={{this.removeProcessingExample}}
+                          @icon="trash-can"
+                          @label="npn_critique_reply.modal.processing_example.remove"
+                          @disabled={{this.processingExampleUploading}}
+                        />
+                      </div>
+                    </div>
+                  {{/if}}
 
-              {{! Canonical image-status line — single line directly
+                  {{! Canonical image-status line — single line directly
                   under the image. Replaces the older `__version-
                   status` that used to live below the a11y list and
                   the inline "Add processing example" anchor link
                   that scrolled to the section below. Processing
                   Example is now reachable via the disclosure button
                   in the Optional Processing Example section. }}
-              {{#if this.showingVersionLabel}}
-                <p
-                  class="npn-critique-reply-modal__image-status-row"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <span
-                    class="npn-critique-reply-modal__image-status"
-                  >{{this.showingVersionLabel}}</span>
-                  {{#if this.revisionNote}}
-                    <span
-                      class="npn-critique-reply-modal__image-status-sep"
-                      aria-hidden="true"
-                    >—</span>
-                    <span
-                      class="npn-critique-reply-modal__version-note"
-                    >{{i18n
-                        "npn_critique_reply.modal.revision_note"
-                        note=this.revisionNote
-                      }}</span>
+                  {{#if this.showingVersionLabel}}
+                    <p
+                      class="npn-critique-reply-modal__image-status-row"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <span
+                        class="npn-critique-reply-modal__image-status"
+                      >{{this.showingVersionLabel}}</span>
+                      {{#if this.revisionNote}}
+                        <span
+                          class="npn-critique-reply-modal__image-status-sep"
+                          aria-hidden="true"
+                        >—</span>
+                        <span
+                          class="npn-critique-reply-modal__version-note"
+                        >{{i18n
+                            "npn_critique_reply.modal.revision_note"
+                            note=this.revisionNote
+                          }}</span>
+                      {{/if}}
+                    </p>
                   {{/if}}
-                </p>
-              {{/if}}
 
-              {{! Optional Visual Notes section. Toolbar now sits
+                  {{! Optional Visual Notes section. Toolbar now sits
                   BELOW the image with a section heading and helper
                   copy so visual marks read as optional support, not
                   as the workspace's primary purpose. Hidden entirely
@@ -11170,428 +11022,504 @@ export default class NpnCritiqueReplyModal extends Component {
                   image, so surfacing the tools here would imply
                   otherwise. A compact note replaces the toolbar so
                   the disabled state is legible. }}
-              {{#if this.visualNotesAvailable}}
-                <section
-                  class="npn-critique-reply-modal__optional-visual-notes"
-                  aria-labelledby="npn-critique-reply-optional-visual-notes-heading"
-                >
-                {{! "Inspect detail" zoom control. Positioned top-right of
+                  {{#if this.visualNotesAvailable}}
+                    <section
+                      class="npn-critique-reply-modal__optional-visual-notes"
+                      aria-labelledby="npn-critique-reply-optional-visual-notes-heading"
+                    >
+                      {{! "Inspect detail" zoom control. Positioned top-right of
                     this section so it sits inline with the heading in the
                     normal layout without adding a row, and stays put in
                     focus mode (where only the heading text is hidden). The
                     trigger is owned by the image-reference component and
                     reported up via @onZoomStateChange. }}
-                {{#if this._imageZoomAvailable}}
-                  <button
-                    type="button"
-                    class="npn-critique-reply-modal__zoom-button btn btn-default btn-small"
-                    title={{i18n "npn_critique_reply.modal.image_zoom_title"}}
-                    {{on "click" this.openImageZoom}}
-                  >
-                    {{dIcon "magnifying-glass-plus"}}
-                    <span class="npn-critique-reply-modal__zoom-button-label">
-                      {{i18n "npn_critique_reply.modal.image_zoom"}}
-                    </span>
-                  </button>
-                {{/if}}
-                <h3
-                  id="npn-critique-reply-optional-visual-notes-heading"
-                  class="npn-critique-reply-modal__optional-section-heading"
-                >
-                  {{i18n
-                    "npn_critique_reply.modal.optional_visual_notes_heading"
-                  }}
-                </h3>
-                {{! Contextual tool help sits directly under the heading
+                      {{#if this._imageZoomAvailable}}
+                        <button
+                          type="button"
+                          class="npn-critique-reply-modal__zoom-button btn btn-default btn-small"
+                          title={{i18n
+                            "npn_critique_reply.modal.image_zoom_title"
+                          }}
+                          {{on "click" this.openImageZoom}}
+                        >
+                          {{dIcon "magnifying-glass-plus"}}
+                          <span
+                            class="npn-critique-reply-modal__zoom-button-label"
+                          >
+                            {{i18n "npn_critique_reply.modal.image_zoom"}}
+                          </span>
+                        </button>
+                      {{/if}}
+                      <h3
+                        id="npn-critique-reply-optional-visual-notes-heading"
+                        class="npn-critique-reply-modal__optional-section-heading"
+                      >
+                        {{i18n
+                          "npn_critique_reply.modal.optional_visual_notes_heading"
+                        }}
+                      </h3>
+                      {{! Contextual tool help sits directly under the heading
                     (the old "Add marks only…" line was removed and the
                     duplicate below the toolbar was removed too). Defaults
                     to "Select a tool, then click or drag…" and is replaced
                     by the active tool/sub-tool's instructions while a tool
                     is engaged. role=status + aria-live=polite so screen
                     readers hear the change. }}
-                <p
-                  class="npn-critique-reply-modal__optional-section-helper"
-                  role="status"
-                  aria-live="polite"
-                >
-                  {{this.activeToolHelpText}}
-                </p>
-                {{#if this.viewingProcessingExample}}
-                  <p
-                    class="npn-critique-reply-modal__visual-notes-disabled-note"
-                    role="status"
-                  >
-                    {{i18n
-                      "npn_critique_reply.modal.large_image_view.tools_apply_to_reference"
-                    }}
-                  </p>
-                {{else}}
-                {{! Mobile-only disclosure. The summary button is
+                      <p
+                        class="npn-critique-reply-modal__optional-section-helper"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        {{this.activeToolHelpText}}
+                      </p>
+                      {{#if this.viewingProcessingExample}}
+                        <p
+                          class="npn-critique-reply-modal__visual-notes-disabled-note"
+                          role="status"
+                        >
+                          {{i18n
+                            "npn_critique_reply.modal.large_image_view.tools_apply_to_reference"
+                          }}
+                        </p>
+                      {{else}}
+                        {{! Mobile-only disclosure. The summary button is
                     rendered always but hidden on desktop via CSS;
                     the content underneath stays open on desktop and
                     is gated by `is-open` on mobile. JS state lives
                     in mobileVisualToolsOpen; auto-set to true when
                     a draft/edit restore brings in annotations. }}
-                <div
-                  class="npn-critique-reply-modal__visual-tools-disclosure
-                    {{if this.mobileVisualToolsOpen 'is-open'}}"
-                >
-                  <button
-                    type="button"
-                    class="npn-critique-reply-modal__visual-tools-summary"
-                    aria-expanded={{if this.mobileVisualToolsOpen "true" "false"}}
-                    aria-controls="npn-critique-reply-visual-tools-content"
-                    {{on "click" this.toggleMobileVisualTools}}
-                  >
-                    <span
-                      class="npn-critique-reply-modal__visual-tools-summary-label"
-                    >
-                      {{i18n
-                        "npn_critique_reply.modal.mobile.visual_tools_summary"
-                      }}
-                    </span>
-                    <span
-                      class="npn-critique-reply-modal__visual-tools-summary-chevron"
-                      aria-hidden="true"
-                    >
-                      {{dIcon "chevron-down"}}
-                    </span>
-                  </button>
-                  <div
-                    id="npn-critique-reply-visual-tools-content"
-                    class="npn-critique-reply-modal__visual-tools-content"
-                  >
-                <div
-                  class="npn-critique-reply-modal__visual-notes-toolbar"
-                  role="toolbar"
-                  aria-label={{i18n "npn_critique_reply.visual_notes.toolbar_label"}}
-                >
-                  {{! Mode toggles — exactly one active at a time. Each
+                        <div
+                          class="npn-critique-reply-modal__visual-tools-disclosure
+                            {{if this.mobileVisualToolsOpen 'is-open'}}"
+                        >
+                          <button
+                            type="button"
+                            class="npn-critique-reply-modal__visual-tools-summary"
+                            aria-expanded={{if
+                              this.mobileVisualToolsOpen
+                              "true"
+                              "false"
+                            }}
+                            aria-controls="npn-critique-reply-visual-tools-content"
+                            {{on "click" this.toggleMobileVisualTools}}
+                          >
+                            <span
+                              class="npn-critique-reply-modal__visual-tools-summary-label"
+                            >
+                              {{i18n
+                                "npn_critique_reply.modal.mobile.visual_tools_summary"
+                              }}
+                            </span>
+                            <span
+                              class="npn-critique-reply-modal__visual-tools-summary-chevron"
+                              aria-hidden="true"
+                            >
+                              {{dIcon "chevron-down"}}
+                            </span>
+                          </button>
+                          <div
+                            id="npn-critique-reply-visual-tools-content"
+                            class="npn-critique-reply-modal__visual-tools-content"
+                          >
+                            <div
+                              class="npn-critique-reply-modal__visual-notes-toolbar"
+                              role="toolbar"
+                              aria-label={{i18n
+                                "npn_critique_reply.visual_notes.toolbar_label"
+                              }}
+                            >
+                              {{! Mode toggles — exactly one active at a time. Each
                       stays on its own label + icon while active (btn-primary
                       + aria-pressed announce the selected state); the
                       explicit "Finish <tool>" completion lives in the
                       sub-tool row below, matching Eye Path. }}
-                  <DButton
-                    class={{if this.noteMode "btn-primary" "btn-default"}}
-                    @action={{this.toggleNoteMode}}
-                    @icon={{concat this.iconPrefix "plus"}}
-                    @label="npn_critique_reply.visual_notes.numbered_notes"
-                    @title="npn_critique_reply.visual_notes.numbered_notes_title"
-                    @ariaPressed={{this.noteMode}}
-                    @disabled={{this.isPosting}}
-                  />
-                  <DButton
-                    class={{if this.cropMode "btn-primary" "btn-default"}}
-                    @action={{this.toggleCropMode}}
-                    @icon={{concat this.iconPrefix "crop-simple"}}
-                    @label="npn_critique_reply.visual_notes.crop_suggestion"
-                    @title="npn_critique_reply.visual_notes.crop_suggestion_title"
-                    @ariaPressed={{this.cropMode}}
-                    @disabled={{this.isPosting}}
-                  />
-                  {{! Eye Path stays "selected" (the tool's own label +
+                              <DButton
+                                class={{if
+                                  this.noteMode
+                                  "btn-primary"
+                                  "btn-default"
+                                }}
+                                @action={{this.toggleNoteMode}}
+                                @icon={{concat this.iconPrefix "plus"}}
+                                @label="npn_critique_reply.visual_notes.numbered_notes"
+                                @title="npn_critique_reply.visual_notes.numbered_notes_title"
+                                @ariaPressed={{this.noteMode}}
+                                @disabled={{this.isPosting}}
+                              />
+                              <DButton
+                                class={{if
+                                  this.cropMode
+                                  "btn-primary"
+                                  "btn-default"
+                                }}
+                                @action={{this.toggleCropMode}}
+                                @icon={{concat this.iconPrefix "crop-simple"}}
+                                @label="npn_critique_reply.visual_notes.crop_suggestion"
+                                @title="npn_critique_reply.visual_notes.crop_suggestion_title"
+                                @ariaPressed={{this.cropMode}}
+                                @disabled={{this.isPosting}}
+                              />
+                              {{! Eye Path stays "selected" (the tool's own label +
                       icon) while active rather than turning into a
                       dominant "Done with eye path" CTA — completion now
                       lives as a smaller "Finish Eye Path" in the sub-tool
                       row below. aria-pressed announces the active state. }}
-                  <DButton
-                    class={{if this.eyePathMode "btn-primary" "btn-default"}}
-                    @action={{this.toggleEyePathMode}}
-                    @icon={{concat this.iconPrefix "route"}}
-                    @label="npn_critique_reply.visual_notes.eye_path"
-                    @title="npn_critique_reply.visual_notes.eye_path_title"
-                    @ariaPressed={{this.eyePathMode}}
-                    @disabled={{this.isPosting}}
-                  />
-                  {{! Unified Area tool. Internally still routes
+                              <DButton
+                                class={{if
+                                  this.eyePathMode
+                                  "btn-primary"
+                                  "btn-default"
+                                }}
+                                @action={{this.toggleEyePathMode}}
+                                @icon={{concat this.iconPrefix "route"}}
+                                @label="npn_critique_reply.visual_notes.eye_path"
+                                @title="npn_critique_reply.visual_notes.eye_path_title"
+                                @ariaPressed={{this.eyePathMode}}
+                                @disabled={{this.isPosting}}
+                              />
+                              {{! Unified Area tool. Internally still routes
                       through attentionPullMode / attention_pull —
                       schema and tracked state are unchanged so
                       existing annotations remain compatible. Only
                       the labels, tooltip, and helper hint change. }}
-                  <DButton
-                    class={{if
-                      this.attentionPullMode
-                      "btn-primary"
-                      "btn-default"
-                    }}
-                    @action={{this.toggleAttentionPullMode}}
-                    @icon={{concat this.iconPrefix "draw-polygon"}}
-                    @label="npn_critique_reply.visual_notes.area_note"
-                    @title="npn_critique_reply.visual_notes.area_note_title"
-                    @ariaPressed={{this.attentionPullMode}}
-                    @disabled={{this.isPosting}}
-                  />
-                  <DButton
-                    class={{if
-                      this.directionArrowMode
-                      "btn-primary"
-                      "btn-default"
-                    }}
-                    @action={{this.toggleDirectionArrowMode}}
-                    @icon={{concat this.iconPrefix "arrow-right"}}
-                    @label="npn_critique_reply.visual_notes.direction_arrow"
-                    @title="npn_critique_reply.visual_notes.direction_arrow_title"
-                    @ariaPressed={{this.directionArrowMode}}
-                    @disabled={{this.isPosting}}
-                  />
-                  <DButton
-                    class={{if
-                      this.relationshipArrowMode
-                      "btn-primary"
-                      "btn-default"
-                    }}
-                    @action={{this.toggleRelationshipArrowMode}}
-                    @icon={{concat this.iconPrefix "arrows-left-right"}}
-                    @label="npn_critique_reply.visual_notes.relationship_arrow"
-                    @title="npn_critique_reply.visual_notes.relationship_arrow_title"
-                    @ariaPressed={{this.relationshipArrowMode}}
-                    @disabled={{this.isPosting}}
-                  />
+                              <DButton
+                                class={{if
+                                  this.attentionPullMode
+                                  "btn-primary"
+                                  "btn-default"
+                                }}
+                                @action={{this.toggleAttentionPullMode}}
+                                @icon={{concat this.iconPrefix "draw-polygon"}}
+                                @label="npn_critique_reply.visual_notes.area_note"
+                                @title="npn_critique_reply.visual_notes.area_note_title"
+                                @ariaPressed={{this.attentionPullMode}}
+                                @disabled={{this.isPosting}}
+                              />
+                              <DButton
+                                class={{if
+                                  this.directionArrowMode
+                                  "btn-primary"
+                                  "btn-default"
+                                }}
+                                @action={{this.toggleDirectionArrowMode}}
+                                @icon={{concat this.iconPrefix "arrow-right"}}
+                                @label="npn_critique_reply.visual_notes.direction_arrow"
+                                @title="npn_critique_reply.visual_notes.direction_arrow_title"
+                                @ariaPressed={{this.directionArrowMode}}
+                                @disabled={{this.isPosting}}
+                              />
+                              <DButton
+                                class={{if
+                                  this.relationshipArrowMode
+                                  "btn-primary"
+                                  "btn-default"
+                                }}
+                                @action={{this.toggleRelationshipArrowMode}}
+                                @icon={{concat
+                                  this.iconPrefix
+                                  "arrows-left-right"
+                                }}
+                                @label="npn_critique_reply.visual_notes.relationship_arrow"
+                                @title="npn_critique_reply.visual_notes.relationship_arrow_title"
+                                @ariaPressed={{this.relationshipArrowMode}}
+                                @disabled={{this.isPosting}}
+                              />
 
-                  {{! Divider between the two kinds of tool: everything to
+                              {{! Divider between the two kinds of tool: everything to
                       the left ADDS an annotation to the image; Rotate /
                       Flip TRANSFORM the image to test an orientation. The
                       thin rule makes that distinction readable at a glance. }}
-                  <span
-                    class="npn-critique-reply-modal__toolbar-separator"
-                    role="separator"
-                    aria-orientation="vertical"
-                  ></span>
+                              <span
+                                class="npn-critique-reply-modal__toolbar-separator"
+                                role="separator"
+                                aria-orientation="vertical"
+                              ></span>
 
-                  {{! Rotate and Flip tools. Two labeled buttons that
+                              {{! Rotate and Flip tools. Two labeled buttons that
                       visually match the other tool toggles (icon +
                       visible label, same height/padding). Unlike
                       drawing modes, these aren't persistent states —
                       clicking a menu item applies the transform
                       immediately and closes the menu. Both menus
                       share the unified `_imageTransform` state. }}
-                  <div class="npn-critique-reply-modal__transform-menu-wrap">
-                    <DButton
-                      id="npn-critique-reply-rotate-trigger"
-                      class="btn-default"
-                      @action={{this.toggleRotateMenu}}
-                      @icon={{concat this.iconPrefix "rotate-right"}}
-                      @label="npn_critique_reply.visual_notes.transform.rotate.label"
-                      @title="npn_critique_reply.visual_notes.transform.rotate.title"
-                      @disabled={{or this.isPosting this._imageTransformApplying}}
-                      aria-haspopup="menu"
-                      aria-expanded={{if this._rotateMenuOpen "true" "false"}}
-                    />
-                    {{#if this._rotateMenuOpen}}
-                      <div
-                        id="npn-critique-reply-rotate-menu"
-                        class="npn-critique-reply-modal__transform-menu"
-                        role="menu"
-                        {{on "keydown" this.onRotateMenuKeydown}}
-                        {{didInsert (fn this.positionTransformMenu "rotate")}}
-                      >
-                        <p class="npn-critique-reply-modal__transform-menu-hint">
-                          {{i18n
-                            "npn_critique_reply.visual_notes.transform.rotate.hint"
-                          }}
-                        </p>
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__transform-menu-item"
-                          role="menuitem"
-                          @action={{this.rotateImageCw}}
-                          @icon={{concat this.iconPrefix "rotate-right"}}
-                          @label="npn_critique_reply.visual_notes.transform.rotate.rotate_right"
-                          @title="npn_critique_reply.visual_notes.transform.rotate.rotate_right_title"
-                          @disabled={{this._imageTransformApplying}}
-                        />
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__transform-menu-item"
-                          role="menuitem"
-                          @action={{this.rotateImageCcw}}
-                          @icon={{concat this.iconPrefix "rotate-left"}}
-                          @label="npn_critique_reply.visual_notes.transform.rotate.rotate_left"
-                          @title="npn_critique_reply.visual_notes.transform.rotate.rotate_left_title"
-                          @disabled={{this._imageTransformApplying}}
-                        />
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__transform-menu-item npn-critique-reply-modal__transform-menu-reset"
-                          role="menuitem"
-                          @action={{this.resetImageTransform}}
-                          @icon={{concat this.iconPrefix "arrow-rotate-left"}}
-                          @label="npn_critique_reply.visual_notes.transform.reset"
-                          @title="npn_critique_reply.visual_notes.transform.reset_title"
-                          @disabled={{or
-                            this._imageTransformApplying
-                            this._resetTransformDisabled
-                          }}
-                        />
-                        <p class="npn-critique-reply-modal__transform-menu-note">
-                          {{i18n
-                            "npn_critique_reply.visual_notes.transform.original_unmodified"
-                          }}
-                        </p>
-                      </div>
-                    {{/if}}
-                  </div>
+                              <div
+                                class="npn-critique-reply-modal__transform-menu-wrap"
+                              >
+                                <DButton
+                                  id="npn-critique-reply-rotate-trigger"
+                                  class="btn-default"
+                                  @action={{this.toggleRotateMenu}}
+                                  @icon={{concat
+                                    this.iconPrefix
+                                    "rotate-right"
+                                  }}
+                                  @label="npn_critique_reply.visual_notes.transform.rotate.label"
+                                  @title="npn_critique_reply.visual_notes.transform.rotate.title"
+                                  @disabled={{or
+                                    this.isPosting
+                                    this._imageTransformApplying
+                                  }}
+                                  aria-haspopup="menu"
+                                  aria-expanded={{if
+                                    this._rotateMenuOpen
+                                    "true"
+                                    "false"
+                                  }}
+                                />
+                                {{#if this._rotateMenuOpen}}
+                                  <div
+                                    id="npn-critique-reply-rotate-menu"
+                                    class="npn-critique-reply-modal__transform-menu"
+                                    role="menu"
+                                    {{on "keydown" this.onRotateMenuKeydown}}
+                                    {{didInsert
+                                      (fn this.positionTransformMenu "rotate")
+                                    }}
+                                  >
+                                    <p
+                                      class="npn-critique-reply-modal__transform-menu-hint"
+                                    >
+                                      {{i18n
+                                        "npn_critique_reply.visual_notes.transform.rotate.hint"
+                                      }}
+                                    </p>
+                                    <DButton
+                                      class="btn-flat npn-critique-reply-modal__transform-menu-item"
+                                      role="menuitem"
+                                      @action={{this.rotateImageCw}}
+                                      @icon={{concat
+                                        this.iconPrefix
+                                        "rotate-right"
+                                      }}
+                                      @label="npn_critique_reply.visual_notes.transform.rotate.rotate_right"
+                                      @title="npn_critique_reply.visual_notes.transform.rotate.rotate_right_title"
+                                      @disabled={{this._imageTransformApplying}}
+                                    />
+                                    <DButton
+                                      class="btn-flat npn-critique-reply-modal__transform-menu-item"
+                                      role="menuitem"
+                                      @action={{this.rotateImageCcw}}
+                                      @icon={{concat
+                                        this.iconPrefix
+                                        "rotate-left"
+                                      }}
+                                      @label="npn_critique_reply.visual_notes.transform.rotate.rotate_left"
+                                      @title="npn_critique_reply.visual_notes.transform.rotate.rotate_left_title"
+                                      @disabled={{this._imageTransformApplying}}
+                                    />
+                                    <DButton
+                                      class="btn-flat npn-critique-reply-modal__transform-menu-item npn-critique-reply-modal__transform-menu-reset"
+                                      role="menuitem"
+                                      @action={{this.resetImageTransform}}
+                                      @icon={{concat
+                                        this.iconPrefix
+                                        "arrow-rotate-left"
+                                      }}
+                                      @label="npn_critique_reply.visual_notes.transform.reset"
+                                      @title="npn_critique_reply.visual_notes.transform.reset_title"
+                                      @disabled={{or
+                                        this._imageTransformApplying
+                                        this._resetTransformDisabled
+                                      }}
+                                    />
+                                    <p
+                                      class="npn-critique-reply-modal__transform-menu-note"
+                                    >
+                                      {{i18n
+                                        "npn_critique_reply.visual_notes.transform.original_unmodified"
+                                      }}
+                                    </p>
+                                  </div>
+                                {{/if}}
+                              </div>
 
-                  <div class="npn-critique-reply-modal__transform-menu-wrap">
-                    <DButton
-                      id="npn-critique-reply-flip-trigger"
-                      class="btn-default"
-                      @action={{this.toggleFlipMenu}}
-                      {{! `right-left` (swap arrows) reads as "mirror /
+                              <div
+                                class="npn-critique-reply-modal__transform-menu-wrap"
+                              >
+                                <DButton
+                                  id="npn-critique-reply-flip-trigger"
+                                  class="btn-default"
+                                  @action={{this.toggleFlipMenu}}
+                                  {{! `right-left` (swap arrows) reads as "mirror /
                           reverse orientation" and, unlike `arrows-left-right`,
                           doesn't collide with the Relationship-arrow tool. }}
-                      @icon={{concat this.iconPrefix "right-left"}}
-                      @label="npn_critique_reply.visual_notes.transform.flip.label"
-                      @title="npn_critique_reply.visual_notes.transform.flip.title"
-                      @disabled={{or this.isPosting this._imageTransformApplying}}
-                      aria-haspopup="menu"
-                      aria-expanded={{if this._flipMenuOpen "true" "false"}}
-                    />
-                    {{#if this._flipMenuOpen}}
-                      <div
-                        id="npn-critique-reply-flip-menu"
-                        class="npn-critique-reply-modal__transform-menu"
-                        role="menu"
-                        {{on "keydown" this.onFlipMenuKeydown}}
-                        {{didInsert (fn this.positionTransformMenu "flip")}}
-                      >
-                        <p class="npn-critique-reply-modal__transform-menu-hint">
-                          {{i18n
-                            "npn_critique_reply.visual_notes.transform.flip.hint"
-                          }}
-                        </p>
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__transform-menu-item"
-                          role="menuitem"
-                          @action={{this.flipImageHorizontal}}
-                          @icon={{concat this.iconPrefix "arrows-left-right"}}
-                          @label="npn_critique_reply.visual_notes.transform.flip.flip_horizontal"
-                          @title="npn_critique_reply.visual_notes.transform.flip.flip_horizontal_title"
-                          @disabled={{this._imageTransformApplying}}
-                        />
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__transform-menu-item"
-                          role="menuitem"
-                          @action={{this.flipImageVertical}}
-                          @icon={{concat this.iconPrefix "arrows-up-down"}}
-                          @label="npn_critique_reply.visual_notes.transform.flip.flip_vertical"
-                          @title="npn_critique_reply.visual_notes.transform.flip.flip_vertical_title"
-                          @disabled={{this._imageTransformApplying}}
-                        />
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__transform-menu-item npn-critique-reply-modal__transform-menu-reset"
-                          role="menuitem"
-                          @action={{this.resetImageTransform}}
-                          @icon={{concat this.iconPrefix "arrow-rotate-left"}}
-                          @label="npn_critique_reply.visual_notes.transform.reset"
-                          @title="npn_critique_reply.visual_notes.transform.reset_title"
-                          @disabled={{or
-                            this._imageTransformApplying
-                            this._resetTransformDisabled
-                          }}
-                        />
-                        <p class="npn-critique-reply-modal__transform-menu-note">
-                          {{i18n
-                            "npn_critique_reply.visual_notes.transform.original_unmodified"
-                          }}
-                        </p>
-                      </div>
-                    {{/if}}
-                  </div>
+                                  @icon={{concat this.iconPrefix "right-left"}}
+                                  @label="npn_critique_reply.visual_notes.transform.flip.label"
+                                  @title="npn_critique_reply.visual_notes.transform.flip.title"
+                                  @disabled={{or
+                                    this.isPosting
+                                    this._imageTransformApplying
+                                  }}
+                                  aria-haspopup="menu"
+                                  aria-expanded={{if
+                                    this._flipMenuOpen
+                                    "true"
+                                    "false"
+                                  }}
+                                />
+                                {{#if this._flipMenuOpen}}
+                                  <div
+                                    id="npn-critique-reply-flip-menu"
+                                    class="npn-critique-reply-modal__transform-menu"
+                                    role="menu"
+                                    {{on "keydown" this.onFlipMenuKeydown}}
+                                    {{didInsert
+                                      (fn this.positionTransformMenu "flip")
+                                    }}
+                                  >
+                                    <p
+                                      class="npn-critique-reply-modal__transform-menu-hint"
+                                    >
+                                      {{i18n
+                                        "npn_critique_reply.visual_notes.transform.flip.hint"
+                                      }}
+                                    </p>
+                                    <DButton
+                                      class="btn-flat npn-critique-reply-modal__transform-menu-item"
+                                      role="menuitem"
+                                      @action={{this.flipImageHorizontal}}
+                                      @icon={{concat
+                                        this.iconPrefix
+                                        "arrows-left-right"
+                                      }}
+                                      @label="npn_critique_reply.visual_notes.transform.flip.flip_horizontal"
+                                      @title="npn_critique_reply.visual_notes.transform.flip.flip_horizontal_title"
+                                      @disabled={{this._imageTransformApplying}}
+                                    />
+                                    <DButton
+                                      class="btn-flat npn-critique-reply-modal__transform-menu-item"
+                                      role="menuitem"
+                                      @action={{this.flipImageVertical}}
+                                      @icon={{concat
+                                        this.iconPrefix
+                                        "arrows-up-down"
+                                      }}
+                                      @label="npn_critique_reply.visual_notes.transform.flip.flip_vertical"
+                                      @title="npn_critique_reply.visual_notes.transform.flip.flip_vertical_title"
+                                      @disabled={{this._imageTransformApplying}}
+                                    />
+                                    <DButton
+                                      class="btn-flat npn-critique-reply-modal__transform-menu-item npn-critique-reply-modal__transform-menu-reset"
+                                      role="menuitem"
+                                      @action={{this.resetImageTransform}}
+                                      @icon={{concat
+                                        this.iconPrefix
+                                        "arrow-rotate-left"
+                                      }}
+                                      @label="npn_critique_reply.visual_notes.transform.reset"
+                                      @title="npn_critique_reply.visual_notes.transform.reset_title"
+                                      @disabled={{or
+                                        this._imageTransformApplying
+                                        this._resetTransformDisabled
+                                      }}
+                                    />
+                                    <p
+                                      class="npn-critique-reply-modal__transform-menu-note"
+                                    >
+                                      {{i18n
+                                        "npn_critique_reply.visual_notes.transform.original_unmodified"
+                                      }}
+                                    </p>
+                                  </div>
+                                {{/if}}
+                              </div>
 
-                </div>
+                            </div>
 
-                {{! Row 2 — per-mode contextual actions + crop's
+                            {{! Row 2 — per-mode contextual actions + crop's
                     aspect-ratio chooser. Always rendered so its
                     reserved height keeps the image position stable
                     when modes change. When the active mode has
                     nothing to surface (or no mode is active), the
                     strip is empty but maintains its min-height. }}
-                <div
-                  class="npn-critique-reply-modal__visual-notes-secondary"
-                  role="toolbar"
-                  aria-label={{i18n
-                    "npn_critique_reply.visual_notes.toolbar_label"
-                  }}
-                >
-                    {{! Pin mode. Empty state → "click to add..."
+                            <div
+                              class="npn-critique-reply-modal__visual-notes-secondary"
+                              role="toolbar"
+                              aria-label={{i18n
+                                "npn_critique_reply.visual_notes.toolbar_label"
+                              }}
+                            >
+                              {{! Pin mode. Empty state → "click to add..."
                         hint; once any pin exists → Remove (when
                         selected) + Clear. }}
-                    {{#if this.noteMode}}
-                      {{#if this.notes.length}}
-                        {{#if this.selectedPin}}
-                          <DButton
-                            class="btn-default npn-critique-reply-modal__remove-pin"
-                            @icon="trash-can"
-                            @action={{this.removeSelectedPin}}
-                            @translatedLabel={{i18n
-                              "npn_critique_reply.visual_notes.remove_note"
-                              number=this.selectedPin.number
-                            }}
-                            @disabled={{this.isPosting}}
-                          />
-                        {{/if}}
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__clear-notes"
-                          @action={{this.clearNotes}}
-                          @label="npn_critique_reply.visual_notes.clear"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
-                    {{/if}}
+                              {{#if this.noteMode}}
+                                {{#if this.notes.length}}
+                                  {{#if this.selectedPin}}
+                                    <DButton
+                                      class="btn-default npn-critique-reply-modal__remove-pin"
+                                      @icon="trash-can"
+                                      @action={{this.removeSelectedPin}}
+                                      @translatedLabel={{i18n
+                                        "npn_critique_reply.visual_notes.remove_note"
+                                        number=this.selectedPin.number
+                                      }}
+                                      @disabled={{this.isPosting}}
+                                    />
+                                  {{/if}}
+                                  <DButton
+                                    class="btn-flat npn-critique-reply-modal__clear-notes"
+                                    @action={{this.clearNotes}}
+                                    @label="npn_critique_reply.visual_notes.clear"
+                                    @disabled={{this.isPosting}}
+                                  />
+                                {{/if}}
+                              {{/if}}
 
-                    {{! Crop mode actions. The Remove (trash) and
+                              {{! Crop mode actions. The Remove (trash) and
                         Replace flat are kept; "Clear crop" used to be
                         a separate flat button that called the same
                         action as Remove crop — dropped that
                         duplicate. }}
-                    {{#if this.cropMode}}
-                      {{#if this.crop}}
-                        <DButton
-                          class="btn-default npn-critique-reply-modal__remove-pin"
-                          @icon="trash-can"
-                          @action={{this.clearCrop}}
-                          @label="npn_critique_reply.visual_notes.crop_remove"
-                          @disabled={{this.isPosting}}
-                        />
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__clear-notes"
-                          @action={{this.replaceCrop}}
-                          @label="npn_critique_reply.visual_notes.crop_replace"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
+                              {{#if this.cropMode}}
+                                {{#if this.crop}}
+                                  <DButton
+                                    class="btn-default npn-critique-reply-modal__remove-pin"
+                                    @icon="trash-can"
+                                    @action={{this.clearCrop}}
+                                    @label="npn_critique_reply.visual_notes.crop_remove"
+                                    @disabled={{this.isPosting}}
+                                  />
+                                  <DButton
+                                    class="btn-flat npn-critique-reply-modal__clear-notes"
+                                    @action={{this.replaceCrop}}
+                                    @label="npn_critique_reply.visual_notes.crop_replace"
+                                    @disabled={{this.isPosting}}
+                                  />
+                                {{/if}}
 
-                      {{! Aspect-ratio chooser folds into the
+                                {{! Aspect-ratio chooser folds into the
                           secondary row instead of being its own
                           third strip. }}
-                      <span
-                        class="npn-critique-reply-modal__crop-ratio-label"
-                      >{{i18n
-                          "npn_critique_reply.visual_notes.crop_ratio_label"
-                        }}</span>
-                      {{#each this.cropRatioOptions as |option|}}
-                        <button
-                          type="button"
-                          class="npn-critique-reply-modal__crop-ratio-button
-                            {{if
-                              (eq option this.cropAspectRatio)
-                              'is-selected'
-                            }}"
-                          aria-pressed={{if
-                            (eq option this.cropAspectRatio)
-                            "true"
-                            "false"
-                          }}
-                          disabled={{this.isPosting}}
-                          {{on
-                            "click"
-                            (fn this.setCropAspectRatio option)
-                          }}
-                        >{{#if (eq option "free")}}{{i18n
-                              "npn_critique_reply.visual_notes.crop_ratio_free"
-                            }}{{else}}{{option}}{{/if}}</button>
-                      {{/each}}
-                    {{/if}}
+                                <span
+                                  class="npn-critique-reply-modal__crop-ratio-label"
+                                >{{i18n
+                                    "npn_critique_reply.visual_notes.crop_ratio_label"
+                                  }}</span>
+                                {{#each this.cropRatioOptions as |option|}}
+                                  <button
+                                    type="button"
+                                    class="npn-critique-reply-modal__crop-ratio-button
+                                      {{if
+                                        (eq option this.cropAspectRatio)
+                                        'is-selected'
+                                      }}"
+                                    aria-pressed={{if
+                                      (eq option this.cropAspectRatio)
+                                      "true"
+                                      "false"
+                                    }}
+                                    disabled={{this.isPosting}}
+                                    {{on
+                                      "click"
+                                      (fn this.setCropAspectRatio option)
+                                    }}
+                                  >{{#if (eq option "free")}}{{i18n
+                                        "npn_critique_reply.visual_notes.crop_ratio_free"
+                                      }}{{else}}{{option}}{{/if}}</button>
+                                {{/each}}
+                              {{/if}}
 
-                    {{! Eye-path mode actions. With multi-path support:
+                              {{! Eye-path mode actions. With multi-path support:
                         "New eye path" lets the user start another
                         path without toggling the tool off and on.
                         "Remove path" (trash) drops the currently
@@ -11601,284 +11529,316 @@ export default class NpnCritiqueReplyModal extends Component {
                         path. "Clear all" wipes every eye path —
                         only shown when 2+ paths exist so it doesn't
                         duplicate the single-path remove. }}
-                    {{#if this.eyePathMode}}
-                      {{! Stroke / Points sub-toggle. Visible
+                              {{#if this.eyePathMode}}
+                                {{! Stroke / Points sub-toggle. Visible
                           whenever Eye Path is active so the user
                           can pick how the next path will be
                           captured. Existing paths keep their
                           stored mode regardless of the toggle. }}
-                      <div
-                        class="npn-critique-reply-modal__area-shape-toggle"
-                        role="group"
-                        aria-label={{i18n
-                          "npn_critique_reply.visual_notes.eye_path_mode.label"
-                        }}
-                      >
-                        <button
-                          type="button"
-                          class="npn-critique-reply-modal__area-shape-toggle-button
-                            {{if
-                              (eq this.eyePathInteractionMode 'stroke')
-                              'is-selected'
-                            }}"
-                          aria-pressed={{if
-                            (eq this.eyePathInteractionMode "stroke")
-                            "true"
-                            "false"
-                          }}
-                          title={{i18n
-                            "npn_critique_reply.visual_notes.eye_path_mode.stroke_title"
-                          }}
-                          {{on
-                            "click"
-                            (fn this.setEyePathInteractionMode "stroke")
-                          }}
-                        >
-                          {{i18n
-                            "npn_critique_reply.visual_notes.eye_path_mode.stroke"
-                          }}
-                        </button>
-                        <button
-                          type="button"
-                          class="npn-critique-reply-modal__area-shape-toggle-button
-                            {{if
-                              (eq this.eyePathInteractionMode 'points')
-                              'is-selected'
-                            }}"
-                          aria-pressed={{if
-                            (eq this.eyePathInteractionMode "points")
-                            "true"
-                            "false"
-                          }}
-                          title={{i18n
-                            "npn_critique_reply.visual_notes.eye_path_mode.points_title"
-                          }}
-                          {{on
-                            "click"
-                            (fn this.setEyePathInteractionMode "points")
-                          }}
-                        >
-                          {{i18n
-                            "npn_critique_reply.visual_notes.eye_path_mode.points"
-                          }}
-                        </button>
-                      </div>
-                      {{#if this.eyePaths.length}}
-                        {{#if this.focusedEyePath}}
-                          {{#unless this.eyePathsAtMax}}
-                            <DButton
-                              class="btn-default npn-critique-reply-modal__new-eye-path"
-                              @icon="plus"
-                              @action={{this.startNewEyePath}}
-                              @label="npn_critique_reply.visual_notes.eye_path_new"
-                              @title="npn_critique_reply.visual_notes.eye_path_new_title"
-                              @disabled={{this.isPosting}}
-                            />
-                          {{/unless}}
-                          <DButton
-                            class="btn-default npn-critique-reply-modal__remove-pin"
-                            @icon="trash-can"
-                            @action={{this.removeSelectedEyePath}}
-                            @label="npn_critique_reply.visual_notes.eye_path_remove"
-                            @disabled={{this.isPosting}}
-                          />
-                          <DButton
-                            class="btn-flat npn-critique-reply-modal__clear-notes"
-                            @action={{this.removeLastEyePathPoint}}
-                            @label="npn_critique_reply.visual_notes.eye_path_remove_last"
-                            @disabled={{this.isPosting}}
-                          />
-                        {{/if}}
-                        {{#if this.hasMultipleEyePaths}}
-                          <DButton
-                            class="btn-flat npn-critique-reply-modal__clear-notes"
-                            @action={{this.clearEyePath}}
-                            @label="npn_critique_reply.visual_notes.eye_path_clear_all"
-                            @disabled={{this.isPosting}}
-                          />
-                        {{/if}}
-                      {{/if}}
-                      {{! Completion action for Eye Path. Small, but the
+                                <div
+                                  class="npn-critique-reply-modal__area-shape-toggle"
+                                  role="group"
+                                  aria-label={{i18n
+                                    "npn_critique_reply.visual_notes.eye_path_mode.label"
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    class="npn-critique-reply-modal__area-shape-toggle-button
+                                      {{if
+                                        (eq
+                                          this.eyePathInteractionMode 'stroke'
+                                        )
+                                        'is-selected'
+                                      }}"
+                                    aria-pressed={{if
+                                      (eq this.eyePathInteractionMode "stroke")
+                                      "true"
+                                      "false"
+                                    }}
+                                    title={{i18n
+                                      "npn_critique_reply.visual_notes.eye_path_mode.stroke_title"
+                                    }}
+                                    {{on
+                                      "click"
+                                      (fn
+                                        this.setEyePathInteractionMode "stroke"
+                                      )
+                                    }}
+                                  >
+                                    {{i18n
+                                      "npn_critique_reply.visual_notes.eye_path_mode.stroke"
+                                    }}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    class="npn-critique-reply-modal__area-shape-toggle-button
+                                      {{if
+                                        (eq
+                                          this.eyePathInteractionMode 'points'
+                                        )
+                                        'is-selected'
+                                      }}"
+                                    aria-pressed={{if
+                                      (eq this.eyePathInteractionMode "points")
+                                      "true"
+                                      "false"
+                                    }}
+                                    title={{i18n
+                                      "npn_critique_reply.visual_notes.eye_path_mode.points_title"
+                                    }}
+                                    {{on
+                                      "click"
+                                      (fn
+                                        this.setEyePathInteractionMode "points"
+                                      )
+                                    }}
+                                  >
+                                    {{i18n
+                                      "npn_critique_reply.visual_notes.eye_path_mode.points"
+                                    }}
+                                  </button>
+                                </div>
+                                {{#if this.eyePaths.length}}
+                                  {{#if this.focusedEyePath}}
+                                    {{#unless this.eyePathsAtMax}}
+                                      <DButton
+                                        class="btn-default npn-critique-reply-modal__new-eye-path"
+                                        @icon="plus"
+                                        @action={{this.startNewEyePath}}
+                                        @label="npn_critique_reply.visual_notes.eye_path_new"
+                                        @title="npn_critique_reply.visual_notes.eye_path_new_title"
+                                        @disabled={{this.isPosting}}
+                                      />
+                                    {{/unless}}
+                                    <DButton
+                                      class="btn-default npn-critique-reply-modal__remove-pin"
+                                      @icon="trash-can"
+                                      @action={{this.removeSelectedEyePath}}
+                                      @label="npn_critique_reply.visual_notes.eye_path_remove"
+                                      @disabled={{this.isPosting}}
+                                    />
+                                    <DButton
+                                      class="btn-flat npn-critique-reply-modal__clear-notes"
+                                      @action={{this.removeLastEyePathPoint}}
+                                      @label="npn_critique_reply.visual_notes.eye_path_remove_last"
+                                      @disabled={{this.isPosting}}
+                                    />
+                                  {{/if}}
+                                  {{#if this.hasMultipleEyePaths}}
+                                    <DButton
+                                      class="btn-flat npn-critique-reply-modal__clear-notes"
+                                      @action={{this.clearEyePath}}
+                                      @label="npn_critique_reply.visual_notes.eye_path_clear_all"
+                                      @disabled={{this.isPosting}}
+                                    />
+                                  {{/if}}
+                                {{/if}}
+                                {{! Completion action for Eye Path. Small, but the
                           check icon + primary tint keep it clearly
                           findable; exits the mode and preserves the
                           path (same action the main button used to be). }}
-                      <DButton
-                        class="btn-primary btn-small npn-critique-reply-modal__finish-eye-path"
-                        @icon="check"
-                        @action={{this.toggleEyePathMode}}
-                        @label="npn_critique_reply.visual_notes.eye_path_finish"
-                        @title="npn_critique_reply.visual_notes.eye_path_finish_title"
-                        @disabled={{this.isPosting}}
-                      />
-                    {{/if}}
+                                <DButton
+                                  class="btn-primary btn-small npn-critique-reply-modal__finish-eye-path"
+                                  @icon="check"
+                                  @action={{this.toggleEyePathMode}}
+                                  @label="npn_critique_reply.visual_notes.eye_path_finish"
+                                  @title="npn_critique_reply.visual_notes.eye_path_finish_title"
+                                  @disabled={{this.isPosting}}
+                                />
+                              {{/if}}
 
-                    {{! Oval / Draw Area shape sub-toggle. Visible
+                              {{! Oval / Draw Area shape sub-toggle. Visible
                         whenever Attention or Strong Area is the
                         active tool. State is shared across both
                         tools (areaShapeMode). Default "oval"
                         matches the long-standing behaviour. }}
-                    {{#if (or this.attentionPullMode this.strongAreaMode)}}
-                      <div
-                        class="npn-critique-reply-modal__area-shape-toggle"
-                        role="group"
-                        aria-label={{i18n
-                          "npn_critique_reply.visual_notes.area_shape.label"
-                        }}
-                      >
-                        <button
-                          type="button"
-                          class="npn-critique-reply-modal__area-shape-toggle-button
-                            {{if (eq this.areaShapeMode 'path') 'is-selected'}}"
-                          aria-pressed={{if
-                            (eq this.areaShapeMode "path")
-                            "true"
-                            "false"
-                          }}
-                          title={{i18n
-                            "npn_critique_reply.visual_notes.area_shape.draw_area_title"
-                          }}
-                          {{on "click" (fn this.setAreaShapeMode "path")}}
-                        >
-                          {{i18n
-                            "npn_critique_reply.visual_notes.area_shape.draw_area"
-                          }}
-                        </button>
-                        <button
-                          type="button"
-                          class="npn-critique-reply-modal__area-shape-toggle-button
-                            {{if (eq this.areaShapeMode 'oval') 'is-selected'}}"
-                          aria-pressed={{if
-                            (eq this.areaShapeMode "oval")
-                            "true"
-                            "false"
-                          }}
-                          title={{i18n
-                            "npn_critique_reply.visual_notes.area_shape.oval_title"
-                          }}
-                          {{on "click" (fn this.setAreaShapeMode "oval")}}
-                        >
-                          {{i18n
-                            "npn_critique_reply.visual_notes.area_shape.oval"
-                          }}
-                        </button>
-                      </div>
-                    {{/if}}
-
-                    {{! Attention-pull mode. }}
-                    {{#if this.attentionPullMode}}
-                      {{#if this.attentionPulls.length}}
-                        {{#if this.selectedAttentionPull}}
-                          {{#if
-                            (eq this.selectedAttentionPull.shape "path")
-                          }}
-                            <DButton
-                              class="btn-default npn-critique-reply-modal__retrace
-                                {{if this.retracingAttentionPullId 'is-active'}}"
-                              @icon="pencil"
-                              @action={{this.toggleRetraceAttentionPull}}
-                              @label={{if
-                                this.retracingAttentionPullId
-                                "npn_critique_reply.visual_notes.retrace.cancel"
-                                "npn_critique_reply.visual_notes.retrace.button"
+                              {{#if
+                                (or this.attentionPullMode this.strongAreaMode)
                               }}
-                              @disabled={{this.isPosting}}
-                            />
-                          {{/if}}
-                          <DButton
-                            class="btn-default npn-critique-reply-modal__remove-pin"
-                            @icon="trash-can"
-                            @action={{this.removeSelectedAttentionPull}}
-                            @label="npn_critique_reply.visual_notes.area_note_remove"
-                            @disabled={{this.isPosting}}
-                          />
-                        {{/if}}
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__clear-notes"
-                          @action={{this.clearAttentionPulls}}
-                          @label="npn_critique_reply.visual_notes.area_note_clear"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
-                    {{/if}}
+                                <div
+                                  class="npn-critique-reply-modal__area-shape-toggle"
+                                  role="group"
+                                  aria-label={{i18n
+                                    "npn_critique_reply.visual_notes.area_shape.label"
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    class="npn-critique-reply-modal__area-shape-toggle-button
+                                      {{if
+                                        (eq this.areaShapeMode 'path')
+                                        'is-selected'
+                                      }}"
+                                    aria-pressed={{if
+                                      (eq this.areaShapeMode "path")
+                                      "true"
+                                      "false"
+                                    }}
+                                    title={{i18n
+                                      "npn_critique_reply.visual_notes.area_shape.draw_area_title"
+                                    }}
+                                    {{on
+                                      "click"
+                                      (fn this.setAreaShapeMode "path")
+                                    }}
+                                  >
+                                    {{i18n
+                                      "npn_critique_reply.visual_notes.area_shape.draw_area"
+                                    }}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    class="npn-critique-reply-modal__area-shape-toggle-button
+                                      {{if
+                                        (eq this.areaShapeMode 'oval')
+                                        'is-selected'
+                                      }}"
+                                    aria-pressed={{if
+                                      (eq this.areaShapeMode "oval")
+                                      "true"
+                                      "false"
+                                    }}
+                                    title={{i18n
+                                      "npn_critique_reply.visual_notes.area_shape.oval_title"
+                                    }}
+                                    {{on
+                                      "click"
+                                      (fn this.setAreaShapeMode "oval")
+                                    }}
+                                  >
+                                    {{i18n
+                                      "npn_critique_reply.visual_notes.area_shape.oval"
+                                    }}
+                                  </button>
+                                </div>
+                              {{/if}}
 
-                    {{! Strong-area mode. }}
-                    {{#if this.strongAreaMode}}
-                      {{#if this.strongAreas.length}}
-                        {{#if this.selectedStrongArea}}
-                          {{#if (eq this.selectedStrongArea.shape "path")}}
-                            <DButton
-                              class="btn-default npn-critique-reply-modal__retrace
-                                {{if this.retracingStrongAreaId 'is-active'}}"
-                              @icon="pencil"
-                              @action={{this.toggleRetraceStrongArea}}
-                              @label={{if
-                                this.retracingStrongAreaId
-                                "npn_critique_reply.visual_notes.retrace.cancel"
-                                "npn_critique_reply.visual_notes.retrace.button"
-                              }}
-                              @disabled={{this.isPosting}}
-                            />
-                          {{/if}}
-                          <DButton
-                            class="btn-default npn-critique-reply-modal__remove-pin"
-                            @icon="trash-can"
-                            @action={{this.removeSelectedStrongArea}}
-                            @label="npn_critique_reply.visual_notes.strong_area_remove"
-                            @disabled={{this.isPosting}}
-                          />
-                        {{/if}}
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__clear-notes"
-                          @action={{this.clearStrongAreas}}
-                          @label="npn_critique_reply.visual_notes.strong_area_clear"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
-                    {{/if}}
+                              {{! Attention-pull mode. }}
+                              {{#if this.attentionPullMode}}
+                                {{#if this.attentionPulls.length}}
+                                  {{#if this.selectedAttentionPull}}
+                                    {{#if
+                                      (eq
+                                        this.selectedAttentionPull.shape "path"
+                                      )
+                                    }}
+                                      <DButton
+                                        class="btn-default npn-critique-reply-modal__retrace
+                                          {{if
+                                            this.retracingAttentionPullId
+                                            'is-active'
+                                          }}"
+                                        @icon="pencil"
+                                        @action={{this.toggleRetraceAttentionPull}}
+                                        @label={{if
+                                          this.retracingAttentionPullId
+                                          "npn_critique_reply.visual_notes.retrace.cancel"
+                                          "npn_critique_reply.visual_notes.retrace.button"
+                                        }}
+                                        @disabled={{this.isPosting}}
+                                      />
+                                    {{/if}}
+                                    <DButton
+                                      class="btn-default npn-critique-reply-modal__remove-pin"
+                                      @icon="trash-can"
+                                      @action={{this.removeSelectedAttentionPull}}
+                                      @label="npn_critique_reply.visual_notes.area_note_remove"
+                                      @disabled={{this.isPosting}}
+                                    />
+                                  {{/if}}
+                                  <DButton
+                                    class="btn-flat npn-critique-reply-modal__clear-notes"
+                                    @action={{this.clearAttentionPulls}}
+                                    @label="npn_critique_reply.visual_notes.area_note_clear"
+                                    @disabled={{this.isPosting}}
+                                  />
+                                {{/if}}
+                              {{/if}}
 
-                    {{! Direction-arrow mode. }}
-                    {{#if this.directionArrowMode}}
-                      {{#if this.directionArrows.length}}
-                        {{#if this.selectedDirectionArrow}}
-                          <DButton
-                            class="btn-default npn-critique-reply-modal__remove-pin"
-                            @icon="trash-can"
-                            @action={{this.removeSelectedDirectionArrow}}
-                            @label="npn_critique_reply.visual_notes.direction_arrow_remove"
-                            @disabled={{this.isPosting}}
-                          />
-                        {{/if}}
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__clear-notes"
-                          @action={{this.clearDirectionArrows}}
-                          @label="npn_critique_reply.visual_notes.direction_arrow_clear"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
-                    {{/if}}
+                              {{! Strong-area mode. }}
+                              {{#if this.strongAreaMode}}
+                                {{#if this.strongAreas.length}}
+                                  {{#if this.selectedStrongArea}}
+                                    {{#if
+                                      (eq this.selectedStrongArea.shape "path")
+                                    }}
+                                      <DButton
+                                        class="btn-default npn-critique-reply-modal__retrace
+                                          {{if
+                                            this.retracingStrongAreaId
+                                            'is-active'
+                                          }}"
+                                        @icon="pencil"
+                                        @action={{this.toggleRetraceStrongArea}}
+                                        @label={{if
+                                          this.retracingStrongAreaId
+                                          "npn_critique_reply.visual_notes.retrace.cancel"
+                                          "npn_critique_reply.visual_notes.retrace.button"
+                                        }}
+                                        @disabled={{this.isPosting}}
+                                      />
+                                    {{/if}}
+                                    <DButton
+                                      class="btn-default npn-critique-reply-modal__remove-pin"
+                                      @icon="trash-can"
+                                      @action={{this.removeSelectedStrongArea}}
+                                      @label="npn_critique_reply.visual_notes.strong_area_remove"
+                                      @disabled={{this.isPosting}}
+                                    />
+                                  {{/if}}
+                                  <DButton
+                                    class="btn-flat npn-critique-reply-modal__clear-notes"
+                                    @action={{this.clearStrongAreas}}
+                                    @label="npn_critique_reply.visual_notes.strong_area_clear"
+                                    @disabled={{this.isPosting}}
+                                  />
+                                {{/if}}
+                              {{/if}}
 
-                    {{! Relationship-arrow mode. }}
-                    {{#if this.relationshipArrowMode}}
-                      {{#if this.relationshipArrows.length}}
-                        {{#if this.selectedRelationshipArrow}}
-                          <DButton
-                            class="btn-default npn-critique-reply-modal__remove-pin"
-                            @icon="trash-can"
-                            @action={{this.removeSelectedRelationshipArrow}}
-                            @label="npn_critique_reply.visual_notes.relationship_arrow_remove"
-                            @disabled={{this.isPosting}}
-                          />
-                        {{/if}}
-                        <DButton
-                          class="btn-flat npn-critique-reply-modal__clear-notes"
-                          @action={{this.clearRelationshipArrows}}
-                          @label="npn_critique_reply.visual_notes.relationship_arrow_clear"
-                          @disabled={{this.isPosting}}
-                        />
-                      {{/if}}
-                    {{/if}}
+                              {{! Direction-arrow mode. }}
+                              {{#if this.directionArrowMode}}
+                                {{#if this.directionArrows.length}}
+                                  {{#if this.selectedDirectionArrow}}
+                                    <DButton
+                                      class="btn-default npn-critique-reply-modal__remove-pin"
+                                      @icon="trash-can"
+                                      @action={{this.removeSelectedDirectionArrow}}
+                                      @label="npn_critique_reply.visual_notes.direction_arrow_remove"
+                                      @disabled={{this.isPosting}}
+                                    />
+                                  {{/if}}
+                                  <DButton
+                                    class="btn-flat npn-critique-reply-modal__clear-notes"
+                                    @action={{this.clearDirectionArrows}}
+                                    @label="npn_critique_reply.visual_notes.direction_arrow_clear"
+                                    @disabled={{this.isPosting}}
+                                  />
+                                {{/if}}
+                              {{/if}}
 
-                    {{! Completion action for the active tool — mirrors Eye
+                              {{! Relationship-arrow mode. }}
+                              {{#if this.relationshipArrowMode}}
+                                {{#if this.relationshipArrows.length}}
+                                  {{#if this.selectedRelationshipArrow}}
+                                    <DButton
+                                      class="btn-default npn-critique-reply-modal__remove-pin"
+                                      @icon="trash-can"
+                                      @action={{this.removeSelectedRelationshipArrow}}
+                                      @label="npn_critique_reply.visual_notes.relationship_arrow_remove"
+                                      @disabled={{this.isPosting}}
+                                    />
+                                  {{/if}}
+                                  <DButton
+                                    class="btn-flat npn-critique-reply-modal__clear-notes"
+                                    @action={{this.clearRelationshipArrows}}
+                                    @label="npn_critique_reply.visual_notes.relationship_arrow_clear"
+                                    @disabled={{this.isPosting}}
+                                  />
+                                {{/if}}
+                              {{/if}}
+
+                              {{! Completion action for the active tool — mirrors Eye
                         Path's "Finish" treatment (Eye Path keeps its own
                         Finish inside its block above). The toolbar toggle
                         stays on the tool's own label/icon; this small primary
@@ -11886,311 +11846,324 @@ export default class NpnCritiqueReplyModal extends Component {
                         and preserves the work, instead of folding "Done" into
                         the toggle. Exactly one tool is active at a time, so a
                         single dynamic button covers them all. }}
-                    {{#if this.activeVisualToolFinishLabel}}
-                      <DButton
-                        class="btn-primary btn-small npn-critique-reply-modal__finish-tool"
-                        @icon="check"
-                        @action={{this.finishActiveVisualTool}}
-                        @translatedLabel={{this.activeVisualToolFinishLabel}}
-                        @disabled={{this.isPosting}}
-                      />
-                    {{/if}}
-                </div>
-                  </div>
-                </div>
-                {{! Closes the else branch above: toolbar + secondary
+                              {{#if this.activeVisualToolFinishLabel}}
+                                <DButton
+                                  class="btn-primary btn-small npn-critique-reply-modal__finish-tool"
+                                  @icon="check"
+                                  @action={{this.finishActiveVisualTool}}
+                                  @translatedLabel={{this.activeVisualToolFinishLabel}}
+                                  @disabled={{this.isPosting}}
+                                />
+                              {{/if}}
+                            </div>
+                          </div>
+                        </div>
+                        {{! Closes the else branch above: toolbar + secondary
                     are the reference-view path. }}
-                {{/if}}
-                </section>
-              {{/if}}
+                      {{/if}}
+                    </section>
+                  {{/if}}
 
-              {{! Visual annotation list stays available on either
+                  {{! Visual annotation list stays available on either
                   view — annotations themselves persist while the
                   user looks at the processing example, so the
                   keyboard / screen-reader mirror keeps working. }}
-              {{#if this.hasVisualAnnotations}}
-                <details
-                  class="npn-critique-reply-modal__a11y-list"
-                  aria-label={{i18n
-                    "npn_critique_reply.visual_notes.a11y_list_label"
-                  }}
-                >
-                  <summary>{{i18n
-                      "npn_critique_reply.visual_notes.a11y_list_summary"
-                      count=this.annotationCount
-                    }}</summary>
-                  <ul class="npn-critique-reply-modal__a11y-list-items">
-                    {{#each this.notes as |pin|}}
-                      <li>
-                        <span
-                          class="npn-critique-reply-modal__a11y-list-label"
-                        ><span
-                            class="npn-annotation-badge npn-annotation-badge--note"
-                            aria-hidden="true"
-                          >{{pin.number}}</span>{{i18n
-                            "npn_critique_reply.visual_notes.pin_label"
-                            number=pin.number
-                          }}{{#if pin.noteText}}
+                  {{#if this.hasVisualAnnotations}}
+                    <details
+                      class="npn-critique-reply-modal__a11y-list"
+                      aria-label={{i18n
+                        "npn_critique_reply.visual_notes.a11y_list_label"
+                      }}
+                    >
+                      <summary>{{i18n
+                          "npn_critique_reply.visual_notes.a11y_list_summary"
+                          count=this.annotationCount
+                        }}</summary>
+                      <ul class="npn-critique-reply-modal__a11y-list-items">
+                        {{#each this.notes as |pin|}}
+                          <li>
                             <span
-                              class="npn-critique-reply-modal__a11y-list-note-snippet"
+                              class="npn-critique-reply-modal__a11y-list-label"
+                            ><span
+                                class="npn-annotation-badge npn-annotation-badge--note"
+                                aria-hidden="true"
+                              >{{pin.number}}</span>{{i18n
+                                "npn_critique_reply.visual_notes.pin_label"
+                                number=pin.number
+                              }}{{#if pin.noteText}}
+                                <span
+                                  class="npn-critique-reply-modal__a11y-list-note-snippet"
+                                >{{i18n
+                                    "npn_critique_reply.visual_notes.a11y_note_snippet"
+                                    note=(this.snippetFor pin.noteText)
+                                  }}</span>
+                              {{/if}}</span>
+                            <button
+                              type="button"
+                              class="btn-small btn-default"
+                              aria-pressed={{if
+                                (eq pin.number this.selectedPinNumber)
+                                "true"
+                                "false"
+                              }}
+                              disabled={{this.isPosting}}
+                              {{on "click" (fn this.selectPin pin)}}
                             >{{i18n
-                                "npn_critique_reply.visual_notes.a11y_note_snippet"
-                                note=(this.snippetFor pin.noteText)
+                                "npn_critique_reply.visual_notes.a11y_select"
+                              }}</button>
+                            <button
+                              type="button"
+                              class="btn-small btn-flat"
+                              disabled={{this.isPosting}}
+                              {{on
+                                "click"
+                                (fn this.removePinByNumber pin.number)
+                              }}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_remove"
+                              }}</button>
+                          </li>
+                        {{/each}}
+                        {{#if this.crop}}
+                          <li>
+                            <span
+                              class="npn-critique-reply-modal__a11y-list-label"
+                            ><span
+                                class="npn-annotation-badge npn-annotation-badge--crop"
+                                aria-hidden="true"
+                              >{{or this.crop.label "Crop"}}</span>{{i18n
+                                "npn_critique_reply.visual_notes.crop_a11y_label"
                               }}</span>
-                          {{/if}}</span>
-                        <button
-                          type="button"
-                          class="btn-small btn-default"
-                          aria-pressed={{if
-                            (eq pin.number this.selectedPinNumber)
-                            "true"
-                            "false"
-                          }}
-                          disabled={{this.isPosting}}
-                          {{on "click" (fn this.selectPin pin)}}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_select"
-                          }}</button>
-                        <button
-                          type="button"
-                          class="btn-small btn-flat"
-                          disabled={{this.isPosting}}
-                          {{on "click" (fn this.removePinByNumber pin.number)}}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_remove"
-                          }}</button>
-                      </li>
-                    {{/each}}
-                    {{#if this.crop}}
-                      <li>
-                        <span
-                          class="npn-critique-reply-modal__a11y-list-label"
-                        ><span
-                            class="npn-annotation-badge npn-annotation-badge--crop"
-                            aria-hidden="true"
-                          >{{or this.crop.label "Crop"}}</span>{{i18n
-                            "npn_critique_reply.visual_notes.crop_a11y_label"
-                          }}</span>
-                        <button
-                          type="button"
-                          class="btn-small btn-default"
-                          aria-pressed={{if this.cropSelected "true" "false"}}
-                          disabled={{this.isPosting}}
-                          {{on "click" this.selectCrop}}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_select"
-                          }}</button>
-                        <button
-                          type="button"
-                          class="btn-small btn-flat"
-                          disabled={{this.isPosting}}
-                          {{on "click" this.clearCrop}}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_remove"
-                          }}</button>
-                      </li>
-                    {{/if}}
-                    {{#each this.eyePaths as |eyePath|}}
-                      <li>
-                        <span
-                          class="npn-critique-reply-modal__a11y-list-label"
-                        ><span
-                            class="npn-annotation-badge npn-annotation-badge--eye-path"
-                            aria-hidden="true"
-                          >{{eyePath.label}}</span>{{i18n
-                            "npn_critique_reply.visual_notes.eye_path_a11y_label_n"
-                            label=eyePath.label
-                            count=eyePath.points.length
-                          }}</span>
-                        <button
-                          type="button"
-                          class="btn-small btn-default"
-                          aria-pressed={{if
-                            (eq eyePath.id this.selectedEyePathId)
-                            "true"
-                            "false"
-                          }}
-                          disabled={{this.isPosting}}
-                          {{on "click" (fn this.selectEyePath eyePath.id)}}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_select"
-                          }}</button>
-                        <button
-                          type="button"
-                          class="btn-small btn-flat"
-                          disabled={{this.isPosting}}
-                          {{on "click" (fn this.removeEyePathById eyePath.id)}}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_remove"
-                          }}</button>
-                      </li>
-                    {{/each}}
-                    {{#each this.attentionPulls as |pull|}}
-                      <li>
-                        <span
-                          class="npn-critique-reply-modal__a11y-list-label"
-                        ><span
-                            class="npn-annotation-badge npn-annotation-badge--attention"
-                            aria-hidden="true"
-                          >{{pull.label}}</span>{{i18n
-                            "npn_critique_reply.visual_notes.area_note_a11y_label"
-                            label=pull.label
-                          }}</span>
-                        <button
-                          type="button"
-                          class="btn-small btn-default"
-                          aria-pressed={{if
-                            (eq pull.id this.selectedAttentionPullId)
-                            "true"
-                            "false"
-                          }}
-                          disabled={{this.isPosting}}
-                          {{on "click" (fn this.selectAttentionPull pull.id)}}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_select"
-                          }}</button>
-                        <button
-                          type="button"
-                          class="btn-small btn-flat"
-                          disabled={{this.isPosting}}
-                          {{on
-                            "click"
-                            (fn this.removeAttentionPullById pull.id)
-                          }}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_remove"
-                          }}</button>
-                      </li>
-                    {{/each}}
-                    {{#each this.strongAreas as |area|}}
-                      <li>
-                        <span
-                          class="npn-critique-reply-modal__a11y-list-label"
-                        ><span
-                            class="npn-annotation-badge npn-annotation-badge--strong-area"
-                            aria-hidden="true"
-                          >{{area.label}}</span>{{i18n
-                            "npn_critique_reply.visual_notes.strong_area_a11y_label"
-                            label=area.label
-                          }}</span>
-                        <button
-                          type="button"
-                          class="btn-small btn-default"
-                          aria-pressed={{if
-                            (eq area.id this.selectedStrongAreaId)
-                            "true"
-                            "false"
-                          }}
-                          disabled={{this.isPosting}}
-                          {{on "click" (fn this.selectStrongArea area.id)}}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_select"
-                          }}</button>
-                        <button
-                          type="button"
-                          class="btn-small btn-flat"
-                          disabled={{this.isPosting}}
-                          {{on
-                            "click"
-                            (fn this.removeStrongAreaById area.id)
-                          }}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_remove"
-                          }}</button>
-                      </li>
-                    {{/each}}
-                    {{#each this.directionArrows as |arrow|}}
-                      <li>
-                        <span
-                          class="npn-critique-reply-modal__a11y-list-label"
-                        ><span
-                            class="npn-annotation-badge npn-annotation-badge--direction"
-                            aria-hidden="true"
-                          >{{arrow.label}}</span>{{i18n
-                            "npn_critique_reply.visual_notes.direction_arrow_a11y_label"
-                            label=arrow.label
-                          }}</span>
-                        <button
-                          type="button"
-                          class="btn-small btn-default"
-                          aria-pressed={{if
-                            (eq arrow.id this.selectedDirectionArrowId)
-                            "true"
-                            "false"
-                          }}
-                          disabled={{this.isPosting}}
-                          {{on
-                            "click"
-                            (fn this.selectDirectionArrow arrow.id)
-                          }}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_select"
-                          }}</button>
-                        <button
-                          type="button"
-                          class="btn-small btn-flat"
-                          disabled={{this.isPosting}}
-                          {{on
-                            "click"
-                            (fn this.removeDirectionArrowById arrow.id)
-                          }}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_remove"
-                          }}</button>
-                      </li>
-                    {{/each}}
-                    {{#each this.relationshipArrows as |arrow|}}
-                      <li>
-                        <span
-                          class="npn-critique-reply-modal__a11y-list-label"
-                        ><span
-                            class="npn-annotation-badge npn-annotation-badge--relationship"
-                            aria-hidden="true"
-                          >{{arrow.label}}</span>{{i18n
-                            "npn_critique_reply.visual_notes.relationship_arrow_a11y_label"
-                            label=arrow.label
-                          }}</span>
-                        <button
-                          type="button"
-                          class="btn-small btn-default"
-                          aria-pressed={{if
-                            (eq arrow.id this.selectedRelationshipArrowId)
-                            "true"
-                            "false"
-                          }}
-                          disabled={{this.isPosting}}
-                          {{on
-                            "click"
-                            (fn this.selectRelationshipArrow arrow.id)
-                          }}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_select"
-                          }}</button>
-                        <button
-                          type="button"
-                          class="btn-small btn-flat"
-                          disabled={{this.isPosting}}
-                          {{on
-                            "click"
-                            (fn this.removeRelationshipArrowById arrow.id)
-                          }}
-                        >{{i18n
-                            "npn_critique_reply.visual_notes.a11y_remove"
-                          }}</button>
-                      </li>
-                    {{/each}}
-                  </ul>
-                </details>
-              {{/if}}
+                            <button
+                              type="button"
+                              class="btn-small btn-default"
+                              aria-pressed={{if
+                                this.cropSelected
+                                "true"
+                                "false"
+                              }}
+                              disabled={{this.isPosting}}
+                              {{on "click" this.selectCrop}}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_select"
+                              }}</button>
+                            <button
+                              type="button"
+                              class="btn-small btn-flat"
+                              disabled={{this.isPosting}}
+                              {{on "click" this.clearCrop}}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_remove"
+                              }}</button>
+                          </li>
+                        {{/if}}
+                        {{#each this.eyePaths as |eyePath|}}
+                          <li>
+                            <span
+                              class="npn-critique-reply-modal__a11y-list-label"
+                            ><span
+                                class="npn-annotation-badge npn-annotation-badge--eye-path"
+                                aria-hidden="true"
+                              >{{eyePath.label}}</span>{{i18n
+                                "npn_critique_reply.visual_notes.eye_path_a11y_label_n"
+                                label=eyePath.label
+                                count=eyePath.points.length
+                              }}</span>
+                            <button
+                              type="button"
+                              class="btn-small btn-default"
+                              aria-pressed={{if
+                                (eq eyePath.id this.selectedEyePathId)
+                                "true"
+                                "false"
+                              }}
+                              disabled={{this.isPosting}}
+                              {{on "click" (fn this.selectEyePath eyePath.id)}}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_select"
+                              }}</button>
+                            <button
+                              type="button"
+                              class="btn-small btn-flat"
+                              disabled={{this.isPosting}}
+                              {{on
+                                "click"
+                                (fn this.removeEyePathById eyePath.id)
+                              }}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_remove"
+                              }}</button>
+                          </li>
+                        {{/each}}
+                        {{#each this.attentionPulls as |pull|}}
+                          <li>
+                            <span
+                              class="npn-critique-reply-modal__a11y-list-label"
+                            ><span
+                                class="npn-annotation-badge npn-annotation-badge--attention"
+                                aria-hidden="true"
+                              >{{pull.label}}</span>{{i18n
+                                "npn_critique_reply.visual_notes.area_note_a11y_label"
+                                label=pull.label
+                              }}</span>
+                            <button
+                              type="button"
+                              class="btn-small btn-default"
+                              aria-pressed={{if
+                                (eq pull.id this.selectedAttentionPullId)
+                                "true"
+                                "false"
+                              }}
+                              disabled={{this.isPosting}}
+                              {{on
+                                "click"
+                                (fn this.selectAttentionPull pull.id)
+                              }}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_select"
+                              }}</button>
+                            <button
+                              type="button"
+                              class="btn-small btn-flat"
+                              disabled={{this.isPosting}}
+                              {{on
+                                "click"
+                                (fn this.removeAttentionPullById pull.id)
+                              }}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_remove"
+                              }}</button>
+                          </li>
+                        {{/each}}
+                        {{#each this.strongAreas as |area|}}
+                          <li>
+                            <span
+                              class="npn-critique-reply-modal__a11y-list-label"
+                            ><span
+                                class="npn-annotation-badge npn-annotation-badge--strong-area"
+                                aria-hidden="true"
+                              >{{area.label}}</span>{{i18n
+                                "npn_critique_reply.visual_notes.strong_area_a11y_label"
+                                label=area.label
+                              }}</span>
+                            <button
+                              type="button"
+                              class="btn-small btn-default"
+                              aria-pressed={{if
+                                (eq area.id this.selectedStrongAreaId)
+                                "true"
+                                "false"
+                              }}
+                              disabled={{this.isPosting}}
+                              {{on "click" (fn this.selectStrongArea area.id)}}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_select"
+                              }}</button>
+                            <button
+                              type="button"
+                              class="btn-small btn-flat"
+                              disabled={{this.isPosting}}
+                              {{on
+                                "click"
+                                (fn this.removeStrongAreaById area.id)
+                              }}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_remove"
+                              }}</button>
+                          </li>
+                        {{/each}}
+                        {{#each this.directionArrows as |arrow|}}
+                          <li>
+                            <span
+                              class="npn-critique-reply-modal__a11y-list-label"
+                            ><span
+                                class="npn-annotation-badge npn-annotation-badge--direction"
+                                aria-hidden="true"
+                              >{{arrow.label}}</span>{{i18n
+                                "npn_critique_reply.visual_notes.direction_arrow_a11y_label"
+                                label=arrow.label
+                              }}</span>
+                            <button
+                              type="button"
+                              class="btn-small btn-default"
+                              aria-pressed={{if
+                                (eq arrow.id this.selectedDirectionArrowId)
+                                "true"
+                                "false"
+                              }}
+                              disabled={{this.isPosting}}
+                              {{on
+                                "click"
+                                (fn this.selectDirectionArrow arrow.id)
+                              }}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_select"
+                              }}</button>
+                            <button
+                              type="button"
+                              class="btn-small btn-flat"
+                              disabled={{this.isPosting}}
+                              {{on
+                                "click"
+                                (fn this.removeDirectionArrowById arrow.id)
+                              }}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_remove"
+                              }}</button>
+                          </li>
+                        {{/each}}
+                        {{#each this.relationshipArrows as |arrow|}}
+                          <li>
+                            <span
+                              class="npn-critique-reply-modal__a11y-list-label"
+                            ><span
+                                class="npn-annotation-badge npn-annotation-badge--relationship"
+                                aria-hidden="true"
+                              >{{arrow.label}}</span>{{i18n
+                                "npn_critique_reply.visual_notes.relationship_arrow_a11y_label"
+                                label=arrow.label
+                              }}</span>
+                            <button
+                              type="button"
+                              class="btn-small btn-default"
+                              aria-pressed={{if
+                                (eq arrow.id this.selectedRelationshipArrowId)
+                                "true"
+                                "false"
+                              }}
+                              disabled={{this.isPosting}}
+                              {{on
+                                "click"
+                                (fn this.selectRelationshipArrow arrow.id)
+                              }}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_select"
+                              }}</button>
+                            <button
+                              type="button"
+                              class="btn-small btn-flat"
+                              disabled={{this.isPosting}}
+                              {{on
+                                "click"
+                                (fn this.removeRelationshipArrowById arrow.id)
+                              }}
+                            >{{i18n
+                                "npn_critique_reply.visual_notes.a11y_remove"
+                              }}</button>
+                          </li>
+                        {{/each}}
+                      </ul>
+                    </details>
+                  {{/if}}
 
-              {{! `__version-status` removed — its content moved up
+                  {{! `__version-status` removed — its content moved up
                   to the canonical __image-status-row right under the
                   image, eliminating the duplicate "Showing Original"
                   the user was seeing. }}
 
-            </aside>
+                </aside>
 
-            {{! Processing Example sits inside the left pane wrapper
+                {{! Processing Example sits inside the left pane wrapper
                 so it shares the single scroll context with image-col
                 rather than the writing pane. The actual section
                 markup is rendered once further down (after the
@@ -12198,108 +12171,105 @@ export default class NpnCritiqueReplyModal extends Component {
                 actually render it here. The conditional gate keeps
                 it out of the DOM when not eligible. The section
                 content begins below. }}
-            {{#if this.processingExampleAvailable}}
-              <section
-                class="npn-critique-reply-modal__processing-example-row
-                  npn-critique-reply-modal__processing-example
-                  is-open"
-                aria-labelledby="npn-critique-reply-processing-example-heading"
-              >
-                {{! Always-expanded section header. The disclosure
+                {{#if this.processingExampleAvailable}}
+                  <section
+                    class="npn-critique-reply-modal__processing-example-row npn-critique-reply-modal__processing-example is-open"
+                    aria-labelledby="npn-critique-reply-processing-example-heading"
+                  >
+                    {{! Always-expanded section header. The disclosure
                     pattern was dropped per beta feedback — the
                     section is short enough that hiding it behind
                     "Add" / "Manage" added friction without saving
                     meaningful space. Heading + helper now read as a
                     quiet section break and the actions are always
                     one click away. }}
-                <h4
-                  id="npn-critique-reply-processing-example-heading"
-                  class="npn-critique-reply-modal__processing-example-heading
-                    npn-critique-reply-modal__optional-section-heading"
-                >
-                  {{i18n
-                    "npn_critique_reply.modal.optional_processing_example_heading"
-                  }}
-                </h4>
+                    <h4
+                      id="npn-critique-reply-processing-example-heading"
+                      class="npn-critique-reply-modal__processing-example-heading npn-critique-reply-modal__optional-section-heading"
+                    >
+                      {{i18n
+                        "npn_critique_reply.modal.optional_processing_example_heading"
+                      }}
+                    </h4>
 
-                <div
-                  id="npn-critique-reply-processing-example-content"
-                  class="npn-critique-reply-modal__processing-example-content"
-                >
-                  {{#if this.hasProcessingExample}}
-                    {{! Uploaded state: thumbnail + filename were
+                    <div
+                      id="npn-critique-reply-processing-example-content"
+                      class="npn-critique-reply-modal__processing-example-content"
+                    >
+                      {{#if this.hasProcessingExample}}
+                        {{! Uploaded state: thumbnail + filename were
                         dropped per beta feedback — they weren't
                         useful. Replace / Remove live in the view-
                         toggle row above the image so they're always
                         visible without scrolling here. This section
                         just confirms the upload exists. }}
-                    <p
-                      class="npn-critique-reply-modal__processing-example-status-text"
-                    >
-                      {{i18n
-                        "npn_critique_reply.modal.processing_example.uploaded"
-                      }}
-                    </p>
-                  {{else}}
-                    {{! Helper now lives inside the expanded content
+                        <p
+                          class="npn-critique-reply-modal__processing-example-status-text"
+                        >
+                          {{i18n
+                            "npn_critique_reply.modal.processing_example.uploaded"
+                          }}
+                        </p>
+                      {{else}}
+                        {{! Helper now lives inside the expanded content
                         so it surfaces only when the user opens the
                         section. Collapsed state stays minimal: just
                         heading + Add. }}
-                    <p
-                      class="npn-critique-reply-modal__optional-section-helper"
-                    >
-                      {{i18n
-                        "npn_critique_reply.modal.optional_processing_example_helper"
-                      }}
-                    </p>
-                    <div
-                      class="npn-critique-reply-modal__processing-example-actions"
-                    >
-                      <a
-                        class="btn btn-default btn-small npn-critique-reply-modal__processing-example-download"
-                        href={{this.processingExampleSourceUrl}}
-                        download={{this.processingExampleSourceDownloadFilename}}
-                        rel="noopener"
-                        target="_blank"
-                      >
-                        {{dIcon "download"}}
-                        <span>
+                        <p
+                          class="npn-critique-reply-modal__optional-section-helper"
+                        >
                           {{i18n
-                            "npn_critique_reply.modal.processing_example.download"
+                            "npn_critique_reply.modal.optional_processing_example_helper"
                           }}
-                        </span>
-                      </a>
-                      <DButton
-                        class="btn-default btn-small npn-critique-reply-modal__processing-example-upload"
-                        @action={{this.triggerProcessingExampleFilePicker}}
-                        @icon="upload"
-                        @label="npn_critique_reply.modal.processing_example.upload"
-                        @disabled={{this.processingExampleUploading}}
-                        @isLoading={{this.processingExampleUploading}}
+                        </p>
+                        <div
+                          class="npn-critique-reply-modal__processing-example-actions"
+                        >
+                          <a
+                            class="btn btn-default btn-small npn-critique-reply-modal__processing-example-download"
+                            href={{this.processingExampleSourceUrl}}
+                            download={{this.processingExampleSourceDownloadFilename}}
+                            rel="noopener"
+                            target="_blank"
+                          >
+                            {{dIcon "download"}}
+                            <span>
+                              {{i18n
+                                "npn_critique_reply.modal.processing_example.download"
+                              }}
+                            </span>
+                          </a>
+                          <DButton
+                            class="btn-default btn-small npn-critique-reply-modal__processing-example-upload"
+                            @action={{this.triggerProcessingExampleFilePicker}}
+                            @icon="upload"
+                            @label="npn_critique_reply.modal.processing_example.upload"
+                            @disabled={{this.processingExampleUploading}}
+                            @isLoading={{this.processingExampleUploading}}
+                          />
+                        </div>
+                      {{/if}}
+
+                      {{#if this.processingExampleError}}
+                        <p
+                          class="npn-critique-reply-modal__processing-example-error"
+                          role="alert"
+                        >
+                          {{this.processingExampleError.message}}
+                        </p>
+                      {{/if}}
+
+                      <input
+                        id="npn-critique-reply-processing-example-input"
+                        class="npn-critique-reply-modal__processing-example-input"
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        {{on "change" this.onProcessingExampleFileChange}}
                       />
                     </div>
-                  {{/if}}
-
-                  {{#if this.processingExampleError}}
-                    <p
-                      class="npn-critique-reply-modal__processing-example-error"
-                      role="alert"
-                    >
-                      {{this.processingExampleError.message}}
-                    </p>
-                  {{/if}}
-
-                  <input
-                    id="npn-critique-reply-processing-example-input"
-                    class="npn-critique-reply-modal__processing-example-input"
-                    type="file"
-                    accept="image/*"
-                    hidden
-                    {{on "change" this.onProcessingExampleFileChange}}
-                  />
-                </div>
-              </section>
-            {{/if}}
+                  </section>
+                {{/if}}
               {{/if}}{{! end project wall / single image }}
 
               {{! Sentinel for the IntersectionObserver. Sits at the
@@ -12432,8 +12402,7 @@ export default class NpnCritiqueReplyModal extends Component {
 
                   <button
                     type="button"
-                    class="btn btn-default btn-small btn-icon-text
-                      npn-critique-reply-modal__view-notes-trigger"
+                    class="btn btn-default btn-small btn-icon-text npn-critique-reply-modal__view-notes-trigger"
                     aria-haspopup="dialog"
                     aria-expanded={{if
                       this.photographersNotesOpen
@@ -12479,8 +12448,12 @@ export default class NpnCritiqueReplyModal extends Component {
                       {{on "click" this.togglePinnedFeedback}}
                     >{{if
                         this._pinnedFeedbackExpanded
-                        (i18n "npn_critique_reply.modal.pinned_feedback_show_less")
-                        (i18n "npn_critique_reply.modal.pinned_feedback_show_more")
+                        (i18n
+                          "npn_critique_reply.modal.pinned_feedback_show_less"
+                        )
+                        (i18n
+                          "npn_critique_reply.modal.pinned_feedback_show_more"
+                        )
                       }}</button>
                   {{/if}}
                 </div>
@@ -12546,7 +12519,9 @@ export default class NpnCritiqueReplyModal extends Component {
                         }}"
                       disabled={{this.isPosting}}
                       {{on "click" (fn this.setWritingContext "image")}}
-                    >{{this.imageNotesTabLabel}}{{#if this.activeImageMarkCount}}
+                    >{{this.imageNotesTabLabel}}{{#if
+                        this.activeImageMarkCount
+                      }}
                         <span
                           class="npn-critique-reply-modal__context-tab-count"
                           title={{this.imageNotesCountLabel}}
@@ -12556,7 +12531,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   {{/if}}
                 </div>
 
-                {{#unless (or this.linkFormOpen this.sequenceBuilderOpen)}}
+                {{#unless this.linkFormOpen}}
                   <div
                     class="npn-critique-reply-modal__toolbar"
                     role="toolbar"
@@ -12732,16 +12707,6 @@ export default class NpnCritiqueReplyModal extends Component {
                   service swaps the active modal instead of stacking,
                   which would dismiss the critique workspace if we used
                   DModal here. }}
-              {{#if this.sequenceBuilderOpen}}
-                <div class="npn-critique-reply-modal__sequence-panel">
-                  <this.SequenceBuilder
-                    @images={{this.sequenceImages}}
-                    @initial={{this.sequenceBuilderInitial}}
-                    @onInsert={{this.insertSequence}}
-                    @onCancel={{this.closeSequenceBuilder}}
-                  />
-                </div>
-              {{/if}}
               {{#if this.linkFormOpen}}
                 <form
                   class="npn-critique-reply-modal__link-form"
@@ -12943,9 +12908,7 @@ export default class NpnCritiqueReplyModal extends Component {
                       <h4
                         class="npn-critique-reply-modal__prompt-group-title"
                       >{{group.title}}</h4>
-                      <ul
-                        class="npn-critique-reply-modal__prompt-group-list"
-                      >
+                      <ul class="npn-critique-reply-modal__prompt-group-list">
                         {{#each group.prompts as |prompt|}}
                           <li
                             class="npn-critique-reply-modal__prompt-group-item"
@@ -12971,9 +12934,7 @@ export default class NpnCritiqueReplyModal extends Component {
               <button
                 type="button"
                 class="npn-critique-reply-modal__pane-scroll-cue"
-                aria-label={{i18n
-                  "npn_critique_reply.modal.scroll_more_below"
-                }}
+                aria-label={{i18n "npn_critique_reply.modal.scroll_more_below"}}
                 {{on "click" (fn this.scrollPaneDown "right")}}
               >
                 <span class="npn-critique-reply-modal__pane-scroll-cue-text">
@@ -13089,9 +13050,7 @@ export default class NpnCritiqueReplyModal extends Component {
                 id="npn-critique-reply-preview-heading"
                 class="npn-critique-reply-modal__preview-title"
                 tabindex="-1"
-              >{{i18n
-                  "npn_critique_reply.modal.preview_header_title"
-                }}</h2>
+              >{{i18n "npn_critique_reply.modal.preview_header_title"}}</h2>
               <p class="npn-critique-reply-modal__preview-subtitle">{{i18n
                   "npn_critique_reply.modal.preview_header_subtitle"
                 }}</p>
@@ -13106,15 +13065,10 @@ export default class NpnCritiqueReplyModal extends Component {
                   content at all. }}
               {{#if this.previewHasText}}
                 <section
-                  class="npn-critique-reply-modal__preview-section
-                    npn-critique-reply-modal__preview-section--critique"
+                  class="npn-critique-reply-modal__preview-section npn-critique-reply-modal__preview-section--critique"
                 >
-                  <h3
-                    class="npn-critique-reply-modal__preview-section-title"
-                  >
-                    {{i18n
-                      "npn_critique_reply.modal.preview_section_critique"
-                    }}
+                  <h3 class="npn-critique-reply-modal__preview-section-title">
+                    {{i18n "npn_critique_reply.modal.preview_section_critique"}}
                   </h3>
                   <div
                     class="npn-critique-reply-modal__preview-text cooked"
@@ -13123,19 +13077,12 @@ export default class NpnCritiqueReplyModal extends Component {
               {{/if}}
               {{#if this.previewShowEmptyPlaceholder}}
                 <section
-                  class="npn-critique-reply-modal__preview-section
-                    npn-critique-reply-modal__preview-section--critique"
+                  class="npn-critique-reply-modal__preview-section npn-critique-reply-modal__preview-section--critique"
                 >
-                  <h3
-                    class="npn-critique-reply-modal__preview-section-title"
-                  >
-                    {{i18n
-                      "npn_critique_reply.modal.preview_section_critique"
-                    }}
+                  <h3 class="npn-critique-reply-modal__preview-section-title">
+                    {{i18n "npn_critique_reply.modal.preview_section_critique"}}
                   </h3>
-                  <p
-                    class="npn-critique-reply-modal__preview-text-empty"
-                  >{{i18n
+                  <p class="npn-critique-reply-modal__preview-text-empty">{{i18n
                       "npn_critique_reply.modal.preview_empty_text"
                     }}</p>
                 </section>
@@ -13152,16 +13099,11 @@ export default class NpnCritiqueReplyModal extends Component {
                     definition" mid-render. Same applies to
                     `<input>` / `<table>` / etc. for future
                     iterations. }}
-                {{#each
-                  this._previewSnapshot.visualNotesImages as |imgEntry|
-                }}
+                {{#each this._previewSnapshot.visualNotesImages as |imgEntry|}}
                   <section
-                    class="npn-critique-reply-modal__preview-section
-                      npn-critique-reply-modal__preview-section--visual-notes"
+                    class="npn-critique-reply-modal__preview-section npn-critique-reply-modal__preview-section--visual-notes"
                   >
-                    <h3
-                      class="npn-critique-reply-modal__preview-section-title"
-                    >
+                    <h3 class="npn-critique-reply-modal__preview-section-title">
                       {{#if imgEntry.label}}{{imgEntry.label}}{{else}}{{i18n
                           "npn_critique_reply.modal.preview_section_visual_notes"
                         }}{{/if}}
@@ -13186,8 +13128,7 @@ export default class NpnCritiqueReplyModal extends Component {
 
               {{#if this._previewSnapshot.hasProcessingExample}}
                 <section
-                  class="npn-critique-reply-modal__preview-section
-                    npn-critique-reply-modal__preview-section--processing-example"
+                  class="npn-critique-reply-modal__preview-section npn-critique-reply-modal__preview-section--processing-example"
                 >
                   <h3 class="npn-critique-reply-modal__preview-section-title">
                     {{i18n
@@ -13265,8 +13206,7 @@ export default class NpnCritiqueReplyModal extends Component {
             the middle of the footer alongside the primary buttons. }}
         {{#if this.draftsEnabled}}
           <span
-            class="npn-critique-reply-modal__draft-status
-              npn-critique-reply-modal__draft-status--{{this.draftStatus}}"
+            class="npn-critique-reply-modal__draft-status npn-critique-reply-modal__draft-status--{{this.draftStatus}}"
             aria-live="polite"
           >
             {{#if this.draftStatusLabel}}

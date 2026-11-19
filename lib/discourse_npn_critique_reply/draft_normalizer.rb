@@ -101,6 +101,23 @@ module DiscourseNpnCritiqueReply
     PROJECT_EDIT_TAGS_ALTERNATE = %w[bring_in].freeze
     MAX_PROJECT_EDIT_TAGS = 100
 
+    # Project critiques: the critic's "Suggest a hang" work in progress
+    # (discourse-npn-submissions' npn-hang-suggester): a label, their order
+    # of project numbers, ranks on hung prints, and their hang settings.
+    PROJECT_NUMBER_REGEXP = /\AA?[1-9]\d{0,2}\z/
+    PROJECT_SUGGESTION_RANKS = %w[strongest keep unsure].freeze
+    MAX_PROJECT_SUGGESTION_PRINTS = 60
+    MAX_PROJECT_SUGGESTION_LABEL = 100
+    PROJECT_HANG_CHOICES = {
+      "layout" => %w[line rows lead],
+      "wall" => %w[warm gray charcoal],
+      "mat" => %w[none white offwhite black],
+      "frame" => %w[none black wood white],
+      "unit" => %w[in cm],
+    }.freeze
+    PROJECT_HANG_MAT_WIDTHS = [2, 3, 4].freeze
+    PROJECT_HANG_SIZES = [8, 10, 12, 14, 16, 20, 24, 30, 36, 40, 48, 60].freeze
+
     module_function
 
     # Returns a fully-normalized draft hash ready for PluginStore. The
@@ -175,6 +192,7 @@ module DiscourseNpnCritiqueReply
         "large_image_view" => normalize_large_image_view(payload["large_image_view"]),
         "project_view" => normalize_project_view(payload["project_view"]),
         "project_edit_tags" => normalize_project_edit_tags(payload["project_edit_tags"]),
+        "project_suggestion" => normalize_project_suggestion(payload["project_suggestion"]),
         "ui" => normalize_ui(payload["ui"]),
       }
     end
@@ -205,6 +223,60 @@ module DiscourseNpnCritiqueReply
         out[key] = tag if allowed.include?(tag)
       end
       out
+    end
+
+    # `{ "label" => "Option A", "order" => ["9", "8", "A1"],
+    #    "ranks" => { "9" => "strongest" }, "hang" => { … } }` or nil.
+    def normalize_project_suggestion(value)
+      return nil unless value.is_a?(Hash)
+      value = value.to_h.stringify_keys
+
+      order =
+        Array(value["order"])
+          .map { |n| n.to_s.strip.upcase }
+          .select { |n| n.match?(PROJECT_NUMBER_REGEXP) }
+          .uniq
+          .first(MAX_PROJECT_SUGGESTION_PRINTS)
+      return nil if order.empty?
+
+      ranks = {}
+      if value["ranks"].is_a?(Hash)
+        value["ranks"].each do |k, v|
+          key = k.to_s.strip.upcase
+          rank = v.to_s.strip
+          ranks[key] = rank if order.include?(key) && PROJECT_SUGGESTION_RANKS.include?(rank)
+        end
+      end
+
+      {
+        "label" => value["label"].to_s.gsub(/[\r\n]/, " ").strip[0, MAX_PROJECT_SUGGESTION_LABEL],
+        "order" => order,
+        "ranks" => ranks,
+        "hang" => normalize_project_hang(value["hang"]),
+      }
+    end
+
+    def normalize_project_hang(value)
+      return nil unless value.is_a?(Hash)
+      value = value.to_h.stringify_keys
+      out = {}
+      PROJECT_HANG_CHOICES.each do |key, allowed|
+        str = value[key].to_s
+        out[key] = str if allowed.include?(str)
+      end
+      width = value["mat_width"].to_i
+      out["mat_width"] = width if PROJECT_HANG_MAT_WIDTHS.include?(width)
+      if value["sizes"].is_a?(Hash)
+        sizes = {}
+        value["sizes"].each do |k, v|
+          break if sizes.size >= MAX_PROJECT_SUGGESTION_PRINTS
+          id = k.to_s
+          size = v.to_i
+          sizes[id] = size if id.match?(/\A\d+\z/) && PROJECT_HANG_SIZES.include?(size)
+        end
+        out["sizes"] = sizes
+      end
+      out.presence
     end
 
     def normalize_writing_context(value)
