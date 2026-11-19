@@ -24,6 +24,8 @@ en:
           sequence: "Sequence"
           edit: "Edit"
           individual: "Individual images"
+          presentation: "Presentation"
+          technical: "Technical / processing"
         edit_hint: "Optional: tag the images you have an opinion on (★ ✓ ? ✕). You don't need to tag them all."
         edit_auto_note: "Your tags are added to the critique as an image when you preview or post. Use the button to place it somewhere specific."
         edit_add: "Add edit to critique"
