@@ -20,6 +20,7 @@ en:
           presentation: "Presentation"
           technical: "Technical / processing"
         suggest: "Suggest a hang"
+        old_tags_notice: "You tagged images in this draft before the tools changed. Open the button below to review those tags and add them to your critique; they aren't posted otherwise."
         suggest_hint: "Your version of the project, added to your critique as one image."
       start_button: "Start a Critique"
       start_button_title: "Open the critique workspace"

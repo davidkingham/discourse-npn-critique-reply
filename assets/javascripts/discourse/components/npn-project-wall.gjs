@@ -127,6 +127,11 @@ export default class NpnProjectWall extends Component {
         </p>
       {{/if}}
 
+      {{#if @hasOldTags}}
+        <p class="npn-project-wall__old-tags" role="status">
+          {{i18n "npn_critique_reply.project_wall.old_tags_notice"}}
+        </p>
+      {{/if}}
       {{#if @onSuggestSequence}}
         <div class="npn-project-wall__suggest">
           <DButton

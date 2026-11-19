@@ -4274,108 +4274,6 @@ html.modal-open .fk-d-menu[data-identifier="usercard"] {
       outline-color: var(--tertiary);
     }
   }
-
-  // A tagged tile gets a coloured edge in its tag's colour.
-  @each $tag in strongest, keep, unsure, cut, bring_in {
-    &__tile.--tag-#{$tag} img {
-      outline-color: var(--npn-tag-#{$tag});
-    }
-  }
-
-  &__tile.--tag-cut img {
-    opacity: 0.55;
-  }
-
-  &__tags {
-    display: flex;
-    gap: 0.15em;
-  }
-
-  &__tag {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.9em;
-    height: 1.7em;
-    padding: 0;
-    border: 1px solid var(--primary-low);
-    border-radius: var(--d-border-radius, 4px);
-    background: var(--secondary);
-    color: var(--primary-medium);
-    cursor: pointer;
-    font-size: var(--font-down-1);
-
-    &:hover {
-      color: var(--primary);
-      border-color: var(--primary-medium);
-    }
-
-    &[disabled] {
-      cursor: not-allowed;
-      opacity: 0.5;
-    }
-
-    @each $tag in strongest, keep, unsure, cut, bring_in {
-      &.--#{$tag}.is-active {
-        background: var(--npn-tag-#{$tag});
-        border-color: var(--npn-tag-#{$tag});
-        color: var(--secondary);
-      }
-    }
-  }
-
-  &__edit {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5em;
-    margin-top: 0.5em;
-    padding: 0.6em 0.75em;
-    border-radius: var(--d-border-radius, 4px);
-    background: var(--primary-very-low);
-  }
-
-  &.--edit-requested &__edit {
-    border: 1px solid var(--tertiary-low);
-  }
-
-  &__edit-summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75em;
-    font-size: var(--font-down-1);
-  }
-
-  &__edit-hint {
-    color: var(--primary-medium);
-  }
-
-  @each $tag in strongest, keep, unsure, cut, bring_in {
-    &__count.--#{$tag} {
-      color: var(--npn-tag-#{$tag});
-      font-weight: 600;
-    }
-  }
-
-  &__edit-actions {
-    display: flex;
-    gap: 0.4em;
-  }
-
-  &__edit-note {
-    flex-basis: 100%;
-    margin: 0;
-    font-size: var(--font-down-1);
-    color: var(--primary-medium);
-  }
-
-  &__error {
-    flex-basis: 100%;
-    margin: 0;
-    color: var(--danger);
-    font-size: var(--font-down-1);
-  }
 }
 
 .npn-critique-reply-modal__back-to-project {
@@ -4406,4 +4304,12 @@ html.modal-open .fk-d-menu[data-identifier="usercard"] {
   min-width: 0;
   overflow-y: auto;
   padding: 0.25rem 0.25rem 1rem;
+}
+
+.npn-project-wall__old-tags {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--font-down-1);
+  background: var(--highlight-low);
+  border-radius: var(--d-border-radius);
 }
