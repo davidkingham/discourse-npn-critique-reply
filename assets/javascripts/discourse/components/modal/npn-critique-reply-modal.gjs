@@ -159,12 +159,6 @@ const WRITING_CONTEXT_IMAGE = "image";
 
 const PROJECT_VIEW_WALL = "wall";
 const PROJECT_VIEW_FOCUS = "focus";
-// A suggested-edit image already in the critique (alt text written by
-// discourse-npn-submissions' npn-project-edit.js). Adding the edit again
-// replaces it rather than stacking a second one.
-const PROJECT_EDIT_IMAGE_REGEXP = /!\[Suggested edit:[^\]]*\]\([^)]*\)/;
-// Captures that image's summary ("strongest 4; keep 1, 3") from its alt text.
-const PROJECT_EDIT_SUMMARY_REGEXP = /!\[Suggested edit: ([^\]|]*)/;
 
 // Pull the numeric suffix off an id like "attention_pull_3" → 3. Used
 // only during draft restore so newly-created markers don't collide
@@ -354,13 +348,14 @@ export default class NpnCritiqueReplyModal extends Component {
 
   // Project critiques: the left pane shows the whole project ("wall") by
   // default; opening one image ("focus") shows the familiar single-image view
-  // with the visual tools. `projectEditTags` is the critic's keep/cut tagging
-  // keyed by project number ({ "4": "keep", "A1": "bring_in" }); both are
-  // saved with the draft.
+  // with the visual tools. `projectSuggestion` is the critic's "Suggest a
+  // hang" work in progress ({ label, order, ranks, hang }); both are saved
+  // with the draft. `legacyEditTags` holds keep/cut tags from a draft saved
+  // before "Suggest a hang" replaced them: the wall says so, and they seed
+  // the tool when it's opened.
   @tracked projectView = PROJECT_VIEW_WALL;
-  @tracked projectEditTags = {};
-  @tracked projectEditBusy = false;
-  @tracked projectEditError = null;
+  @tracked projectSuggestion = null;
+  @tracked legacyEditTags = null;
   @tracked sequenceBuilderInitial = null;
   _sequencePreservedSelection = null;
   @tracked linkFormUrl = "";
@@ -1382,9 +1377,11 @@ export default class NpnCritiqueReplyModal extends Component {
     } catch {
       selected = "";
     }
-    // Selecting an existing [npn-sequence] block first reopens it.
-    this.sequenceBuilderInitial =
-      this._sequenceBuilderService.initialFor(selected);
+    // Selecting a suggestion image first reopens it for editing.
+    this.sequenceBuilderInitial = this._sequenceBuilderService.initialFor(
+      selected,
+      this.sequenceImages
+    );
     this.sequenceBuilderOpen = true;
   }
 
@@ -1396,10 +1393,19 @@ export default class NpnCritiqueReplyModal extends Component {
     this._focusWritingSurface();
   }
 
+  // Puts a suggestion into the critique: replacing the selected one when
+  // the tool was reopened from a selection, else replacing the one this
+  // critic added earlier under the same name (the builder service remembers
+  // it), else as its own block in the overall critique.
   @action
-  insertSequence(markup) {
+  async insertSequence(markup, label = "") {
     const editing = !!this.sequenceBuilderInitial;
-    if (this.#textarea && this._sequencePreservedSelection) {
+    const builder = this._sequenceBuilderService;
+    if (!editing && this.activeWritingContext !== WRITING_CONTEXT_OVERALL) {
+      this.setWritingContext(WRITING_CONTEXT_OVERALL);
+      await new Promise((resolve) => next(resolve));
+    }
+    if (editing && this.#textarea && this._sequencePreservedSelection) {
       try {
         this.#textarea.focus();
         this.#textarea.setSelectionRange(
@@ -1413,14 +1419,23 @@ export default class NpnCritiqueReplyModal extends Component {
     try {
       const tm = this.#textManipulation;
       if (tm) {
-        // Replacing a selected sequence keeps it in place; a fresh insert
-        // goes in as its own block (in the rich editor addText keeps only
-        // inline content, which would glue it to the previous paragraph).
+        const existing = editing
+          ? null
+          : builder?.existingSuggestion?.(
+              this.overallCritiqueText ?? "",
+              this.topic?.id,
+              label
+            );
         if (editing) {
           tm.addText(tm.getSelected(), markup);
+        } else if (existing) {
+          tm.replaceText(existing, markup);
         } else {
+          // Its own block (in the rich editor addText keeps only inline
+          // content, which would glue it to the previous paragraph).
           tm.insertBlock(markup);
         }
+        builder?.noteInserted?.(this.topic?.id, label, markup);
         if (!this.#usingDEditor) {
           this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
         }
@@ -1429,6 +1444,51 @@ export default class NpnCritiqueReplyModal extends Component {
       this._recordError("insert_sequence", e, null, "warn");
     }
     this.closeSequenceBuilder();
+  }
+
+  // The tool's saved work in progress; a draft from before "Suggest a
+  // hang" brings its keep/cut tags in as the starting point.
+  get projectSuggestionState() {
+    if (this.projectSuggestion) {
+      return this.projectSuggestion;
+    }
+    const tags = this.legacyEditTags;
+    const images = this.sequenceImages;
+    if (!tags || !images) {
+      return null;
+    }
+    const order = [
+      ...(images.originals ?? [])
+        .map((image) => image.number)
+        .filter((n) => tags[n] !== "cut"),
+      ...(images.alternates ?? [])
+        .map((image) => image.number)
+        .filter((n) => tags[n] === "bring_in"),
+    ];
+    const ranks = Object.fromEntries(
+      Object.entries(tags).filter(([, tag]) =>
+        ["strongest", "keep", "unsure"].includes(tag)
+      )
+    );
+    return { label: "", order, ranks, hang: null };
+  }
+
+  get suggestLabel() {
+    return (
+      this._sequenceBuilderService?.buttonLabelFor?.(this.sequenceImages) ??
+      "npn_critique_reply.project_wall.suggest"
+    );
+  }
+
+  get hasLegacyEditTags() {
+    return !!this.legacyEditTags;
+  }
+
+  @action
+  setProjectSuggestion(state) {
+    this.projectSuggestion = state;
+    this.legacyEditTags = null;
+    this._scheduleProjectDraftSave();
   }
 
   // ---- Project critique: wall, open image, suggested edit ---------------
@@ -1465,16 +1525,8 @@ export default class NpnCritiqueReplyModal extends Component {
     return this.isProjectCritique && this.projectView === PROJECT_VIEW_FOCUS;
   }
 
-  get projectTagDefs() {
-    return this._sequenceBuilderService?.editTags ?? [];
-  }
-
-  get projectHasEditImage() {
-    return PROJECT_EDIT_IMAGE_REGEXP.test(this.overallCritiqueText ?? "");
-  }
-
-  get hasProjectEditTags() {
-    return Object.keys(this.projectEditTags ?? {}).length > 0;
+  get hasProjectSuggestion() {
+    return !!this.projectSuggestion || !!this.legacyEditTags;
   }
 
   _scheduleProjectDraftSave() {
@@ -1523,138 +1575,6 @@ export default class NpnCritiqueReplyModal extends Component {
       this.sequenceImages?.alternates ?? [],
       index
     );
-  }
-
-  // Tapping the active tag clears it; tapping another replaces it.
-  @action
-  setProjectEditTag(number, tag) {
-    const updated = { ...(this.projectEditTags ?? {}) };
-    if (updated[number] === tag) {
-      delete updated[number];
-    } else {
-      updated[number] = tag;
-    }
-    this.projectEditTags = updated;
-    this.projectEditError = null;
-    this._scheduleProjectDraftSave();
-  }
-
-  @action
-  clearProjectEditTags() {
-    this.projectEditTags = {};
-    this.projectEditError = null;
-    this._scheduleProjectDraftSave();
-  }
-
-  // Makes sure the posted critique carries the critic's keep/cut tags: if
-  // images are tagged and the overall critique has no edit image, one is
-  // generated and appended; if it has one that no longer matches the tags,
-  // it's regenerated in place. Runs before Preview and Post, so tagging alone
-  // is enough — "Add edit to critique" is only for placing it mid-text.
-  // Returns false (and shows an error) if the image couldn't be made.
-  async _syncProjectEditIntoText() {
-    const builder = this._sequenceBuilderService;
-    if (!this.isProjectCritique || !this.hasProjectEditTags || !builder) {
-      return true;
-    }
-    const text = this.overallCritiqueText ?? "";
-    const summary = builder.editSummaryFor({
-      images: this.sequenceImages,
-      tags: this.projectEditTags,
-    });
-    const existing = PROJECT_EDIT_IMAGE_REGEXP.exec(text);
-    const existingSummary = PROJECT_EDIT_SUMMARY_REGEXP.exec(text)?.[1];
-    if (existing && existingSummary?.trim() === summary) {
-      return true;
-    }
-
-    this.projectEditBusy = true;
-    let markup;
-    try {
-      markup = await builder.buildEditImage({
-        images: this.sequenceImages,
-        tags: this.projectEditTags,
-      });
-    } catch (e) {
-      this._recordError("project_edit_sync", e, null, "warn");
-      if (!this.isDestroying && !this.isDestroyed) {
-        this.projectEditBusy = false;
-        this.errorMessage = i18n(
-          "npn_critique_reply.project_wall.edit_failed_post"
-        );
-      }
-      return false;
-    } finally {
-      if (!this.isDestroying && !this.isDestroyed) {
-        this.projectEditBusy = false;
-      }
-    }
-
-    // The editor is bound to the tracked text (and re-renders on change), so
-    // updating it here updates what the critic sees too.
-    this.overallCritiqueText = existing
-      ? text.replace(existing[0], markup)
-      : text.trim()
-        ? `${text.trimEnd()}\n\n${markup}`
-        : markup;
-    this._scheduleProjectDraftSave();
-    return true;
-  }
-
-  // Draws the tags as one grouped contact sheet, uploads it, and puts it in
-  // the OVERALL critique: replacing an earlier suggested-edit image if there
-  // is one, otherwise as its own block at the cursor.
-  @action
-  async addProjectEdit() {
-    const builder = this._sequenceBuilderService;
-    if (!builder || this.projectEditBusy || !this.hasProjectEditTags) {
-      return;
-    }
-    this.projectEditBusy = true;
-    this.projectEditError = null;
-    let markup;
-    try {
-      markup = await builder.buildEditImage({
-        images: this.sequenceImages,
-        tags: this.projectEditTags,
-      });
-    } catch (e) {
-      this._recordError("project_edit", e, null, "warn");
-      if (!this.isDestroying && !this.isDestroyed) {
-        this.projectEditError = i18n(
-          "npn_critique_reply.project_wall.edit_failed"
-        );
-        this.projectEditBusy = false;
-      }
-      return;
-    }
-    this.projectEditBusy = false;
-
-    if (this.activeWritingContext !== WRITING_CONTEXT_OVERALL) {
-      this.setWritingContext(WRITING_CONTEXT_OVERALL);
-      await new Promise((resolve) => next(resolve));
-    }
-    try {
-      const tm = this.#textManipulation;
-      if (!tm) {
-        return;
-      }
-      const existing = PROJECT_EDIT_IMAGE_REGEXP.exec(
-        this.overallCritiqueText ?? ""
-      );
-      if (existing) {
-        tm.replaceText(existing[0], markup, {
-          regex: PROJECT_EDIT_IMAGE_REGEXP,
-        });
-      } else {
-        tm.insertBlock(markup);
-      }
-      if (!this.#usingDEditor) {
-        this.#textarea?.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-    } catch (e) {
-      this._recordError("insert_project_edit", e, null, "warn");
-    }
   }
 
   @action
@@ -2147,7 +2067,6 @@ export default class NpnCritiqueReplyModal extends Component {
   get canPreview() {
     return (
       this.hasUnsavedText ||
-      (this.isProjectCritique && this.hasProjectEditTags) ||
       this.hasAnyImageAnnotations ||
       this.hasProcessingExample
     );
@@ -2966,7 +2885,7 @@ export default class NpnCritiqueReplyModal extends Component {
       this.hasAnyImageAnnotations ||
       this.hasProcessingExample ||
       this.hasImageTransform ||
-      this.hasProjectEditTags
+      this.hasProjectSuggestion
     );
   }
 
@@ -8526,12 +8445,6 @@ export default class NpnCritiqueReplyModal extends Component {
     this.visualNotesFailureContext = null;
 
     this.previewBuilding = true;
-    // Project critiques: put the keep/cut tags into the text first so the
-    // preview shows exactly what will post.
-    if (!(await this._syncProjectEditIntoText())) {
-      this.previewBuilding = false;
-      return;
-    }
     // Snapshot the active image so the preview iterates a consistent
     // per-image picture (the active edits aren't yet in cold storage) —
     // both annotations and notes text.
@@ -8777,17 +8690,6 @@ export default class NpnCritiqueReplyModal extends Component {
   }
 
   async _doPostCritique({ skipVisualNotes }) {
-    // Project critiques: tagged images are posted as the edit image even if
-    // the critic never pressed "Add edit to critique" (and a stale one is
-    // refreshed). Tags alone are enough to post.
-    if (this.isProjectCritique && this.hasProjectEditTags) {
-      this.isPosting = true;
-      const synced = await this._syncProjectEditIntoText();
-      this.isPosting = false;
-      if (!synced || this._destroyed) {
-        return;
-      }
-    }
     if (!this.hasUnsavedText) {
       this.validationMessage = i18n(
         "npn_critique_reply.modal.validation_empty"
@@ -9738,9 +9640,11 @@ export default class NpnCritiqueReplyModal extends Component {
       // path falls back to the auto-switch default if the view
       // doesn't match the current state.
       large_image_view: this.largeImageView,
-      // Project critiques: left-pane view and keep/cut tags.
+      // Project critiques: left-pane view and the Suggest-a-hang work in
+      // progress (legacy keep/cut tags are carried until the tool is used).
       project_view: this.projectView,
-      project_edit_tags: this.projectEditTags ?? {},
+      project_edit_tags: this.legacyEditTags ?? {},
+      project_suggestion: this.projectSuggestion,
       // `prompts_expanded` is reused on the wire as the "More ideas
       // expanded" boolean — same field name (so the Ruby DraftNormalizer
       // UI_ALLOWED_KEYS whitelist doesn't need to change) but the new
@@ -10109,7 +10013,12 @@ export default class NpnCritiqueReplyModal extends Component {
         draft.project_view === PROJECT_VIEW_FOCUS
           ? PROJECT_VIEW_FOCUS
           : PROJECT_VIEW_WALL;
-      this.projectEditTags = { ...(draft.project_edit_tags ?? {}) };
+      this.projectSuggestion = draft.project_suggestion ?? null;
+      const legacyTags = draft.project_edit_tags ?? {};
+      this.legacyEditTags =
+        !this.projectSuggestion && Object.keys(legacyTags).length
+          ? { ...legacyTags }
+          : null;
 
       const savedView = draft.large_image_view;
       if (savedView && LARGE_IMAGE_VIEWS.includes(savedView)) {
@@ -10526,8 +10435,8 @@ export default class NpnCritiqueReplyModal extends Component {
     this.processingExampleError = null;
     this.largeImageView = LARGE_IMAGE_VIEW_REFERENCE;
     this.projectView = PROJECT_VIEW_WALL;
-    this.projectEditTags = {};
-    this.projectEditError = null;
+    this.projectSuggestion = null;
+    this.legacyEditTags = null;
     // Reset the mobile disclosures to their fresh-modal defaults: the
     // Visual tools panel stays expanded (its default), the Processing
     // Example collapses since there's nothing left to surface.
@@ -10732,21 +10641,29 @@ export default class NpnCritiqueReplyModal extends Component {
               class="npn-critique-reply-modal__left-pane"
               {{didInsert this.setupLeftPane}}
             >
-              {{#if this.showProjectWall}}
+              {{#if this.sequenceBuilderOpen}}
+                {{! Suggest a hang works on the project, so it takes the
+                project's place in the left pane while it's open; the
+                critique text stays in view on the right. }}
+                <div class="npn-critique-reply-modal__suggest-pane">
+                  <this.SequenceBuilder
+                    @images={{this.sequenceImages}}
+                    @initial={{this.sequenceBuilderInitial}}
+                    @state={{this.projectSuggestionState}}
+                    @onStateChange={{this.setProjectSuggestion}}
+                    @onInsert={{this.insertSequence}}
+                    @onCancel={{this.closeSequenceBuilder}}
+                  />
+                </div>
+              {{else if this.showProjectWall}}
                 <NpnProjectWall
                   @images={{this.sequenceImages}}
-                  @tags={{this.projectEditTags}}
-                  @tagDefs={{this.projectTagDefs}}
                   @disabled={{this.isPosting}}
-                  @editBusy={{this.projectEditBusy}}
-                  @editError={{this.projectEditError}}
-                  @hasEditImage={{this.projectHasEditImage}}
+                  @suggestLabel={{this.suggestLabel}}
+                  @hasOldTags={{this.hasLegacyEditTags}}
                   @onOpenImage={{this.openProjectImage}}
                   @onView={{this.viewProject}}
                   @onViewAlternate={{this.viewProjectAlternate}}
-                  @onSetTag={{this.setProjectEditTag}}
-                  @onClearTags={{this.clearProjectEditTags}}
-                  @onAddEdit={{this.addProjectEdit}}
                   @onSuggestSequence={{this.openSequenceBuilder}}
                   @openImagesLarge={{this.projectImagesFromPost}}
                 />
@@ -12556,7 +12473,7 @@ export default class NpnCritiqueReplyModal extends Component {
                   {{/if}}
                 </div>
 
-                {{#unless (or this.linkFormOpen this.sequenceBuilderOpen)}}
+                {{#unless this.linkFormOpen}}
                   <div
                     class="npn-critique-reply-modal__toolbar"
                     role="toolbar"
@@ -12732,16 +12649,6 @@ export default class NpnCritiqueReplyModal extends Component {
                   service swaps the active modal instead of stacking,
                   which would dismiss the critique workspace if we used
                   DModal here. }}
-              {{#if this.sequenceBuilderOpen}}
-                <div class="npn-critique-reply-modal__sequence-panel">
-                  <this.SequenceBuilder
-                    @images={{this.sequenceImages}}
-                    @initial={{this.sequenceBuilderInitial}}
-                    @onInsert={{this.insertSequence}}
-                    @onCancel={{this.closeSequenceBuilder}}
-                  />
-                </div>
-              {{/if}}
               {{#if this.linkFormOpen}}
                 <form
                   class="npn-critique-reply-modal__link-form"
