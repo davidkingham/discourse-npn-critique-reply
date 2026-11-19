@@ -88,6 +88,19 @@ module DiscourseNpnCritiqueReply
     # `LARGE_IMAGE_VIEWS` in the modal component.
     LARGE_IMAGE_VIEWS = %w[reference processing_example].freeze
 
+    # Project critiques: which left-pane view the critic was on — the whole
+    # project wall, or one image in focus mode (with the visual tools).
+    PROJECT_VIEWS = %w[wall focus].freeze
+    DEFAULT_PROJECT_VIEW = "wall"
+
+    # Project critiques: the critic's keep/cut tags, keyed by the image's
+    # project number ("4", "A1"). Originals take strongest/keep/unsure/cut;
+    # alternates ("A…") take only bring_in. Mirrors EDIT_TAGS in
+    # discourse-npn-submissions' npn-project-edit.js.
+    PROJECT_EDIT_TAGS_ORIGINAL = %w[strongest keep unsure cut].freeze
+    PROJECT_EDIT_TAGS_ALTERNATE = %w[bring_in].freeze
+    MAX_PROJECT_EDIT_TAGS = 100
+
     module_function
 
     # Returns a fully-normalized draft hash ready for PluginStore. The
@@ -160,6 +173,8 @@ module DiscourseNpnCritiqueReply
         # when the value isn't in the whitelist; client restore falls
         # back to its auto-switch default in that case.
         "large_image_view" => normalize_large_image_view(payload["large_image_view"]),
+        "project_view" => normalize_project_view(payload["project_view"]),
+        "project_edit_tags" => normalize_project_edit_tags(payload["project_edit_tags"]),
         "ui" => normalize_ui(payload["ui"]),
       }
     end
@@ -168,6 +183,28 @@ module DiscourseNpnCritiqueReply
       return nil if value.nil?
       str = value.to_s.strip
       LARGE_IMAGE_VIEWS.include?(str) ? str : nil
+    end
+
+    def normalize_project_view(value)
+      str = value.to_s.strip
+      PROJECT_VIEWS.include?(str) ? str : DEFAULT_PROJECT_VIEW
+    end
+
+    # `{ "4" => "keep", "A1" => "bring_in" }`. Keys must look like a project
+    # number; a tag that doesn't fit the key's kind (bring_in on an original,
+    # keep on an alternate) is dropped.
+    def normalize_project_edit_tags(value)
+      return {} unless value.is_a?(Hash)
+      out = {}
+      value.each do |k, v|
+        break if out.size >= MAX_PROJECT_EDIT_TAGS
+        key = k.to_s.strip.upcase
+        next unless key.match?(/\AA?[1-9]\d{0,2}\z/)
+        tag = v.to_s.strip
+        allowed = key.start_with?("A") ? PROJECT_EDIT_TAGS_ALTERNATE : PROJECT_EDIT_TAGS_ORIGINAL
+        out[key] = tag if allowed.include?(tag)
+      end
+      out
     end
 
     def normalize_writing_context(value)

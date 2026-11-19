@@ -31,6 +31,26 @@ The reply is created through the standard `PostCreator` / `PostRevisor` (no
 guardian skipping), so critiques are ordinary posts — nothing about reading,
 moderation, search, or backup changes.
 
+## Project critiques
+
+For image-method project critiques (when `discourse-npn-submissions` is
+installed), the left pane shows the **project wall** instead of one
+reference image: every image at true proportions with its number, alternates
+below, the photographer's requested feedback types and presentation goal on
+top. From the wall a critic can:
+
+- **View the project**: step through the images full-screen, in order.
+- **Open an image**: switch to the familiar single-image view with every
+  visual tool; "Back to project" returns to the wall.
+- **Suggest an edit**: tag images strongest / keep / unsure / cut
+  (alternates: bring in), then "Add edit to critique" inserts one grouped
+  contact-sheet image into the overall critique (re-adding replaces it).
+- **Suggest a sequence**: the inline sequence builder.
+
+The wall/open-image view and the tags are saved with the draft
+(`project_view`, `project_edit_tags`; see `DraftNormalizer`). Writing stays
+long-form; the tools only drop images into the text.
+
 ## How eligibility works — where the button appears
 
 There is **no dedicated route**; the UI injects into the normal topic view via
