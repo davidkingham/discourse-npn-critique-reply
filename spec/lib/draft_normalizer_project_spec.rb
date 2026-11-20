@@ -96,6 +96,43 @@ describe DiscourseNpnCritiqueReply::DraftNormalizer do
     )
   end
 
+  it "keeps a suggested book's spreads and a salon hang's positions" do
+    out =
+      normalize(
+        "project_suggestion" => {
+          "order" => %w[2 1 3],
+          "hang" => {
+            "layout" => "free",
+            "book_format" => "square",
+            "cover" => 99,
+            "spreads" => [
+              { "ids" => [11, 10], "side" => "full" },
+              { "ids" => [12], "side" => "sideways" },
+              { "ids" => [] },
+              "nope"
+            ],
+            "positions" => {
+              "10" => [44.26, "58.5"],
+              "11" => [-3, 57],
+              "x" => [1, 2]
+            }
+          }
+        }
+      )
+    expect(out["project_suggestion"]["hang"]).to eq(
+      "layout" => "free",
+      "book_format" => "square",
+      "cover" => 99,
+      "spreads" => [
+        { "ids" => [11, 10] },
+        { "ids" => [12], "side" => "right" }
+      ],
+      "positions" => {
+        "10" => [44.3, 58.5]
+      }
+    )
+  end
+
   it "drops an empty or malformed suggestion" do
     expect(normalize({})["project_suggestion"]).to be_nil
     expect(

@@ -109,12 +109,14 @@ module DiscourseNpnCritiqueReply
     MAX_PROJECT_SUGGESTION_PRINTS = 60
     MAX_PROJECT_SUGGESTION_LABEL = 100
     PROJECT_HANG_CHOICES = {
-      "layout" => %w[line rows lead],
+      "layout" => %w[line rows lead free],
       "wall" => %w[warm gray charcoal],
       "mat" => %w[none white offwhite black],
       "frame" => %w[none black wood white],
       "unit" => %w[in cm],
+      "book_format" => %w[portrait square landscape],
     }.freeze
+    PROJECT_SPREAD_SIDES = %w[right left full].freeze
     PROJECT_HANG_MAT_WIDTHS = [2, 3, 4].freeze
     PROJECT_HANG_SIZES = [8, 10, 12, 14, 16, 20, 24, 30, 36, 40, 48, 60].freeze
 
@@ -275,6 +277,38 @@ module DiscourseNpnCritiqueReply
           sizes[id] = size if id.match?(/\A\d+\z/) && PROJECT_HANG_SIZES.include?(size)
         end
         out["sizes"] = sizes
+      end
+      # Salon hang: a print's centre, [x, y] in inches, by upload id.
+      if value["positions"].is_a?(Hash)
+        positions = {}
+        value["positions"].each do |k, v|
+          break if positions.size >= MAX_PROJECT_SUGGESTION_PRINTS
+          id = k.to_s
+          next unless id.match?(/\A\d+\z/) && v.is_a?(Array) && v.size == 2
+          x, y = v.map { |n| Float(n, exception: false) }
+          next if x.nil? || y.nil? || !x.between?(0, 2400) || !y.between?(0, 300)
+          positions[id] = [x.round(1), y.round(1)]
+        end
+        out["positions"] = positions if positions.any?
+      end
+      # A book: the cover upload and the spreads (one image with a side, or
+      # two facing images), by upload id.
+      cover = value["cover"].to_i
+      out["cover"] = cover if cover.positive?
+      if value["spreads"].is_a?(Array)
+        spreads =
+          value["spreads"]
+            .first(MAX_PROJECT_SUGGESTION_PRINTS)
+            .filter_map do |spread|
+              spread = spread.to_h.stringify_keys if spread.respond_to?(:to_h)
+              next unless spread.is_a?(Hash)
+              ids = Array(spread["ids"]).map(&:to_i).select(&:positive?).first(2)
+              next if ids.empty?
+              next { "ids" => ids } if ids.size == 2
+              side = spread["side"].to_s
+              { "ids" => ids, "side" => PROJECT_SPREAD_SIDES.include?(side) ? side : "right" }
+            end
+        out["spreads"] = spreads if spreads.any?
       end
       out.presence
     end
