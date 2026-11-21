@@ -66,6 +66,15 @@ en:
         start: "Start a Critique"
         reply: "Quote in a reply"
 
+      # In-post player for a critique's voice note: the image the critic
+      # was looking at, with their pointer replayed in sync with the audio.
+      voice_walkthrough:
+        show: "Show what they point at"
+        hide: "Hide image"
+        hint: "The dot shows where the critic was pointing as they spoke."
+        image_alt: "The image being discussed, with the critic's pointer"
+        jump: "Hear the critic talk about this (%{time})"
+
       modal:
         title: "Critique Workspace"
         intro: "Write your critique with the image and photographer’s context close at hand."
@@ -287,6 +296,28 @@ en:
         validation_empty: "Write a critique or use the prompts first."
         post_failed: "Couldn't post your critique. Please try again."
 
+        # Voice note (experimental): a short spoken recording added to
+        # the critique and posted as a standard audio player.
+        voice_note:
+          heading: "Voice note"
+          optional: "optional"
+          helper: "Talk through the image instead of typing. Only your microphone is recorded."
+          record: "Record a voice note"
+          stop: "Stop"
+          recording: "Recording %{elapsed} of %{max}"
+          requesting: "Waiting for microphone access…"
+          uploading: "Saving your recording…"
+          rerecord: "Record again"
+          remove: "Remove"
+          embed_label: "Voice critique"
+          error_unsupported: "This browser can't record audio."
+          error_permission: "Microphone access was blocked. Allow it in your browser's site settings and try again."
+          error_no_microphone: "No microphone was found."
+          error_extension: "Recordings from this browser are saved as .%{extension} files, which this site doesn't accept yet. An admin needs to add %{extension} to the authorized extensions setting."
+          error_empty: "Nothing was recorded. Please try again."
+          error_upload: "The recording couldn't be saved. %{detail}"
+          error_generic: "Recording failed. Please try again."
+          pointer_hint: "Your pointer over the image is recorded too, so readers can see what you point at."
         # Processing Example workflow. A critic downloads the reference
         # image, processes it externally, and uploads ONE processing
         # example to include alongside their critique. Always called

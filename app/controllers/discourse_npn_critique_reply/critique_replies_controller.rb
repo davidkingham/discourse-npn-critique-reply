@@ -53,6 +53,7 @@ module DiscourseNpnCritiqueReply
 
       attach_visual_notes(post, params[:visual_notes], topic_id: topic.id)
       attach_processing_example(post, params[:processing_example], topic: topic)
+      attach_voice_note(post, params[:voice_note])
 
       render json: {
         success: true,
@@ -129,6 +130,7 @@ module DiscourseNpnCritiqueReply
 
       sync_visual_notes_for_update(post)
       sync_processing_example_for_update(post)
+      sync_voice_note_for_update(post)
 
       render json: {
         success: true,
@@ -345,6 +347,60 @@ module DiscourseNpnCritiqueReply
         message: "[discourse-npn-critique-reply] failed to clear " \
           "npn_processing_example (post=#{post&.id})",
       )
+    end
+
+    # Voice note (experimental). Create path: persist only while the
+    # experiment is on. The normalizer returns nil unless the audio is
+    # actually embedded in the post body, so the metadata can't describe
+    # a recording the post doesn't contain.
+    def attach_voice_note(post, payload)
+      return if payload.blank?
+      return unless SiteSetting.npn_critique_reply_voice_note_experiment
+
+      normalized = normalize_voice_note(payload, post)
+      return if normalized.nil?
+
+      post.custom_fields["npn_voice_note"] = normalized
+      post.save_custom_fields
+    rescue => e
+      Discourse.warn_exception(
+        e,
+        message: "[discourse-npn-critique-reply] failed to attach " \
+          "npn_voice_note (post=#{post&.id})",
+      )
+    end
+
+    # Edit path. Same three-case contract as the other payloads:
+    # non-blank → replace, explicit null → clear, key absent → no-op.
+    # Deliberately NOT gated on the experiment setting: turning the
+    # experiment off must not make an unrelated edit strip the pointer
+    # timeline from a recording that is still in the post.
+    def sync_voice_note_for_update(post)
+      return unless params.key?(:voice_note)
+
+      payload = params[:voice_note]
+      normalized = payload.blank? ? nil : normalize_voice_note(payload, post)
+
+      if normalized.nil?
+        if post.custom_fields["npn_voice_note"].present?
+          post.custom_fields.delete("npn_voice_note")
+          post.save_custom_fields
+        end
+      else
+        post.custom_fields["npn_voice_note"] = normalized
+        post.save_custom_fields
+      end
+    rescue => e
+      Discourse.warn_exception(
+        e,
+        message: "[discourse-npn-critique-reply] failed to sync " \
+          "npn_voice_note (post=#{post&.id})",
+      )
+    end
+
+    def normalize_voice_note(payload, post)
+      hash = payload.respond_to?(:to_unsafe_h) ? payload.to_unsafe_h : payload
+      VoiceNoteNormalizer.normalize(hash, raw: post.raw)
     end
 
     # Returns true when both the global setting permits processing

@@ -32,7 +32,8 @@ export function postCritique(
   raw,
   selectedImageVersionKey,
   visualNotes = null,
-  processingExample = null
+  processingExample = null,
+  voiceNote = null
 ) {
   const body = {
     raw,
@@ -43,6 +44,11 @@ export function postCritique(
   }
   if (processingExample) {
     body.processing_example = processingExample;
+  }
+  // Voice note (experimental): `{ upload, duration_ms, timeline, … }`
+  // → `npn_voice_note` post custom field. Omitted when absent.
+  if (voiceNote) {
+    body.voice_note = voiceNote;
   }
   return ajax(`/npn-critique-reply/topics/${topicId}/replies`, {
     type: "POST",
@@ -80,7 +86,8 @@ export function updateCritique(
   raw,
   selectedImageVersionKey,
   visualNotes = null,
-  processingExample = null
+  processingExample = null,
+  voiceNote = null
 ) {
   // Note: BOTH `visual_notes` and `processing_example` are always
   // present in the update body. Distinguishing "key absent" (preserve
@@ -92,6 +99,9 @@ export function updateCritique(
     selected_image_version_key: selectedImageVersionKey ?? null,
     visual_notes: visualNotes ?? null,
     processing_example: processingExample ?? null,
+    // Always present, like the two above: null clears the stored
+    // `npn_voice_note` when the critic removed the recording.
+    voice_note: voiceNote ?? null,
   };
   return ajax(`/npn-critique-reply/posts/${postId}/critique`, {
     type: "PUT",

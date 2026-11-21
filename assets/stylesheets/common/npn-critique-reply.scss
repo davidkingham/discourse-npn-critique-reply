@@ -4313,3 +4313,199 @@ html.modal-open .fk-d-menu[data-identifier="usercard"] {
   background: var(--highlight-low);
   border-radius: var(--d-border-radius);
 }
+
+// Voice note recorder (experimental spike) — sits above the critique
+// editor in the workspace.
+.npn-critique-voice-recorder {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--primary-low);
+  border-radius: var(--d-border-radius);
+  background: var(--secondary);
+
+  &__heading {
+    margin: 0 0 0.4rem;
+    font-size: var(--font-down-1);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--primary-high);
+  }
+
+  &__optional {
+    margin-left: 0.35rem;
+    font-weight: normal;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--primary-medium);
+  }
+
+  &__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.75rem;
+  }
+
+  &__helper,
+  &__status {
+    margin: 0;
+    font-size: var(--font-down-1);
+    color: var(--primary-medium);
+  }
+
+  &__live {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__dot {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    background: var(--danger);
+    animation: npn-critique-voice-recorder-pulse 1.2s ease-in-out infinite;
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+
+  &__player {
+    flex: 1 1 14rem;
+    min-width: 0;
+    max-width: 100%;
+    height: 2.25rem;
+  }
+
+  &__error {
+    margin: 0.4rem 0 0;
+    font-size: var(--font-down-1);
+    color: var(--danger);
+  }
+}
+
+@keyframes npn-critique-voice-recorder-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}
+
+// Voice walkthrough — in-post player: audio + the image the critic was
+// looking at, with their pointer replayed over it.
+.npn-voice-walkthrough {
+  margin: 0 0 1rem;
+
+  &__bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+
+    audio {
+      flex: 1 1 16rem;
+      min-width: 0;
+      max-width: 100%;
+      margin: 0;
+    }
+  }
+
+  &__stage {
+    margin-top: 0.6rem;
+  }
+
+  &__frame {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    line-height: 0;
+    // The pointer must never be clipped at the image edge.
+    overflow: visible;
+  }
+
+  &__image {
+    display: block;
+    max-width: 100%;
+    max-height: 80vh;
+    width: auto;
+    height: auto;
+    border-radius: var(--d-border-radius);
+  }
+
+  &__cursor {
+    position: absolute;
+    width: 1.4rem;
+    height: 1.4rem;
+    margin: -0.7rem 0 0 -0.7rem;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: rgb(255 80 60 / 55%);
+    box-shadow:
+      0 0 0 1px rgb(0 0 0 / 55%),
+      0 1px 6px rgb(0 0 0 / 45%);
+    pointer-events: none;
+
+    &.--pressed::after {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      animation: npn-voice-walkthrough-press 0.6s ease-out forwards;
+    }
+  }
+
+  &__hint {
+    margin: 0.4rem 0 0;
+    font-size: var(--font-down-1);
+    line-height: var(--line-height-medium);
+    color: var(--primary-medium);
+  }
+}
+
+@keyframes npn-voice-walkthrough-press {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+// Annotation pills that jump the voice walkthrough to the moment the
+// critic pointed at that mark. The small triangle is the only visual
+// change, so pills without a moment look exactly as before.
+.npn-annotation-badge--jump {
+  cursor: pointer;
+
+  &::after {
+    content: "";
+    display: inline-block;
+    margin-left: 0.3em;
+    border-style: solid;
+    border-width: 0.28em 0 0.28em 0.42em;
+    border-color: transparent transparent transparent currentcolor;
+    vertical-align: 0.05em;
+    opacity: 0.85;
+  }
+
+  &:hover,
+  &:focus-visible {
+    filter: brightness(1.12);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tertiary);
+    outline-offset: 2px;
+  }
+}

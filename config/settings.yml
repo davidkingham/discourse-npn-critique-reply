@@ -98,3 +98,21 @@ plugins:
   npn_critique_reply_rich_editor_experiment:
     default: true
     client: true
+
+  # EXPERIMENTAL (spike): let a critic record a short voice note in the
+  # Critique Workspace. The recording is uploaded through the normal
+  # uploads endpoint and embedded in the reply as a standard audio
+  # player. The recorded file type (m4a, ogg or webm, depending on the
+  # browser) must also be listed in the core `authorized_extensions`
+  # setting, or the upload is refused. Off by default.
+  npn_critique_reply_voice_note_experiment:
+    default: false
+    client: true
+
+  # Longest voice note a critic can record, in seconds. Recording stops
+  # on its own at the cap.
+  npn_critique_reply_voice_note_max_seconds:
+    default: 180
+    min: 15
+    max: 600
+    client: true

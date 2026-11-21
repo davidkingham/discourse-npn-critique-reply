@@ -32,6 +32,16 @@ import { and, eq, or } from "discourse/truth-helpers";
 import { i18n } from "discourse-i18n";
 import NpnCritiqueImageReference from "../npn-critique-image-reference";
 import NpnProjectWall from "../npn-project-wall";
+import NpnCritiqueVoiceRecorder from "../npn-critique-voice-recorder";
+import {
+  buildVoiceNoteDraft,
+  buildVoiceNotePayload,
+  parseVoiceNoteFromRaw,
+  PointerTimelineCapture,
+  transformKey,
+  voiceNoteFromPayload,
+  voiceNoteMarkdown,
+} from "../../lib/npn-critique-reply-voice-note";
 import {
   annotationLabelToBadgeSuffix,
   decorateAnnotationTokens,
@@ -686,6 +696,13 @@ export default class NpnCritiqueReplyModal extends Component {
   //   processingExampleError     — { stage, message } when the last
   //                                upload failed; cleared on retry.
   @tracked processingExample = null;
+  // Voice note (experimental, `npn_critique_reply_voice_note_experiment`):
+  // the uploaded recording (plus its pointer timeline), or null. Saved
+  // with the server draft as `voice_note`, so it survives minimizing,
+  // closing and resuming on another device.
+  @tracked voiceNote = null;
+  // Live pointer capture for the take in progress (null between takes).
+  _voicePointerCapture = null;
   @tracked processingExampleUploading = false;
   @tracked processingExampleError = null;
 
@@ -922,6 +939,8 @@ export default class NpnCritiqueReplyModal extends Component {
   _restoringDraft = false;
 
   willDestroy() {
+    this._voicePointerCapture?.capture.stop();
+    this._voicePointerCapture = null;
     super.willDestroy(...arguments);
     this._destroyed = true;
     this._autosaver?.destroy?.();
@@ -2822,8 +2841,144 @@ export default class NpnCritiqueReplyModal extends Component {
 
   get hasUnsavedText() {
     return (
-      this.overallCritiqueText.trim().length > 0 || this.hasAnyImageNotes
+      this.overallCritiqueText.trim().length > 0 ||
+      this.hasAnyImageNotes ||
+      this.hasVoiceNote
     );
+  }
+
+  // ---- Voice note (experimental) ---------------------------------------
+
+  get voiceNoteAvailable() {
+    return !!this.siteSettings.npn_critique_reply_voice_note_experiment;
+  }
+
+  // A note restored from a posted reply still counts when the setting
+  // has since been turned off — otherwise an unrelated edit would
+  // silently delete the recording from the post.
+  get hasVoiceNote() {
+    return !!this.voiceNote;
+  }
+
+  @action
+  setVoiceNote(voiceNote) {
+    this.voiceNote = voiceNote ?? null;
+    if (voiceNote) {
+      this.validationMessage = null;
+    }
+    // Save right away rather than waiting for the next keystroke: a
+    // finished take is the most expensive thing in the draft to lose.
+    if (!this._restoringDraft) {
+      this._autosaver?.schedule?.();
+    }
+  }
+
+  // The recorder started a take: also record where the critic's pointer
+  // is over the reference image, so the post can replay it in sync with
+  // the audio. Tied to the image on screen NOW — if they switch images
+  // mid-take the pointer simply reads as "off the image" until they
+  // come back.
+  @action
+  startVoicePointerCapture() {
+    this._voicePointerCapture?.capture.stop();
+    const imageIndex = this._selectedImageIndex;
+    const capture = new PointerTimelineCapture({
+      resolveTarget: () =>
+        this._selectedImageIndex === imageIndex
+          ? document.querySelector(
+              ".npn-critique-reply-modal .npn-critique-image-reference__img"
+            )
+          : null,
+    });
+    this._voicePointerCapture = {
+      capture,
+      imageIndex,
+      imageTransform: this._imageTransformForIndex(imageIndex),
+    };
+    capture.start();
+  }
+
+  // The take ended. Returns the fields the recorder merges into the
+  // note it hands to `setVoiceNote` (nothing when the take was thrown
+  // away or the pointer never touched the image).
+  @action
+  stopVoicePointerCapture({ discarded } = {}) {
+    const session = this._voicePointerCapture;
+    this._voicePointerCapture = null;
+    if (!session) {
+      return null;
+    }
+    const timeline = session.capture.stop();
+    if (discarded || timeline.points.length < 3) {
+      return null;
+    }
+    return {
+      timeline,
+      imageIndex: session.imageIndex,
+      imageTransform: session.imageTransform,
+    };
+  }
+
+  // `voice_note` request payload. The pointer timeline only goes along
+  // when there is an image it still lines up with:
+  //   • the image must be oriented as it was during the take (a later
+  //     rotate / flip moves everything the pointer was over), and
+  //   • the replay image is that image's flattened visual-notes export
+  //     when this post has one (so the marks being discussed are
+  //     visible), otherwise the plain source image — which only matches
+  //     when no rotate / flip is applied.
+  // Otherwise the audio still posts, without the pointer.
+  _buildVoiceNotePayload(visualBlocks) {
+    const note = this.voiceNote;
+    if (!note) {
+      return null;
+    }
+    let stageImageUrl = null;
+    if (note.timeline) {
+      const index = note.imageIndex ?? 0;
+      const current = this._imageTransformForIndex(index);
+      if (transformKey(current) === transformKey(note.imageTransform)) {
+        const block = (visualBlocks ?? []).find((b) => b.index === index);
+        stageImageUrl =
+          block?.upload?.url ??
+          (current ? null : this._sourceUrlForImageIndex(index));
+      }
+    }
+    return buildVoiceNotePayload(note, { stageImageUrl });
+  }
+
+  _composeVoiceNoteBlock() {
+    return voiceNoteMarkdown(
+      this.voiceNote,
+      i18n("npn_critique_reply.modal.voice_note.embed_label")
+    );
+  }
+
+  // Edit mode: carry a previously posted voice note over. Prefer the
+  // stored `npn_voice_note` payload (it has the pointer timeline); fall
+  // back to finding the audio embed in the reply's markdown — fetching
+  // the raw when the post model doesn't have it loaded.
+  async _restoreVoiceNoteFromPost(post) {
+    // Called from the constructor, i.e. inside the modal's first render
+    // computation. Yield first so no tracked state is read or written
+    // in that frame — Glimmer asserts on a read-then-write there (and
+    // `_recordError` reads enough state to trip the same assertion).
+    await Promise.resolve();
+    try {
+      const stored = voiceNoteFromPayload(post.npn_voice_note);
+      if (stored) {
+        this.voiceNote = stored;
+        return;
+      }
+      const raw =
+        post.raw ?? (await ajax(`/posts/${post.id}.json`))?.raw ?? "";
+      if (this._destroyed || this.voiceNote) {
+        return;
+      }
+      this.voiceNote = parseVoiceNoteFromRaw(raw);
+    } catch (e) {
+      this._recordError("voice_note_restore", e, null, "warn");
+    }
   }
 
   // Sync path — used when there's no headed visual-notes / example
@@ -3320,6 +3475,11 @@ export default class NpnCritiqueReplyModal extends Component {
     const parts = [];
     if (overallText) {
       parts.push(overallText);
+    }
+    // Voice note sits with the overall critique, ahead of the per-image
+    // sections — it is the critic talking about the work as a whole.
+    if (this.hasVoiceNote) {
+      parts.push(this._composeVoiceNoteBlock());
     }
     for (const section of imageSections) {
       parts.push(section);
@@ -8767,6 +8927,10 @@ export default class NpnCritiqueReplyModal extends Component {
           })
         : null;
 
+      // Voice-note metadata (experimental): the recording's upload
+      // plus the pointer timeline captured while the critic talked.
+      const voiceNotePayload = this._buildVoiceNotePayload(visualBlocks);
+
       // Edit mode → PUT /posts/:id/critique (PostRevisor + custom
       // field replace). New-critique mode → POST /topics/:id/replies.
       // Same payload shape; the server endpoint difference is the
@@ -8777,14 +8941,16 @@ export default class NpnCritiqueReplyModal extends Component {
             raw,
             selectedKey,
             visualNotes,
-            processingExamplePayload
+            processingExamplePayload,
+            voiceNotePayload
           )
         : await postCritiqueRequest(
             topicId,
             raw,
             selectedKey,
             visualNotes,
-            processingExamplePayload
+            processingExamplePayload,
+            voiceNotePayload
           );
       if (this._destroyed) {
         // Post was created server-side; modal is gone. MessageBus will
@@ -9634,6 +9800,8 @@ export default class NpnCritiqueReplyModal extends Component {
             filename: this.processingExample.filename ?? null,
           }
         : null,
+      // Voice note (experimental): recording + pointer timeline.
+      voice_note: buildVoiceNoteDraft(this.voiceNote),
       // Persisted large-image view selection. "reference" or
       // "processing_example". Sent regardless of whether an example
       // exists — the server whitelists the value and the restore
@@ -9695,6 +9863,7 @@ export default class NpnCritiqueReplyModal extends Component {
       return;
     }
     const payload = post.npn_visual_notes;
+    this._restoreVoiceNoteFromPost(post);
     // Posts written under the v2 schema store overall critique + per-
     // image notes structurally in the payload, so we restore them
     // directly and never re-parse the prose body (which can't reliably
@@ -9981,6 +10150,14 @@ export default class NpnCritiqueReplyModal extends Component {
       // turns the setting off. The example is silently dropped
       // rather than retained-but-hidden so it can't bleed into the
       // next save.
+      // Voice note. Restored even when the experiment has since been
+      // turned off — the recording exists and would otherwise be lost
+      // silently; the critic can still post or (via edit) remove it.
+      const draftVoiceNote = voiceNoteFromPayload(draft.voice_note);
+      if (draftVoiceNote) {
+        this.voiceNote = draftVoiceNote;
+      }
+
       if (draft.processing_example && this.processingExampleAvailable) {
         this.processingExample = normalizeProcessingExampleFromServer(
           draft.processing_example
@@ -10433,6 +10610,8 @@ export default class NpnCritiqueReplyModal extends Component {
     // not "everything except the uploaded example".
     this.processingExample = null;
     this.processingExampleError = null;
+    // …and so is the voice note.
+    this.voiceNote = null;
     this.largeImageView = LARGE_IMAGE_VIEW_REFERENCE;
     this.projectView = PROJECT_VIEW_WALL;
     this.projectSuggestion = null;
@@ -12412,6 +12591,19 @@ export default class NpnCritiqueReplyModal extends Component {
                   single-image critiques until there's something to put
                   there. The editor's accessible name is carried by a
                   visually-hidden <label> below (see writingPanelHeading). }}
+              {{#if this.voiceNoteAvailable}}
+                <NpnCritiqueVoiceRecorder
+                  class="npn-critique-reply-modal__voice-note"
+                  @voiceNote={{this.voiceNote}}
+                  @onChange={{this.setVoiceNote}}
+                  @onRecordingStart={{this.startVoicePointerCapture}}
+                  @onRecordingStop={{this.stopVoicePointerCapture}}
+                  @capturesPointer={{this.hasImage}}
+                  @topicId={{this.topic.id}}
+                  @disabled={{this.isPosting}}
+                />
+              {{/if}}
+
               <div class="npn-critique-reply-modal__editor-header">
                 <div
                   class="npn-critique-reply-modal__context-switcher"

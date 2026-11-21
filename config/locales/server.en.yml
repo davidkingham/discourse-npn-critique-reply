@@ -16,3 +16,5 @@ en:
     npn_critique_reply_visual_notes_allowed_group_ids: "Groups whose members may use Visual Notes in addition to staff. Leave empty for staff-only access."
     npn_critique_reply_server_drafts_enabled: "Save critique workspace drafts (text + selected image version + annotations) on the server so the user can pick up where they left off across browsers and devices. Drafts are scoped per user / per topic."
     npn_critique_reply_draft_ttl_days: "Discard saved drafts older than this many days of inactivity. Each autosave bumps the timestamp, so the window only counts down once the user stops touching the draft. Set to 0 to disable expiry."
+    npn_critique_reply_voice_note_experiment: "EXPERIMENTAL: let critics record a short voice note in the Critique Workspace. It is posted as a standard audio player in the reply. The recorded file type (m4a, ogg or webm, depending on the browser) must also be allowed in the 'authorized extensions' setting."
+    npn_critique_reply_voice_note_max_seconds: "Longest voice note a critic can record, in seconds. Recording stops on its own at this limit."

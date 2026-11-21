@@ -3,14 +3,15 @@ import { buildQuote } from "discourse/lib/quote";
 import Composer from "discourse/models/composer";
 import Draft from "discourse/models/draft";
 import { i18n } from "discourse-i18n";
+import NpnCritiqueReplyModal from "../components/modal/npn-critique-reply-modal";
 import NpnCritiqueDock from "../components/npn-critique-dock";
 import NpnCritiqueReplyInvitationPanel from "../components/npn-critique-reply-invitation-panel";
 import NpnCritiqueReplyStartButton from "../components/npn-critique-reply-start-button";
 import NpnEditVisualCritiqueButton from "../components/npn-edit-visual-critique-button";
-import NpnCritiqueReplyModal from "../components/modal/npn-critique-reply-modal";
 import { decorateCriticueReplyAnnotations } from "../lib/npn-critique-reply-annotation-badges";
 import annotationPillExtension from "../lib/npn-critique-reply-annotation-pill-extension";
 import { isCritiqueEligible } from "../lib/npn-critique-reply-eligibility";
+import { decorateVoiceWalkthrough } from "../lib/npn-critique-reply-voice-walkthrough";
 
 // Wires up three things:
 //
@@ -207,6 +208,15 @@ export default apiInitializer((api) => {
 
   api.decorateCookedElement(decorateCriticueReplyAnnotations, {
     id: "npn-critique-reply-annotation-badges",
+    onlyStream: true,
+  });
+
+  // Voice walkthrough (experimental): a critique reply's voice note
+  // gets the image the critic was looking at, with their pointer
+  // replayed over it in sync with the audio. No-op for every post
+  // without an `npn_voice_note` pointer timeline.
+  api.decorateCookedElement(decorateVoiceWalkthrough, {
+    id: "npn-critique-reply-voice-walkthrough",
     onlyStream: true,
   });
 

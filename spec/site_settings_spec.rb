@@ -50,4 +50,9 @@ describe SiteSetting do
       SiteSetting.defaults[:npn_critique_reply_rich_editor_experiment],
     ).to eq(true)
   end
+
+  it "registers the voice note experiment (default: off, 180s cap)" do
+    expect(SiteSetting.defaults[:npn_critique_reply_voice_note_experiment]).to eq(false)
+    expect(SiteSetting.defaults[:npn_critique_reply_voice_note_max_seconds]).to eq(180)
+  end
 end

@@ -188,6 +188,9 @@ module DiscourseNpnCritiqueReply
         # missing and nil as "no example".
         "processing_example" =>
           ProcessingExampleNormalizer.normalize_for_draft(payload["processing_example"]),
+        # Voice note (experimental): the uploaded recording plus the
+        # pointer timeline captured with it. Nil when there is none.
+        "voice_note" => VoiceNoteNormalizer.normalize_for_draft(payload["voice_note"]),
         # Persisted large-image view selection. Null when missing or
         # when the value isn't in the whitelist; client restore falls
         # back to its auto-switch default in that case.

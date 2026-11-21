@@ -61,6 +61,9 @@ register_svg_icon "right-left"
 # "Inspect detail" zoom button on the reference image — opens the
 # full-resolution PhotoSwipe lightbox so critics can check sharpness.
 register_svg_icon "magnifying-glass-plus"
+# Voice note recorder (experimental): Record / Stop buttons.
+register_svg_icon "microphone"
+register_svg_icon "stop"
 
 # Optional FontAwesome Pro LIGHT variants of the visual-notes toolbar
 # icons are registered inside after_initialize (below), where the plugin's
@@ -103,6 +106,7 @@ after_initialize do
   require_relative "lib/discourse_npn_critique_reply/draft_store"
   require_relative "lib/discourse_npn_critique_reply/visual_notes_normalizer"
   require_relative "lib/discourse_npn_critique_reply/processing_example_normalizer"
+  require_relative "lib/discourse_npn_critique_reply/voice_note_normalizer"
   require_relative "app/controllers/discourse_npn_critique_reply/critique_replies_controller"
   require_relative "app/controllers/discourse_npn_critique_reply/drafts_controller"
 
@@ -121,6 +125,14 @@ after_initialize do
   # carry both — visual notes block + processing example block — and
   # each is cleared independently on edit.
   register_post_custom_field_type("npn_processing_example", :json)
+
+  # Voice-note metadata (experimental): which upload is the critic's
+  # recording, plus the pointer timeline captured while they talked, so
+  # the post can replay where they were pointing in sync with the
+  # audio. The audio itself is a normal upload embedded in the post
+  # body; without this field the post still plays, just without the
+  # pointer.
+  register_post_custom_field_type("npn_voice_note", :json)
 
   # These topic custom fields are populated by sibling plugins
   # (discourse-npn-submissions, discourse-revised-critique-image), but we
@@ -189,6 +201,18 @@ after_initialize do
         object.custom_fields["npn_processing_example"].present?
     end,
   ) { object.custom_fields["npn_processing_example"] }
+
+  # Voice-note payload: read by the cooked-post decorator that builds
+  # the walkthrough player, and by the workspace when a critique is
+  # reopened for editing. Same restrictions as the fields above.
+  add_to_serializer(
+    :post,
+    :npn_voice_note,
+    include_condition: -> do
+      SiteSetting.npn_critique_reply_enabled && scope&.user.present? &&
+        object.custom_fields["npn_voice_note"].present?
+    end,
+  ) { object.custom_fields["npn_voice_note"] }
 
   # Mount the engine at root — `config/routes.rb` carries the full
   # `/npn-critique-reply/...` prefix, matching the URL the client uses.
