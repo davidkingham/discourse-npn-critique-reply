@@ -45,7 +45,7 @@ module DiscourseNpnCritiqueReply
     def normalize(payload, raw:)
       out = normalize_audio(payload)
       return nil if out.nil?
-      return nil unless raw.to_s.include?(out["upload"]["short_url"])
+      return nil if raw.to_s.exclude?(out["upload"]["short_url"])
 
       # A timeline is only useful with an image to replay it over.
       stage_image_url = normalize_url(payload["stage_image_url"] || payload[:stage_image_url])
