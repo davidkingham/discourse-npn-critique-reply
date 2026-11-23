@@ -3,6 +3,7 @@ import { service } from "@ember/service";
 import DButton from "discourse/ui-kit/d-button";
 import dConcatClass from "discourse/ui-kit/helpers/d-concat-class";
 import { i18n } from "discourse-i18n";
+import { shortDisplayName } from "../lib/npn-critique-reply-display-name";
 
 // Replacement for core's post-menu Reply button
 // (frontend/discourse/app/components/post/menu/buttons/reply.gjs) that
@@ -33,18 +34,8 @@ export default class NpnReplyToNameButton extends Component {
     );
   }
 
-  // First name when the site leads with full names, otherwise the
-  // username. Kept short on purpose — the post menu is a tight row.
   get displayName() {
-    const post = this.args.post;
-    if (!post?.username) {
-      return null;
-    }
-    if (this.siteSettings.prioritize_username_in_ux) {
-      return post.username;
-    }
-    const firstName = post.name?.trim().split(/\s+/)[0];
-    return firstName || post.username;
+    return shortDisplayName(this.args.post, this.siteSettings);
   }
 
   get label() {

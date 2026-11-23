@@ -57,6 +57,13 @@ plugins:
     list_type: compact
     client: true
 
+  # Topic authors get a "Respond to critiques" footer button that opens
+  # one reply pre-filled with an @mention for each critic they haven't
+  # answered yet. Needs the footer takeover.
+  npn_critique_reply_respond_to_critiques:
+    default: true
+    client: true
+
   # Per-post Reply buttons read "Reply to <name>".
   npn_critique_reply_named_reply_buttons:
     default: true

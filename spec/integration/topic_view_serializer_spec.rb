@@ -188,4 +188,34 @@ describe TopicViewSerializer do
       expect(serialized.key?(:npn_critique_reply_has_draft)).to eq(false)
     end
   end
+
+  describe "npn_critique_reply_unanswered_critics" do
+    fab!(:critic) { Fabricate(:user, username: "critic") }
+    fab!(:critique) { Fabricate(:post, topic: topic, user: critic) }
+
+    before { SiteSetting.npn_critique_reply_enabled = true }
+
+    it "lists waiting critics for the topic author" do
+      expect(serialized[:npn_critique_reply_unanswered_critics]).to eq(
+        [{ username: "critic", name: critic.name }],
+      )
+    end
+
+    it "is not sent to anyone else" do
+      json =
+        described_class.new(
+          TopicView.new(topic.id, critic),
+          scope: Guardian.new(critic),
+          root: false,
+        ).as_json
+
+      expect(json).not_to have_key(:npn_critique_reply_unanswered_critics)
+    end
+
+    it "is not sent when the setting is off" do
+      SiteSetting.npn_critique_reply_respond_to_critiques = false
+
+      expect(serialized).not_to have_key(:npn_critique_reply_unanswered_critics)
+    end
+  end
 end

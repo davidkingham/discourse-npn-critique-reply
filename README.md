@@ -84,6 +84,7 @@ All settings live under **Admin → Settings → Plugins** (filter: `npn_critiqu
 | `npn_critique_reply_button_label` | "Start a Critique" | Footer button label. |
 | `npn_critique_reply_footer_takeover` | `true` | One footer reply button chosen by viewer (Start a Critique for a first-time critic; "Reply to topic" or the category label otherwise); hides the native Reply. Off → Start a Critique beside the native Reply. |
 | `npn_critique_reply_footer_reply_labels` | "" | Footer reply label per category, entries written `category:Label` (id, slug, or `parent/child` slug). Unlisted → "Reply to topic". |
+| `npn_critique_reply_respond_to_critiques` | `true` | Authors get a "Respond to critiques" footer button: one reply pre-filled with an @mention per unanswered critic. |
 | `npn_critique_reply_named_reply_buttons` | `true` | Per-post Reply buttons read "Reply to <name>". |
 | `npn_critique_reply_visual_notes_enabled` | `false` | Enable the visual-annotation canvas. |
 | `npn_critique_reply_visual_notes_allowed_group_ids` | "" | Groups allowed to use visual notes (empty → all eligible critics). |

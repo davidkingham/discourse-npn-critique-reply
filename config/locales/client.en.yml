@@ -42,6 +42,15 @@ en:
         another_critique: "Add another critique"
         quick_comment: "or leave a quick comment"
         quick_comment_title: "Post a normal reply without opening the critique workspace"
+        # Topic author, with critics waiting on a response: one reply
+        # pre-filled with an @mention for each of them.
+        respond_one: "Respond to %{name}"
+        respond_many:
+          one: "Respond to %{count} critique"
+          other: "Respond to %{count} critiques"
+        respond_title: "Write one reply that mentions everyone you haven't answered yet, so each person gets a single notification"
+        plain_reply: "or reply without mentions"
+        plain_reply_title: "Post a normal reply to the topic"
 
       # Compact, single-action invitation panel rendered below the OP
       # on eligible critique topics. The panel is a second entry point

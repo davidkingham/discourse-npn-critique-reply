@@ -30,6 +30,8 @@ register_svg_icon "highlighter"
 # `circle-check` was the legacy Strong Area button; kept registered
 # for the same reason as `highlighter`.
 register_svg_icon "circle-check"
+# `reply-all` is the author's "Respond to critiques" footer button.
+register_svg_icon "reply-all"
 # `arrow-right` is the Direction Arrow tool button — one-way arrow for
 # "this leads my eye toward..." use cases.
 register_svg_icon "arrow-right"
@@ -107,6 +109,7 @@ after_initialize do
   require_relative "lib/discourse_npn_critique_reply/visual_notes_normalizer"
   require_relative "lib/discourse_npn_critique_reply/processing_example_normalizer"
   require_relative "lib/discourse_npn_critique_reply/voice_note_normalizer"
+  require_relative "lib/discourse_npn_critique_reply/unanswered_critics"
   require_relative "app/controllers/discourse_npn_critique_reply/critique_replies_controller"
   require_relative "app/controllers/discourse_npn_critique_reply/drafts_controller"
 
@@ -170,6 +173,20 @@ after_initialize do
       topic_id: object.topic.id,
     )
   end
+
+  # For the topic AUTHOR only: the critics still waiting on a response,
+  # as [{ username, name }]. Drives the "Respond to critiques" footer
+  # button, which opens one reply pre-filled with an @mention each (see
+  # UnansweredCritics for what counts as answered).
+  add_to_serializer(
+    :topic_view,
+    :npn_critique_reply_unanswered_critics,
+    include_condition: -> do
+      SiteSetting.npn_critique_reply_enabled &&
+        SiteSetting.npn_critique_reply_respond_to_critiques && scope&.user.present? &&
+        object.topic.user_id == scope.user.id
+    end,
+  ) { DiscourseNpnCritiqueReply::UnansweredCritics.for(topic: object.topic, user: scope.user) }
 
   # Surface the stored visual-notes payload on the Post JSON so the
   # client can reopen a critique reply for editing. Restricted to

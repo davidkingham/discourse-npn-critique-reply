@@ -1,17 +1,33 @@
 import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
-import { action } from "@ember/object";
+import { action, get } from "@ember/object";
 import { getOwner } from "@ember/owner";
 import { service } from "@ember/service";
+import Composer from "discourse/models/composer";
+import Draft from "discourse/models/draft";
 import DButton from "discourse/ui-kit/d-button";
 import { i18n } from "discourse-i18n";
-import { isCritiqueEligible } from "../lib/npn-critique-reply-eligibility";
+import { shortDisplayName } from "../lib/npn-critique-reply-display-name";
+import {
+  isCritiqueEligible,
+  isCritiqueTopic,
+} from "../lib/npn-critique-reply-eligibility";
 import { footerReplyLabelFor } from "../lib/npn-critique-reply-footer-labels";
 import NpnCritiqueReplyModal, {
   CRITIQUE_POSTED_EVENT,
   DRAFT_CHANGED_EVENT,
 } from "./modal/npn-critique-reply-modal";
 import NpnCritiqueReplyStartButton from "./npn-critique-reply-start-button";
+
+// Lower-cased usernames @mentioned in `text`. Usernames may contain dots
+// and hyphens but can't end with one, so "thanks @sarah." is `sarah`.
+function mentionedUsernames(text) {
+  return new Set(
+    [...(text ?? "").matchAll(/@([\w.-]+)/g)].map((match) =>
+      match[1].toLowerCase().replace(/[.-]+$/, "")
+    )
+  );
+}
 
 // The topic footer's reply area, rendered into
 // `topic-footer-main-buttons-before-create`.
@@ -24,6 +40,11 @@ import NpnCritiqueReplyStartButton from "./npn-critique-reply-start-button";
 //       → [Start a Critique]  "or leave a quick comment"
 //   critique topic, not the author, already posted
 //       → [Add another critique]  [Reply to topic]
+//   critique topic, the author, critics still waiting on a response
+//       → [Respond to 3 critiques]  "or reply without mentions"
+//         One reply pre-filled with an @mention per waiting critic, so
+//         each gets a single notification instead of the author posting
+//         a separate reply under every critique.
 //   everything else (the author, non-critique categories, people outside
 //   the critique groups)
 //       → [Reply to topic], or the category's label from
@@ -56,6 +77,7 @@ export default class NpnCritiqueReplyFooterButtons extends Component {
   // reply is posted. `null` → no override, use the serializer value.
   @tracked _hasDraftOverride = null;
   @tracked _postedOverride = null;
+  @tracked _unansweredOverride = null;
 
   constructor() {
     super(...arguments);
@@ -85,13 +107,37 @@ export default class NpnCritiqueReplyFooterButtons extends Component {
 
   // Core fires this after the normal composer creates a post.
   _onPostCreated(post) {
-    if (post?.topic_id && post.topic_id === this.topic?.id) {
-      this._postedOverride = true;
+    if (!post?.topic_id || post.topic_id !== this.topic?.id) {
+      return;
+    }
+    this._postedOverride = true;
+
+    // The author just answered some critics: drop everyone this post
+    // replies to or @mentions, mirroring the server's rule, so the
+    // button's count is right without a reload.
+    const waiting = this.unansweredCritics;
+    if (waiting.length > 0 && post.user_id === this.currentUser?.id) {
+      const addressed = mentionedUsernames(post.raw);
+      const repliedTo =
+        post.reply_to_user?.username ?? post.get?.("reply_to_user.username");
+      if (repliedTo) {
+        addressed.add(repliedTo.toLowerCase());
+      }
+      this._unansweredOverride = waiting.filter(
+        (critic) => !addressed.has(critic.username.toLowerCase())
+      );
     }
   }
 
   get topic() {
     return this.args.outletArgs?.topic;
+  }
+
+  // Serializer values are plain properties on the topic model, which core
+  // overwrites in place when it reloads the topic. Reading through `get`
+  // subscribes to that, so the buttons follow a reload.
+  _topicValue(key) {
+    return this.topic ? get(this.topic, key) : undefined;
   }
 
   // The outlet also renders in footers where core hides its own Reply
@@ -127,22 +173,55 @@ export default class NpnCritiqueReplyFooterButtons extends Component {
     if (this._postedOverride !== null) {
       return this._postedOverride;
     }
-    return !!this.topic?.posted;
+    return !!this._topicValue("posted");
   }
 
   get hasDraft() {
     if (this._hasDraftOverride !== null) {
       return this._hasDraftOverride;
     }
-    return !!this.topic?.npn_critique_reply_has_draft;
+    return !!this._topicValue("npn_critique_reply_has_draft");
   }
 
-  // "critique-first" | "reply-first" | "reply-only"
+  // Critics the author hasn't answered yet, `[{ username, name }]`. The
+  // serializer only sends this to the topic's author.
+  get unansweredCritics() {
+    return (
+      this._unansweredOverride ??
+      this._topicValue("npn_critique_reply_unanswered_critics") ??
+      []
+    );
+  }
+
+  // "respond" | "critique-first" | "reply-first" | "reply-only"
   get mode() {
-    if (!this.critiqueEligible || this.isAuthor) {
+    if (this.isAuthor) {
+      return this.siteSettings.npn_critique_reply_respond_to_critiques &&
+        this.unansweredCritics.length > 0 &&
+        isCritiqueTopic({ topic: this.topic, siteSettings: this.siteSettings })
+        ? "respond"
+        : "reply-only";
+    }
+    if (!this.critiqueEligible) {
       return "reply-only";
     }
     return this.hasPosted ? "reply-first" : "critique-first";
+  }
+
+  get respond() {
+    return this.mode === "respond";
+  }
+
+  get respondLabel() {
+    const critics = this.unansweredCritics;
+    if (critics.length === 1) {
+      return i18n("npn_critique_reply.footer.respond_one", {
+        name: shortDisplayName(critics[0], this.siteSettings),
+      });
+    }
+    return i18n("npn_critique_reply.footer.respond_many", {
+      count: critics.length,
+    });
   }
 
   get critiqueFirst() {
@@ -212,11 +291,79 @@ export default class NpnCritiqueReplyFooterButtons extends Component {
     getOwner(this).lookup("controller:topic")?.replyToPost();
   }
 
+  // One reply addressed to everyone still waiting: an @mention per critic,
+  // each on its own line with room to write underneath. Mentions already
+  // in the text (an open composer, or a saved draft) aren't repeated.
+  _mentionBlock(existing = "") {
+    const already = mentionedUsernames(existing);
+    return this.unansweredCritics
+      .filter((critic) => !already.has(critic.username.toLowerCase()))
+      .map((critic) => `@${critic.username} `)
+      .join("\n\n");
+  }
+
+  @action
+  async respondToCritiques() {
+    const topic = this.topic;
+    const composer = getOwner(this).lookup("service:composer");
+
+    // A reply to this topic is already open → add the missing mentions to
+    // it rather than replacing what the author has written.
+    if (
+      composer.model?.topic?.id === topic.id &&
+      composer.model.action === Composer.REPLY
+    ) {
+      const block = this._mentionBlock(composer.model.reply ?? "");
+      composer.model.set("composeState", Composer.OPEN);
+      if (block) {
+        this.appEvents.trigger("composer:insert-block", block);
+      }
+      return;
+    }
+
+    // Otherwise open a reply to the topic, merging into a saved draft the
+    // same way core's `replyToPost` does.
+    const opts = {
+      action: Composer.REPLY,
+      draftKey: topic.draft_key,
+      draftSequence: topic.draft_sequence,
+      topic,
+    };
+    let existing = "";
+    try {
+      const draftData = await Draft.get(opts.draftKey);
+      if (draftData?.draft) {
+        existing = JSON.parse(draftData.draft).reply ?? "";
+        opts.draftSequence = draftData.draft_sequence;
+      }
+    } catch {
+      // No readable draft — start from the mentions alone.
+    }
+    const block = this._mentionBlock(existing);
+    opts.reply = [existing.trimEnd(), block].filter(Boolean).join("\n\n");
+    composer.open(opts);
+  }
+
   <template>
     {{#if this.takeover}}
       {{#if this.canReply}}
         <span class="npn-footer-reply npn-footer-reply--{{this.mode}}">
-          {{#if this.critiqueFirst}}
+          {{#if this.respond}}
+            <DButton
+              class="btn-primary topic-footer-button npn-footer-reply__btn npn-footer-reply__respond"
+              @action={{this.respondToCritiques}}
+              @icon="reply-all"
+              @translatedLabel={{this.respondLabel}}
+              @title="npn_critique_reply.footer.respond_title"
+            />
+            <DButton
+              class="btn-transparent npn-footer-reply__quick"
+              @action={{this.replyToTopic}}
+              @icon="reply"
+              @label="npn_critique_reply.footer.plain_reply"
+              @title="npn_critique_reply.footer.plain_reply_title"
+            />
+          {{else if this.critiqueFirst}}
             <DButton
               class="btn-primary topic-footer-button npn-footer-reply__btn npn-critique-reply-start"
               @action={{this.startCritique}}

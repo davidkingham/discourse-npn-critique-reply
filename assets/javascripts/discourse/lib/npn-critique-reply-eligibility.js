@@ -20,6 +20,27 @@ export function parseIdList(value) {
     .filter((n) => Number.isInteger(n) && n > 0);
 }
 
+// True when `topic` is a critique topic at all, whoever is looking: the
+// category allow-list, or (empty list) submission metadata on the topic.
+// The author's "Respond to critiques" button uses this directly — authors
+// needn't be in the critic groups to answer their own critiques.
+export function isCritiqueTopic({ topic, siteSettings } = {}) {
+  if (!topic || !siteSettings?.npn_critique_reply_enabled) {
+    return false;
+  }
+  const enabledCategoryIds = parseIdList(
+    siteSettings.npn_critique_reply_enabled_category_ids
+  );
+  if (enabledCategoryIds.length === 0) {
+    // Empty list → only topics whose serializer surfaced
+    // `npn_critique_reply` metadata count as critique topics.
+    // Older project topics without submission metadata still qualify when
+    // the submissions plugin exposes their project images (tag fallback).
+    return !!(topic.npn_critique_reply || topic.npn_project_images);
+  }
+  return enabledCategoryIds.includes(topic.category_id);
+}
+
 // True when the current user may open the critique workspace for `topic`.
 // Mirrors the checks the footer button has always applied: feature on,
 // topic open + repliable, category allow-list (empty → require
@@ -38,18 +59,7 @@ export function isCritiqueEligible({ topic, siteSettings, currentUser } = {}) {
     return false;
   }
 
-  const enabledCategoryIds = parseIdList(
-    siteSettings.npn_critique_reply_enabled_category_ids
-  );
-  if (enabledCategoryIds.length === 0) {
-    // Empty list → only topics whose serializer surfaced
-    // `npn_critique_reply` metadata count as critique topics.
-    // Older project topics without submission metadata still qualify when
-    // the submissions plugin exposes their project images (tag fallback).
-    if (!topic.npn_critique_reply && !topic.npn_project_images) {
-      return false;
-    }
-  } else if (!enabledCategoryIds.includes(topic.category_id)) {
+  if (!isCritiqueTopic({ topic, siteSettings })) {
     return false;
   }
 
