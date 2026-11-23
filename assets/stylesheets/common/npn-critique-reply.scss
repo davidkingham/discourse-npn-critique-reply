@@ -19,6 +19,69 @@
   white-space: nowrap;
 }
 
+// The plugin-owned footer reply area (npn-critique-reply-footer-buttons.gjs).
+// While it is rendered, the native Reply button — a direct child of
+// `.topic-footer-main-buttons`, ours sit inside the outlet's span — is
+// hidden. If our component renders nothing, the native button stays.
+.topic-footer-main-buttons:has(.npn-footer-reply) > .btn.create {
+  display: none;
+}
+
+.npn-footer-reply {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+
+  // Same as core's `.create`: stay on the first row when the action
+  // buttons beside us wrap.
+  align-self: flex-start;
+  gap: 0.5rem;
+
+  .npn-footer-reply__btn {
+    white-space: nowrap;
+  }
+
+  // "or leave a quick comment" — an escape hatch, deliberately quieter
+  // than a button.
+  .npn-footer-reply__quick {
+    padding-inline: 0.25em;
+    font-size: var(--font-down-1);
+    color: var(--primary-medium);
+    text-decoration: underline;
+
+    .discourse-no-touch &:hover {
+      color: var(--primary);
+      background: transparent;
+    }
+
+    // The reply icon is only for the phone layout below.
+    .d-icon {
+      display: none;
+    }
+  }
+
+  // Phones: core hides every footer label (icons only), so the quick
+  // comment link becomes a plain reply icon button like its neighbours.
+  @media (width < 40rem) {
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    gap: 0.75rem;
+
+    .npn-footer-reply__quick {
+      padding: 0.5em 0.65em;
+      font-size: var(--font-up-1-rem);
+      color: var(--primary-high);
+      text-decoration: none;
+      background: var(--primary-low);
+
+      .d-icon {
+        display: inline-block;
+        color: var(--primary-high);
+      }
+    }
+  }
+}
+
 // Shared section heading used in both columns of the workspace modal —
 // uppercase, tight letterspacing, muted color. Visually consistent
 // header tier across "Reference image" / "The photographer asked for"

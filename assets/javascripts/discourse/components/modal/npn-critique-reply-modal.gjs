@@ -254,6 +254,10 @@ const DOCKED_HEADER_FALLBACK_PX = 64;
 // invitation panel listen and flip their copy to / from "Resume Draft"
 // without waiting for a page navigation. Payload: `{ topicId, hasDraft }`.
 export const DRAFT_CHANGED_EVENT = "npn-critique-reply:draft-changed";
+// Fired once a NEW critique (not an edit) has been posted from the
+// workspace, so the footer buttons can switch from "Start a Critique" to
+// "Reply to topic" without a page reload. Payload: `{ topicId }`.
+export const CRITIQUE_POSTED_EVENT = "npn-critique-reply:critique-posted";
 
 // Per-image annotation snapshots. Shallow-clone each annotation array
 // so a saved snapshot doesn't share refs with the active tracked
@@ -8961,6 +8965,10 @@ export default class NpnCritiqueReplyModal extends Component {
       if (this.siteSettings.npn_critique_reply_debug_enabled) {
         // eslint-disable-next-line no-console
         console.info("[npn-critique-reply] post-critique success", response);
+      }
+
+      if (!this.isEditing) {
+        this.appEvents?.trigger(CRITIQUE_POSTED_EVENT, { topicId });
       }
 
       const topicController = getOwner(this).lookup("controller:topic");

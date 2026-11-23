@@ -41,6 +41,27 @@ plugins:
     default: "Start a Critique"
     client: true
 
+  # The plugin owns the topic footer's reply area: one primary button
+  # chosen by who is looking, with the native Reply button hidden by CSS.
+  # Off → the old layout (Start a Critique beside the native Reply).
+  npn_critique_reply_footer_takeover:
+    default: true
+    client: true
+
+  # `category:Label` entries for the footer reply button, e.g.
+  # `learning/ama:Ask a question`. `category` is an id, a slug, or a
+  # parent/child slug path. Unlisted categories get "Reply to topic".
+  npn_critique_reply_footer_reply_labels:
+    default: ""
+    type: list
+    list_type: compact
+    client: true
+
+  # Per-post Reply buttons read "Reply to <name>".
+  npn_critique_reply_named_reply_buttons:
+    default: true
+    client: true
+
   npn_critique_reply_visual_notes_enabled:
     default: false
     client: true

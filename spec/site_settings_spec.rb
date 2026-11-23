@@ -31,6 +31,12 @@ describe SiteSetting do
     expect(SiteSetting.defaults[:npn_critique_reply_button_label]).to eq("Start a Critique")
   end
 
+  it "registers the footer reply button settings" do
+    expect(SiteSetting.defaults[:npn_critique_reply_footer_takeover]).to eq(true)
+    expect(SiteSetting.defaults[:npn_critique_reply_footer_reply_labels]).to eq("")
+    expect(SiteSetting.defaults[:npn_critique_reply_named_reply_buttons]).to eq(true)
+  end
+
   it "registers npn_critique_reply_visual_notes_enabled (default: false)" do
     expect(SiteSetting.respond_to?(:npn_critique_reply_visual_notes_enabled)).to eq(true)
     expect(SiteSetting.defaults[:npn_critique_reply_visual_notes_enabled]).to eq(false)

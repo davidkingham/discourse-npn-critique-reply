@@ -5,9 +5,10 @@ import Draft from "discourse/models/draft";
 import { i18n } from "discourse-i18n";
 import NpnCritiqueReplyModal from "../components/modal/npn-critique-reply-modal";
 import NpnCritiqueDock from "../components/npn-critique-dock";
+import NpnCritiqueReplyFooterButtons from "../components/npn-critique-reply-footer-buttons";
 import NpnCritiqueReplyInvitationPanel from "../components/npn-critique-reply-invitation-panel";
-import NpnCritiqueReplyStartButton from "../components/npn-critique-reply-start-button";
 import NpnEditVisualCritiqueButton from "../components/npn-edit-visual-critique-button";
+import NpnReplyToNameButton from "../components/npn-reply-to-name-button";
 import { decorateCriticueReplyAnnotations } from "../lib/npn-critique-reply-annotation-badges";
 import annotationPillExtension from "../lib/npn-critique-reply-annotation-pill-extension";
 import { isCritiqueEligible } from "../lib/npn-critique-reply-eligibility";
@@ -15,14 +16,14 @@ import { decorateVoiceWalkthrough } from "../lib/npn-critique-reply-voice-walkth
 
 // Wires up three things:
 //
-// 1. The "Start a Critique" secondary button rendered immediately to the left
-//    of the native primary Reply button in the topic footer. We use the
-//    upgrade-safe `topic-footer-main-buttons-before-create` plugin outlet
-//    (the outlet exists in core specifically so plugins can sit a custom
-//    action next to Reply without re-skinning the footer). The component
-//    owns all per-topic eligibility (settings, category, group, metadata,
-//    reply permission). The native Reply button is untouched and remains the
-//    visually primary action.
+// 1. The topic footer's reply area, via the upgrade-safe
+//    `topic-footer-main-buttons-before-create` plugin outlet. The
+//    component shows ONE primary action chosen by who is looking (Start a
+//    Critique for a first-time critic, "Reply to topic" or a per-category
+//    label otherwise) and hides the native Reply button with CSS. With
+//    `npn_critique_reply_footer_takeover` off it falls back to the old
+//    standalone "Start a Critique" button beside the untouched native
+//    Reply. See npn-critique-reply-footer-buttons.gjs.
 //
 // 2. A compact "Start a thoughtful critique" invitation panel rendered via
 //    `api.renderAfterWrapperOutlet("post-article", …)` — `post-article` is
@@ -68,7 +69,7 @@ import { decorateVoiceWalkthrough } from "../lib/npn-critique-reply-voice-walkth
 export default apiInitializer((api) => {
   api.renderInOutlet(
     "topic-footer-main-buttons-before-create",
-    NpnCritiqueReplyStartButton
+    NpnCritiqueReplyFooterButtons
   );
   api.renderAfterWrapperOutlet("post-article", NpnCritiqueReplyInvitationPanel);
 
@@ -268,6 +269,22 @@ export default apiInitializer((api) => {
 
   const siteSettings = api.container.lookup("service:site-settings");
   const currentUser = api.container.lookup("service:current-user");
+
+  // "Reply to Sarah" on each post's Reply button, so it can't be mistaken
+  // for the footer button that replies to the whole topic. Core hard-codes
+  // one shared label for both, so we swap the post-menu button component;
+  // everything but the label mirrors core's.
+  if (
+    siteSettings?.npn_critique_reply_enabled &&
+    siteSettings?.npn_critique_reply_named_reply_buttons
+  ) {
+    api.registerValueTransformer(
+      "post-menu-buttons",
+      ({ value: dag, context: { buttonKeys } }) => {
+        dag.replace(buttonKeys.REPLY, NpnReplyToNameButton);
+      }
+    );
+  }
 
   if (!siteSettings?.npn_critique_reply_enabled) {
     return;

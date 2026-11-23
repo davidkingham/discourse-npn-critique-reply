@@ -31,6 +31,18 @@ en:
       resume_button: "Resume Critique Draft"
       resume_button_title: "Pick up your saved critique draft"
 
+      # Per-post Reply button, so it reads differently from the footer
+      # button that replies to the whole topic.
+      reply_to_name: "Reply to %{name}"
+
+      # The topic footer's reply area (one primary action chosen by who
+      # is looking).
+      footer:
+        reply_to_topic: "Reply to topic"
+        another_critique: "Add another critique"
+        quick_comment: "or leave a quick comment"
+        quick_comment_title: "Post a normal reply without opening the critique workspace"
+
       # Compact, single-action invitation panel rendered below the OP
       # on eligible critique topics. The panel is a second entry point
       # to the workspace modal — the footer "Start a Critique" button
