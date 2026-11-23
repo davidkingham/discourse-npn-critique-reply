@@ -36,6 +36,7 @@ describe SiteSetting do
     expect(SiteSetting.defaults[:npn_critique_reply_footer_reply_labels]).to eq("")
     expect(SiteSetting.defaults[:npn_critique_reply_named_reply_buttons]).to eq(true)
     expect(SiteSetting.defaults[:npn_critique_reply_respond_to_critiques]).to eq(true)
+    expect(SiteSetting.defaults[:npn_critique_reply_combine_replies]).to eq(true)
   end
 
   it "registers npn_critique_reply_visual_notes_enabled (default: false)" do

@@ -64,6 +64,14 @@ plugins:
     default: true
     client: true
 
+  # Nudges a topic author toward one combined reply when they use the
+  # per-post Reply buttons: "Add <name> to reply" while a reply is open,
+  # and a composer notice when other critics are waiting. Needs the named
+  # reply buttons.
+  npn_critique_reply_combine_replies:
+    default: true
+    client: true
+
   # Per-post Reply buttons read "Reply to <name>".
   npn_critique_reply_named_reply_buttons:
     default: true

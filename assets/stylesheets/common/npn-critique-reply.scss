@@ -82,6 +82,18 @@
   }
 }
 
+// "Answer everyone in one post?" composer notice
+// (npn-combine-replies-message.gjs).
+.npn-combine-replies {
+  h3 {
+    margin-top: 0;
+  }
+
+  .btn + .btn {
+    margin-left: 0.5em;
+  }
+}
+
 // Shared section heading used in both columns of the workspace modal —
 // uppercase, tight letterspacing, muted color. Visually consistent
 // header tier across "Reference image" / "The photographer asked for"

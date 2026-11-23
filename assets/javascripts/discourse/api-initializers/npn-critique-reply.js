@@ -4,6 +4,7 @@ import Composer from "discourse/models/composer";
 import Draft from "discourse/models/draft";
 import { i18n } from "discourse-i18n";
 import NpnCritiqueReplyModal from "../components/modal/npn-critique-reply-modal";
+import NpnCombineRepliesMessage from "../components/npn-combine-replies-message";
 import NpnCritiqueDock from "../components/npn-critique-dock";
 import NpnCritiqueReplyFooterButtons from "../components/npn-critique-reply-footer-buttons";
 import NpnCritiqueReplyInvitationPanel from "../components/npn-critique-reply-invitation-panel";
@@ -12,6 +13,7 @@ import NpnReplyToNameButton from "../components/npn-reply-to-name-button";
 import { decorateCriticueReplyAnnotations } from "../lib/npn-critique-reply-annotation-badges";
 import annotationPillExtension from "../lib/npn-critique-reply-annotation-pill-extension";
 import { isCritiqueEligible } from "../lib/npn-critique-reply-eligibility";
+import { markAnswered } from "../lib/npn-critique-reply-unanswered";
 import { decorateVoiceWalkthrough } from "../lib/npn-critique-reply-voice-walkthrough";
 
 // Wires up three things:
@@ -269,6 +271,26 @@ export default apiInitializer((api) => {
 
   const siteSettings = api.container.lookup("service:site-settings");
   const currentUser = api.container.lookup("service:current-user");
+
+  // Keep the author's list of critics still waiting on a response current
+  // as they post, so "Respond to 3 critiques" counts down without a reload.
+  api.onAppEvent("post:created", (post) => {
+    markAnswered(
+      api.container.lookup("controller:topic")?.model,
+      post,
+      currentUser
+    );
+  });
+
+  // The "answer everyone in one post?" composer notice, raised by the
+  // per-post Reply button when a topic author starts replying to one
+  // critic while others are waiting.
+  api.registerValueTransformer(
+    "composer-message-components",
+    ({ value: components }) => {
+      components["npn-combine-replies"] = NpnCombineRepliesMessage;
+    }
+  );
 
   // "Reply to Sarah" on each post's Reply button, so it can't be mistaken
   // for the footer button that replies to the whole topic. Core hard-codes

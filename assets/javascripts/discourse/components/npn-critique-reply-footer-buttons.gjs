@@ -13,21 +13,15 @@ import {
   isCritiqueTopic,
 } from "../lib/npn-critique-reply-eligibility";
 import { footerReplyLabelFor } from "../lib/npn-critique-reply-footer-labels";
+import {
+  mentionBlock,
+  unansweredCritics,
+} from "../lib/npn-critique-reply-unanswered";
 import NpnCritiqueReplyModal, {
   CRITIQUE_POSTED_EVENT,
   DRAFT_CHANGED_EVENT,
 } from "./modal/npn-critique-reply-modal";
 import NpnCritiqueReplyStartButton from "./npn-critique-reply-start-button";
-
-// Lower-cased usernames @mentioned in `text`. Usernames may contain dots
-// and hyphens but can't end with one, so "thanks @sarah." is `sarah`.
-function mentionedUsernames(text) {
-  return new Set(
-    [...(text ?? "").matchAll(/@([\w.-]+)/g)].map((match) =>
-      match[1].toLowerCase().replace(/[.-]+$/, "")
-    )
-  );
-}
 
 // The topic footer's reply area, rendered into
 // `topic-footer-main-buttons-before-create`.
@@ -77,7 +71,6 @@ export default class NpnCritiqueReplyFooterButtons extends Component {
   // reply is posted. `null` → no override, use the serializer value.
   @tracked _hasDraftOverride = null;
   @tracked _postedOverride = null;
-  @tracked _unansweredOverride = null;
 
   constructor() {
     super(...arguments);
@@ -105,27 +98,12 @@ export default class NpnCritiqueReplyFooterButtons extends Component {
     }
   }
 
-  // Core fires this after the normal composer creates a post.
+  // Core fires this after the normal composer creates a post. (The
+  // api-initializer's own `post:created` handler updates the author's
+  // list of critics still waiting.)
   _onPostCreated(post) {
-    if (!post?.topic_id || post.topic_id !== this.topic?.id) {
-      return;
-    }
-    this._postedOverride = true;
-
-    // The author just answered some critics: drop everyone this post
-    // replies to or @mentions, mirroring the server's rule, so the
-    // button's count is right without a reload.
-    const waiting = this.unansweredCritics;
-    if (waiting.length > 0 && post.user_id === this.currentUser?.id) {
-      const addressed = mentionedUsernames(post.raw);
-      const repliedTo =
-        post.reply_to_user?.username ?? post.get?.("reply_to_user.username");
-      if (repliedTo) {
-        addressed.add(repliedTo.toLowerCase());
-      }
-      this._unansweredOverride = waiting.filter(
-        (critic) => !addressed.has(critic.username.toLowerCase())
-      );
+    if (post?.topic_id && post.topic_id === this.topic?.id) {
+      this._postedOverride = true;
     }
   }
 
@@ -186,11 +164,7 @@ export default class NpnCritiqueReplyFooterButtons extends Component {
   // Critics the author hasn't answered yet, `[{ username, name }]`. The
   // serializer only sends this to the topic's author.
   get unansweredCritics() {
-    return (
-      this._unansweredOverride ??
-      this._topicValue("npn_critique_reply_unanswered_critics") ??
-      []
-    );
+    return unansweredCritics(this.topic);
   }
 
   // "respond" | "critique-first" | "reply-first" | "reply-only"
@@ -291,15 +265,10 @@ export default class NpnCritiqueReplyFooterButtons extends Component {
     getOwner(this).lookup("controller:topic")?.replyToPost();
   }
 
-  // One reply addressed to everyone still waiting: an @mention per critic,
-  // each on its own line with room to write underneath. Mentions already
-  // in the text (an open composer, or a saved draft) aren't repeated.
+  // One reply addressed to everyone still waiting. Mentions already in
+  // the text (an open composer, or a saved draft) aren't repeated.
   _mentionBlock(existing = "") {
-    const already = mentionedUsernames(existing);
-    return this.unansweredCritics
-      .filter((critic) => !already.has(critic.username.toLowerCase()))
-      .map((critic) => `@${critic.username} `)
-      .join("\n\n");
+    return mentionBlock(this.unansweredCritics, existing);
   }
 
   @action

@@ -34,6 +34,23 @@ en:
       # Per-post Reply button, so it reads differently from the footer
       # button that replies to the whole topic.
       reply_to_name: "Reply to %{name}"
+      # Topic author, with a reply already being written: the same button
+      # adds an @mention to that reply instead of starting another.
+      add_to_reply: "Add %{name} to reply"
+      added_to_reply: "Added %{name} to your reply"
+      already_in_reply: "%{name} is already in your reply"
+
+      # Composer notice for a topic author who starts replying to one
+      # critic while others are still waiting.
+      combine_replies:
+        title: "Answer everyone in one post?"
+        body_one: "%{name} is also waiting on a reply from you."
+        body_many:
+          one: "%{count} other person is also waiting on a reply from you."
+          other: "%{count} other people are also waiting on a reply from you."
+        why: "Mention them here and each person gets one notification, instead of a separate reply for every critique."
+        add: "Add them to this reply"
+        decline: "No thanks"
 
       # The topic footer's reply area (one primary action chosen by who
       # is looking).
