@@ -26,8 +26,8 @@ import { combineRepliesDeclined } from "./npn-combine-replies-message";
 // `post-menu-buttons` transformer (see the api-initializer).
 //
 // For everyone but the topic's author, everything except the label
-// mirrors core: same classes, action, icon, title, aria-label and
-// show-label rule, so themes and the mobile icon-only layout keep working.
+// mirrors core: same classes, action, icon, title and aria-label, so
+// themes keep working. The label also shows on phones (core hides it).
 //
 // For the AUTHOR of a critique topic it also steers toward one combined
 // reply (`npn_critique_reply_combine_replies`):
@@ -49,10 +49,16 @@ export default class NpnReplyToNameButton extends Component {
   @service appEvents;
   @service toasts;
 
+  // Core shows this label on desktop only. We show it on phones too: the
+  // name is the whole point of the button, and without it the icon is
+  // indistinguishable from the footer's reply button. The viewer's own
+  // posts stay icon-only there — no name to show, and the row is already
+  // full with the edit buttons.
   get showLabel() {
     return (
       this.args.showLabel ??
-      (this.site.desktopView && !this.args.state.isWikiMode)
+      (!this.args.state.isWikiMode &&
+        (this.site.desktopView || !this.isOwnPost))
     );
   }
 
