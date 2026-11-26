@@ -886,10 +886,14 @@
       outline: 2px solid var(--tertiary);
       outline-offset: 2px;
     }
-    &.is-selected {
-      background: var(--tertiary-low);
-      border-color: var(--tertiary);
-      color: var(--tertiary);
+    // Solid fill, so the pill that is showing can't be mistaken for the
+    // one to press. Tertiary is darkened a touch to keep the label
+    // readable at this size.
+    &.is-selected,
+    &.is-selected:hover {
+      background: color-mix(in srgb, var(--tertiary) 80%, var(--primary));
+      border-color: color-mix(in srgb, var(--tertiary) 80%, var(--primary));
+      color: var(--secondary);
       font-weight: 600;
     }
 
@@ -966,13 +970,17 @@
       outline-offset: 2px;
     }
 
-    // Selected: tinted fill + bolder weight + leading check icon.
+    // Selected: solid fill + bolder weight + leading check icon.
     // The check is rendered conditionally in the template; this rule just
     // owns its tone and spacing.
-    &.is-selected {
-      background: var(--tertiary-low);
-      border-color: var(--tertiary);
-      color: var(--tertiary);
+    // Solid fill, so the pill that is showing can't be mistaken for the
+    // one to press. Tertiary is darkened a touch to keep the label
+    // readable at this size.
+    &.is-selected,
+    &.is-selected:hover {
+      background: color-mix(in srgb, var(--tertiary) 80%, var(--primary));
+      border-color: color-mix(in srgb, var(--tertiary) 80%, var(--primary));
+      color: var(--secondary);
       font-weight: 600;
     }
 
@@ -1045,10 +1053,14 @@
       outline-offset: 2px;
     }
 
-    &.is-selected {
-      background: var(--tertiary-low);
-      border-color: var(--tertiary);
-      color: var(--tertiary);
+    // Solid fill, so the pill that is showing can't be mistaken for the
+    // one to press. Tertiary is darkened a touch to keep the label
+    // readable at this size.
+    &.is-selected,
+    &.is-selected:hover {
+      background: color-mix(in srgb, var(--tertiary) 80%, var(--primary));
+      border-color: color-mix(in srgb, var(--tertiary) 80%, var(--primary));
+      color: var(--secondary);
       font-weight: 600;
     }
 
